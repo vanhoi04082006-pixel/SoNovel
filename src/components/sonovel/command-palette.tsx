@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import {
   Home, Search, Heart, Clock, Bookmark, User, Settings, Info,
-  Shield, Headphones, CornerDownLeft, ArrowUp, ArrowDown,
+  Shield, Headphones, CornerDownLeft, ArrowUp, ArrowDown, BarChart3,
 } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import { api, type SeriesItem } from '@/lib/api-client'
@@ -99,6 +99,9 @@ export function CommandPalette() {
                 <CommandGroup heading="Tài khoản">
                   <CommandItem onSelect={() => go({ view: 'profile' })}>
                     <User /><span>Tài khoản</span>
+                  </CommandItem>
+                  <CommandItem onSelect={() => go({ view: 'stats' })}>
+                    <BarChart3 /><span>Thống kê nghe</span>
                   </CommandItem>
                   <CommandItem onSelect={() => go({ view: 'favorites' })}>
                     <Heart /><span>Yêu thích</span>

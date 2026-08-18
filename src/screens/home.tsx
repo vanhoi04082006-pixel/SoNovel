@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Headphones, ChevronRight, Sparkles, TrendingUp, Play, Star, BookOpen } from 'lucide-react'
+import { Headphones, ChevronRight, Sparkles, TrendingUp, Play, Star, BookOpen, BarChart3 } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import { api, type SeriesItem } from '@/lib/api-client'
 import { StoryCard } from '@/components/sonovel/story-card'
@@ -64,8 +64,15 @@ export function HomeScreen() {
   return (
     <div className="mx-auto max-w-6xl px-3 sm:px-4 py-4 sm:py-6 space-y-8">
       {/* Hero */}
-      <section className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-primary/15 via-primary/5 to-transparent p-6 sm:p-8">
+      <section className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-primary/15 via-primary/5 to-transparent p-6 sm:p-8 animate-fade-in-up">
         <div className="absolute inset-0 opacity-30 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 20% 20%, var(--primary) 0%, transparent 40%)' }} />
+        <div className="absolute top-4 right-4 hidden sm:flex gap-1.5 opacity-60">
+          {['Tiên Hiệp', 'Đô Thị', 'Ngôn Tình'].map((g) => (
+            <button key={g} onClick={() => navigate({ view: 'search', genre: g })} className="rounded-full border border-primary/30 bg-background/50 backdrop-blur px-2.5 py-1 text-xs hover:bg-primary hover:text-primary-foreground transition-colors">
+              {g}
+            </button>
+          ))}
+        </div>
         <div className="relative">
           <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-balance">
             Nghe truyện chữ bằng <span className="text-primary">giọng đọc tổng hợp</span>
@@ -77,6 +84,11 @@ export function HomeScreen() {
             <Button onClick={() => navigate({ view: 'search' })} size="sm">
               <Sparkles className="h-4 w-4 mr-1" /> Khám phá truyện
             </Button>
+            {user && (
+              <Button variant="outline" size="sm" onClick={() => navigate({ view: 'stats' })}>
+                <BarChart3 className="h-4 w-4 mr-1" /> Thống kê nghe
+              </Button>
+            )}
             {!user && (
               <Button variant="outline" size="sm" onClick={() => navigate({ view: 'login' })}>
                 Đăng nhập để lưu tiến độ

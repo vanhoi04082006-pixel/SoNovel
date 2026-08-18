@@ -1,13 +1,14 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { BookOpen, FileText, Users, Headphones, Search, Trash2, Settings2, Plus } from 'lucide-react'
+import { BookOpen, FileText, Users, Headphones, Search, Trash2, Settings2, Plus, CheckSquare, Square, X } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import { api, type SeriesItem } from '@/lib/api-client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
 import { CoverImage } from '@/components/sonovel/cover-image'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
@@ -33,6 +34,9 @@ export function AdminDashboard() {
   const [statusTab, setStatusTab] = useState<string>('all')
   const [counts, setCounts] = useState<Record<string, number>>({})
   const [deleteTarget, setDeleteTarget] = useState<SeriesItem | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkMode, setBulkMode] = useState(false)
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const limit = 12
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -80,13 +84,73 @@ export function AdminDashboard() {
     }
   }
 
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const selectAll = () => {
+    if (selectedIds.size === items.length) setSelectedIds(new Set())
+    else setSelectedIds(new Set(items.map((i) => i.id)))
+  }
+
+  const confirmBulkDelete = async () => {
+    const ids = Array.from(selectedIds)
+    if (ids.length === 0) return
+    let ok = 0
+    let fail = 0
+    for (const id of ids) {
+      try {
+        await api.deleteSeries(id)
+        ok++
+      } catch {
+        fail++
+      }
+    }
+    toast.success(`Đã xóa ${ok} truyện${fail > 0 ? `, ${fail} thất bại` : ''}`)
+    setBulkDeleteOpen(false)
+    setSelectedIds(new Set())
+    setBulkMode(false)
+    loadStats()
+    loadList(true)
+  }
+
+  const exitBulkMode = () => {
+    setBulkMode(false)
+    setSelectedIds(new Set())
+  }
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-2xl font-bold">Bảng điều khiển</h1>
-        <Button size="sm" onClick={() => navigate({ view: 'admin', tab: 'seriesForm' })}>
-          <Plus className="h-4 w-4 mr-1" /> Thêm truyện
-        </Button>
+        <div className="flex gap-1">
+          {bulkMode ? (
+            <>
+              <span className="text-sm text-muted-foreground self-center mr-2">Đã chọn {selectedIds.size}</span>
+              <Button size="sm" variant="outline" onClick={selectAll} disabled={items.length === 0}>
+                {selectedIds.size === items.length && items.length > 0 ? <><X className="h-4 w-4 mr-1" /> Bỏ tất cả</> : <><CheckSquare className="h-4 w-4 mr-1" /> Chọn tất cả</>}
+              </Button>
+              <Button size="sm" variant="destructive" onClick={() => setBulkDeleteOpen(true)} disabled={selectedIds.size === 0}>
+                <Trash2 className="h-4 w-4 mr-1" /> Xóa ({selectedIds.size})
+              </Button>
+              <Button size="sm" variant="ghost" onClick={exitBulkMode}>Hủy</Button>
+            </>
+          ) : (
+            <>
+              <Button size="sm" variant="outline" onClick={() => setBulkMode(true)} disabled={items.length === 0}>
+                <CheckSquare className="h-4 w-4 mr-1" /> Chọn nhiều
+              </Button>
+              <Button size="sm" onClick={() => navigate({ view: 'admin', tab: 'seriesForm' })}>
+                <Plus className="h-4 w-4 mr-1" /> Thêm truyện
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Stat cards */}
@@ -132,8 +196,16 @@ export function AdminDashboard() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {items.map((s) => (
-            <Card key={s.id} className="overflow-hidden">
+            <Card key={s.id} className={`overflow-hidden ${bulkMode && selectedIds.has(s.id) ? 'ring-2 ring-primary' : ''}`}>
               <CardContent className="p-3 flex gap-3">
+                {bulkMode && (
+                  <Checkbox
+                    checked={selectedIds.has(s.id)}
+                    onCheckedChange={() => toggleSelect(s.id)}
+                    className="mt-1 shrink-0"
+                    aria-label={`Chọn ${s.title}`}
+                  />
+                )}
                 <CoverImage title={s.title} coverUrl={s.coverUrl} className="h-24 w-16 shrink-0" />
                 <div className="flex-1 min-w-0">
                   <h3 className="font-semibold text-sm line-clamp-1">{s.title}</h3>
@@ -143,10 +215,10 @@ export function AdminDashboard() {
                     <span className="text-xs text-muted-foreground">{s.chapterCount ?? 0} chương</span>
                   </div>
                   <div className="mt-2 flex gap-1">
-                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => navigate({ view: 'admin', tab: 'seriesDetail', seriesId: s.id })}>
+                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => navigate({ view: 'admin', tab: 'seriesDetail', seriesId: s.id })} disabled={bulkMode}>
                       <Settings2 className="h-3 w-3 mr-1" /> Quản lý
                     </Button>
-                    <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive hover:text-destructive" onClick={() => setDeleteTarget(s)}>
+                    <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive hover:text-destructive" onClick={() => setDeleteTarget(s)} disabled={bulkMode}>
                       <Trash2 className="h-3 w-3" />
                     </Button>
                   </div>
@@ -177,6 +249,23 @@ export function AdminDashboard() {
             <AlertDialogCancel>Hủy</AlertDialogCancel>
             <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               Xóa
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xóa {selectedIds.size} truyện đã chọn?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Hành động này sẽ xóa vĩnh viễn {selectedIds.size} truyện cùng toàn bộ chương của chúng. Không thể hoàn tác.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Hủy</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmBulkDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Xóa {selectedIds.size} truyện
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -1,0 +1,43 @@
+{
+  "name": "SoNovel — Nghe truyện chữ",
+  "short_name": "SoNovel",
+  "description": "Ứng dụng nghe truyện chữ tiếng Việt bằng giọng đọc tổng hợp (TTS)",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#d97706",
+  "orientation": "portrait-primary",
+  "lang": "vi",
+  "categories": ["books", "entertainment", "education"],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Trang chủ",
+      "url": "/?view=home",
+      "description": "Mở trang chủ SoNovel"
+    },
+    {
+      "name": "Tìm kiếm",
+      "url": "/?view=search",
+      "description": "Tìm truyện"
+    },
+    {
+      "name": "Tiếp tục nghe",
+      "url": "/?view=profile",
+      "description": "Xem truyện đang nghe dở"
+    }
+  ]
+}

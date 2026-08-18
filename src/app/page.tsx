@@ -5,6 +5,7 @@ import { useAppStore } from '@/store/use-app-store'
 import { TopBar } from '@/components/sonovel/top-bar'
 import { BottomNav } from '@/components/sonovel/bottom-nav'
 import { PlayerBar } from '@/components/player/player-bar'
+import { PWARegister } from '@/components/sonovel/pwa-register'
 import { HomeScreen } from '@/screens/home'
 import { SearchScreen } from '@/screens/search'
 import { StoryDetailScreen } from '@/screens/story-detail'
@@ -14,6 +15,7 @@ import { BookmarksScreen } from '@/screens/bookmarks'
 import { ProfileScreen } from '@/screens/profile'
 import { SettingsScreen } from '@/screens/settings'
 import { AboutScreen } from '@/screens/about'
+import { StatsScreen } from '@/screens/stats'
 import { LoginScreen } from '@/screens/login'
 import { AdminShell } from '@/screens/admin/shell'
 
@@ -42,6 +44,7 @@ export default function Home() {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <TopBar />
+      <PWARegister />
       <main className="flex-1 pb-28 md:pb-8">
         {view.view === 'home' && <HomeScreen />}
         {view.view === 'search' && <SearchScreen />}
@@ -52,6 +55,7 @@ export default function Home() {
         {view.view === 'profile' && <ProfileScreen />}
         {view.view === 'settings' && <SettingsScreen />}
         {view.view === 'about' && <AboutScreen />}
+        {view.view === 'stats' && <StatsScreen />}
         {view.view === 'login' && <LoginScreen />}
         {view.view === 'admin' && user?.role === 'admin' && <AdminShell />}
         {view.view === 'admin' && user?.role !== 'admin' && (

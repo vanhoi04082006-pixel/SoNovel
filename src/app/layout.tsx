@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Be_Vietnam_Pro } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
@@ -16,7 +16,25 @@ export const metadata: Metadata = {
   description: "SoNovel: ứng dụng nghe truyện chữ Việt Nam với giọng đọc TTS. Duyệt, tìm kiếm, nghe truyện mọi lúc, kể cả khi rời màn hình.",
   keywords: ["SoNovel", "nghe truyện", "truyện chữ", "TTS tiếng Việt", "audiobook Việt"],
   authors: [{ name: "SoNovel" }],
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "SoNovel",
+  },
 };
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#d97706" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
+  ],
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+};
+
+// Register service worker — moved to client component (see PWARegister)
 
 export default function RootLayout({
   children,

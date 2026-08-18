@@ -386,3 +386,69 @@ Task: QA, thêm seed data 15 series, progress ring, export/import settings, book
 - Bookmark trong chapter list: charIndex=0 (chưa play) — có thể thêm "đánh dấu vị trí hiện tại" nếu đang play chapter đó.
 - Seed data: 15 series đủ phong phú — có thể thêm 5-10 nữa nhưng OK.
 - Ưu tiên tiếp theo: (a) Search screen thêm "Đề xuất" section consistency, (b) reading stats (tổng thời gian nghe, số chương hoàn thành), (c) PWA manifest + offline, (d) admin bulk actions (xóa nhiều series).
+
+---
+Task ID: u1-u6 (cron webDevReview round 4)
+Agent: orchestrator (main) — cron-triggered QA + feature round
+Task: QA, Reading stats screen, PWA manifest+offline, admin bulk actions, Home hero polish
+
+## 1. Trạng thái dự án (assessment)
+- App ổn định sau round 3 (progress ring, export/import, 15 series, bookmark chapter list).
+- Dev server port 3000, lint 0 errors, API 200, không hydration errors.
+- GitHub repo: commit 52ece02.
+- Round 4 goals từ worklog: (a) reading stats, (b) PWA manifest+offline, (c) admin bulk actions, (d) Search "Đề xuất".
+
+## 2. QA via agent-browser (round 4)
+- Home: hero có genre chips mới + animate-fade-in-up.
+- Login admin demo OK, TopBar hiện "Thống kê nghe".
+- Stats screen render: 2 truyện đã mở, 4 vị trí đánh dấu, "Tiến độ theo truyện".
+- Admin bulk mode: Chọn tất cả → Xóa(12), Hủy exit OK.
+- PWA: manifest.json + sw.js + icon-192/512.png served 200, SW registered (1 registration).
+- Console: không errors.
+
+## 3. Goals hoàn thành round này
+
+### Task u2: Reading Stats screen (src/screens/stats.tsx)
+- API GET /api/stats/reading — tổng thời gian nghe (phút), chương hoàn thành (>95% charIndex), series đang theo dõi, favorites/history/bookmarks count, seriesStats sorted by percent.
+- Stats screen: 4 stat cards (Thời gian nghe/Chương hoàn thành/Truyện đang theo dõi/Yêu thích) + 2 secondary (truyện đã mở/đánh dấu) + list series progress với ProgressRing + play button (hover reveal).
+- Guest: LoginCTA. Logged in: full stats.
+- Wire vào Profile quick links + UserMenu + Command palette.
+- Verified: "2 truyện đã mở", "4 vị trí đánh dấu", "Tiến độ theo truyện" render.
+
+### Task u3: PWA manifest + service worker
+- public/manifest.json: name/short_name, standalone display, theme_color #d97706, icons 192/512 (generated từ logo.svg via sharp), 3 shortcuts (Trang chủ/Tìm kiếm/Tiếp tục nghe).
+- public/sw.js: cache-first static, network-first API (stale-while-revalidate), version sonovel-v1.
+- src/components/sonovel/pwa-register.tsx: client component register SW on load.
+- layout.tsx: metadata.manifest + appleWebApp + viewport.themeColor.
+- Generated icon-192.png (3.3KB) + icon-512.png (15KB) via sharp.
+- Verified: SW registered (1 registration, scope localhost:3000/).
+
+### Task u4: Admin bulk actions (chọn nhiều + xóa hàng loạt)
+- Dashboard: thêm state selectedIds Set + bulkMode + bulkDeleteOpen.
+- Header: 2 mode toggle — bình thường (Chọn nhiều + Thêm truyện), bulk mode (Chọn tất cả/Bỏ tất cả + Xóa(N) + Hủy).
+- Series card: Checkbox (khi bulkMode) + ring-2 ring-primary khi selected; Quản lý/Xóa disabled khi bulkMode.
+- confirmBulkDelete: loop deleteSeries, toast "Đã xóa N truyện", exit bulk mode, reload.
+- AlertDialog bulk delete với count động.
+- Verified: Chọn tất cả → Xóa(12), Hủy exit OK.
+
+### Task u5+u6: Home hero polish + animate
+- Hero: thêm animate-fade-in-up class, 3 genre chips top-right (Tiên Hiệp/Đô Thị/Ngôn Tình) click → search genre.
+- Thêm nút "Thống kê nghe" cho user logged in.
+- CSS animations đã có từ round 1 (fadeInUp, card-lift, shimmer).
+
+## 4. Verification results
+- bun run lint: 0 errors, 0 warnings.
+- agent-browser:
+  * Stats screen: 4 stat cards + 2 secondary + series progress list render đúng.
+  * Admin bulk: Chọn tất cả → Xóa(12), Hủy exit OK.
+  * PWA: manifest.json 200, sw.js 200, icon-192/512 200, SW registered.
+  * Home hero: genre chips + animate-fade-in-up.
+- API /api/stats/reading: trả totalListenMin, chaptersCompleted, seriesStats với percent.
+- Dev log: tất cả 200, không error.
+
+## 5. Vấn đề chưa giải quyết / rủi ro / ưu tiên tiếp theo
+- PWA icons: dùng logo.svg scale lên (đơn giản) — có thể thiết kế icon riêng đẹp hơn.
+- Stats: totalListenMin = sum(charIndex/270) — chỉ ước tính, không chính xác thời gian thực.
+- Bulk delete: loop tuần tự (chậm với nhiều series) — có thể dùng transaction hoặc Promise.all.
+- Search screen "Đề xuất" section: chưa làm (ưu tiên thấp).
+- Ưu tiên tiếp theo: (a) PWA install prompt button, (b) Search "Đề xuất" section, (c) reading streak/heatmap, (d) admin series search by tag.
