@@ -36,6 +36,12 @@ yarn-error.log*
 # vercel
 .vercel
 
+# supabase cli
+supabase/.temp/
+
+# mobile android build
+mobile/modules/sonovel-tts/android/.gradle/
+
 
 # typescript
 *.tsbuildinfo
