@@ -85,6 +85,7 @@ export const api = {
 
   // ---- progress ----
   getProgress: (seriesId: string) => json<{ progress: any }>(`/api/progress?series_id=${seriesId}`),
+  getAllProgress: () => json<{ items: Array<{ seriesId: string; percent: number; listenCharIndex: number; listenChapterId: string | null; lastListenedAt: string | null }> }>('/api/progress/all'),
   saveProgress: (data: { seriesId: string; listenChapterId?: string; listenCharIndex?: number; playbackSpeed?: number }) =>
     json('/api/progress', { method: 'PUT', body: JSON.stringify(data) }),
 

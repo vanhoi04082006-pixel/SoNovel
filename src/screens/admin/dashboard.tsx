@@ -187,11 +187,11 @@ export function AdminDashboard() {
 
 function StatCard({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: number | string; color: string }) {
   return (
-    <Card>
-      <CardContent className="p-4 flex items-center gap-3">
-        <span className={cn('grid h-10 w-10 place-items-center rounded-lg bg-muted', color)}>{icon}</span>
-        <div>
-          <p className="text-2xl font-bold leading-none">{value}</p>
+    <Card className="card-lift overflow-hidden">
+      <CardContent className="p-4 flex items-center gap-3 relative">
+        <span className={cn('grid h-10 w-10 place-items-center rounded-lg bg-muted shrink-0', color)}>{icon}</span>
+        <div className="min-w-0">
+          <p className="text-2xl font-bold leading-none tabular-nums">{value}</p>
           <p className="text-xs text-muted-foreground mt-1">{label}</p>
         </div>
       </CardContent>

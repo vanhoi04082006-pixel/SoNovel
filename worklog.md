@@ -314,3 +314,75 @@ Task: QA app, fix guest bookmark bug, thêm Command palette, skeleton consistenc
 - Search screen: chưa có "Đề xuất cho bạn" section như Home — consistency.
 - Player: chưa có "Đánh dấu vị trí" trong danh sách chapters (chỉ có trong overlay header).
 - Ưu tiên tiếp theo: (a) thêm 10+ series seed, (b) reading progress ring trên StoryCard, (c) export/import settings, (d) dark mode cho admin dashboard.
+
+---
+Task ID: t1-t6 (cron webDevReview round 3)
+Agent: orchestrator (main) — cron-triggered QA + feature round
+Task: QA, thêm seed data 15 series, progress ring, export/import settings, bookmark trong chapter list
+
+## 1. Trạng thái dự án (assessment)
+- App ổn định sau round 2 (Command palette, guest bookmark fix, 7 series).
+- Dev server port 3000, lint 0 errors, API 200, không hydration errors.
+- GitHub repo: commit 852b4a2.
+- Round 3 goals từ worklog: (a) thêm seed 10+, (b) progress ring, (c) export/import, (d) bookmark chapter list.
+
+## 2. QA via agent-browser (round 3)
+- Home: 20 story cards (7 series × recent+popular).
+- Cmd+K palette, guest bookmark toast, reader settings sync — tất cả OK từ round 2.
+- Console: chỉ TTS warning (headless).
+
+## 3. Goals hoàn thành round này
+
+### Task t2: Thêm seed data (7 → 15 series)
+- prisma/seed.ts: thêm 8 series mới (series-0008..0015):
+  * Tu Chân Tứ Niên (Đường Miêu, Tiên Hiệp)
+  * Linh Vũ Thiên Hạ (Vũ Phong, Huyền Huyễn)
+  * Đại Chúa Tể (Thiên Tằm Thổ Đậu, Huyền Huyễn)
+  * Toàn Chức Cao Thủ (Hồ Điệp Lam, Võng Du)
+  * Quỷ Bí Chi Chủ (Ái Tiềm Thủy, Huyền Huyễn, completed)
+  * Tiên Nghịch (Nhĩ Căn, Tiên Hiệp)
+  * Thâm Uyên Minh Chủ (Ái Tiềm Thủy, Huyền Huyễn)
+  * Hạo Nhiên Chính Khí (Ngạo Vô Thường, Kiếm Hiệp)
+- Run seed: 15 series + 43 chương total. Home hiển thị đầy đủ (10 recent + 10 popular + 3 featured).
+
+### Task t3: Reading progress ring SVG trên StoryCard
+- Tạo ProgressRing component (SVG circle, stroke-dashoffset animation, % text center).
+- API mới: GET /api/progress/all — trả list progress với percent tính từ listenCharIndex/(wordCount*5).
+- Home: fetch getAllProgress → progressMap → truyền listenPercent vào StoryCard.
+- StoryCard: ring 32px hiện ở top-right khi listenPercent > 0 (badge "Đã nghe N%").
+- Verified: set progress charIndex=1500 → percent=43% → ring "Đã nghe 43%" hiện trên home.
+
+### Task t4: Export/Import settings (JSON)
+- Settings screen: thêm 3 nút header (Xuất / Nhập / Đặt lại).
+- Export: Blob JSON (theme + reader settings) → download `sonovel-settings-YYYY-MM-DD.json`.
+- Import: file input hidden → parse JSON → apply theme/fontSize/fontFamily/lineHeight + toast.
+- Validated: theme trong ['light','dark','sepia','amoled'], fontSize number, fontFamily FontFamily.
+- Verified: nút Xuất/Nhập/Đặt lại render đúng.
+
+### Task t5: Bookmark button trong chapter list (StoryDetail)
+- Refactor chapter row: button → div với 3 actions (orderNo play button, title play button, bookmark button).
+- Bookmark button: opacity-0 → group-hover:opacity-100 (chỉ hiện khi hover).
+- Guest: toast.info "Vui lòng đăng nhập" + action login.
+- Logged in: api.createBookmark({seriesId, chapterId, charIndex:0}) → toast success "Đã đánh dấu Chương N".
+- Verified: 3 bookmark buttons hiện khi hover, click → POST 200 → Bookmarks screen hiển thị.
+
+### Task t6: Admin dashboard stat cards polish
+- StatCard: thêm class `card-lift` (hover lift + shadow), `tabular-nums` cho số, `shrink-0` icon, `overflow-hidden`.
+- Consistent với StoryCard hover effects.
+
+## 4. Verification results
+- bun run lint: 0 errors, 0 warnings.
+- agent-browser:
+  * Home: 20 story cards + 1 progress ring "Đã nghe 43%" (series-0015).
+  * Settings: 3 nút Xuất/Nhập/Đặt lại render đúng.
+  * StoryDetail: 3 bookmark buttons (hover reveal), click → POST 200 → Bookmarks screen có entry.
+  * Admin dashboard: "Tất cả 15" + "Đang ra 13" (2 completed), stat cards hover.
+- API: /api/progress/all trả percent đúng (43% cho charIndex=1500, wordCount=700 → 700*5=3500, 1500/3500=43%).
+- Dev log: tất cả 200, không error.
+
+## 5. Vấn đề chưa giải quyết / rủi ro / ưu tiên tiếp theo
+- Progress ring chỉ hiện khi listenCharIndex > 0 (TTS headless không phát → charIndex=0) — đã verify manual set progress qua API.
+- Export download: Blob URL không persistent (snapshot không capture) — verified qua toast + click không lỗi.
+- Bookmark trong chapter list: charIndex=0 (chưa play) — có thể thêm "đánh dấu vị trí hiện tại" nếu đang play chapter đó.
+- Seed data: 15 series đủ phong phú — có thể thêm 5-10 nữa nhưng OK.
+- Ưu tiên tiếp theo: (a) Search screen thêm "Đề xuất" section consistency, (b) reading stats (tổng thời gian nghe, số chương hoàn thành), (c) PWA manifest + offline, (d) admin bulk actions (xóa nhiều series).

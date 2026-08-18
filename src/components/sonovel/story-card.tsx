@@ -6,13 +6,15 @@ import { BookOpen, Headphones, Heart } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import type { SeriesItem } from '@/lib/api-client'
 import { estMinutes } from '@/lib/format'
+import { ProgressRing } from './progress-ring'
 
-export function StoryCard({ series, onClick, favorited }: { series: SeriesItem; onClick?: () => void; favorited?: boolean }) {
+export function StoryCard({ series, onClick, favorited, listenPercent }: { series: SeriesItem; onClick?: () => void; favorited?: boolean; listenPercent?: number }) {
   const navigate = useAppStore((s) => s.navigate)
   const go = () => onClick ? onClick() : navigate({ view: 'story', seriesId: series.id })
 
   const listenMin = Math.max(1, Math.round((series.wordCount || 0) / 270))
   const primaryGenre = series.genres?.[0]
+  const hasProgress = typeof listenPercent === 'number' && listenPercent > 0
 
   return (
     <button
@@ -35,11 +37,18 @@ export function StoryCard({ series, onClick, favorited }: { series: SeriesItem; 
               <Badge variant="outline" className="bg-background/85 backdrop-blur text-[10px] px-1.5 py-0">Nháp</Badge>
             )}
           </div>
-          {favorited && (
-            <span className="grid h-5 w-5 place-items-center rounded-full bg-background/85 backdrop-blur shadow-sm">
-              <Heart className="h-3 w-3 fill-rose-500 text-rose-500" />
-            </span>
-          )}
+          <div className="flex flex-col items-end gap-1">
+            {favorited && (
+              <span className="grid h-5 w-5 place-items-center rounded-full bg-background/85 backdrop-blur shadow-sm">
+                <Heart className="h-3 w-3 fill-rose-500 text-rose-500" />
+              </span>
+            )}
+            {hasProgress && (
+              <div className="rounded-full bg-background/85 backdrop-blur shadow-sm">
+                <ProgressRing percent={listenPercent!} size={32} strokeWidth={3} className="text-primary" />
+              </div>
+            )}
+          </div>
         </div>
         {/* Bottom gradient + stats */}
         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-1.5 pt-4">
@@ -63,3 +72,4 @@ export function StoryCard({ series, onClick, favorited }: { series: SeriesItem; 
     </button>
   )
 }
+

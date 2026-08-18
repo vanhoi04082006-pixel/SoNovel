@@ -23,6 +23,7 @@ export function HomeScreen() {
   const [recent, setRecent] = useState<SeriesItem[]>([])
   const [popular, setPopular] = useState<SeriesItem[]>([])
   const [continueItems, setContinueItems] = useState<any[]>([])
+  const [progressMap, setProgressMap] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -39,8 +40,16 @@ export function HomeScreen() {
         setPopular(p.items)
         if (user) {
           try {
-            const c = await api.continueListening()
-            if (!cancelled) setContinueItems(c.items)
+            const [c, all] = await Promise.all([
+              api.continueListening(),
+              api.getAllProgress(),
+            ])
+            if (!cancelled) {
+              setContinueItems(c.items)
+              const map: Record<string, number> = {}
+              all.items.forEach((p) => { if (p.percent > 0) map[p.seriesId] = p.percent })
+              setProgressMap(map)
+            }
           } catch {}
         }
       } catch {
@@ -99,7 +108,7 @@ export function HomeScreen() {
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-10 gap-3">
           {loading
             ? Array.from({ length: 10 }).map((_, i) => <div key={i} className="aspect-[3/4] w-full rounded-lg skeleton-shimmer" />)
-            : recent.map((s) => <StoryCard key={s.id} series={s} />)}
+            : recent.map((s) => <StoryCard key={s.id} series={s} listenPercent={progressMap[s.id]} />)}
         </div>
       </section>
 
@@ -113,7 +122,7 @@ export function HomeScreen() {
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-10 gap-3">
           {loading
             ? Array.from({ length: 10 }).map((_, i) => <div key={i} className="aspect-[3/4] w-full rounded-lg skeleton-shimmer" />)
-            : popular.map((s) => <StoryCard key={s.id} series={s} />)}
+            : popular.map((s) => <StoryCard key={s.id} series={s} listenPercent={progressMap[s.id]} />)}
         </div>
       </section>
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Heart, Share2, Play, Headphones, ChevronLeft, BookOpen, Search as SearchIcon, Volume2 } from 'lucide-react'
+import { Heart, Share2, Play, Headphones, ChevronLeft, BookOpen, Search as SearchIcon, Volume2, Bookmark } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import { api, type SeriesDetail, type ChapterItem } from '@/lib/api-client'
 import { CoverImage } from '@/components/sonovel/cover-image'
@@ -237,27 +237,55 @@ export function StoryDetailScreen() {
               ? Math.min(100, (currentPlayingChar / Math.max(1, c.wordCount * 5)) * 100)
               : isListened ? Math.min(100, (listenCharIndex / Math.max(1, c.wordCount * 5)) * 100) : 0
             return (
-              <button
+              <div
                 key={c.id}
-                onClick={() => {
-                  const idx = chapters.findIndex((ch) => ch.id === c.id)
-                  startPlay(idx, 0)
-                }}
-                className="flex w-full items-center gap-3 px-3 py-2.5 hover:bg-accent/50 transition-colors text-left"
+                className="flex w-full items-center gap-3 px-3 py-2.5 hover:bg-accent/50 transition-colors text-left group"
               >
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-muted text-xs font-semibold">
+                <button
+                  onClick={() => {
+                    const idx = chapters.findIndex((ch) => ch.id === c.id)
+                    startPlay(idx, 0)
+                  }}
+                  className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-muted text-xs font-semibold hover:bg-primary hover:text-primary-foreground transition-colors"
+                  aria-label={`Phát ${c.title}`}
+                >
                   {c.orderNo}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-medium line-clamp-1 ${isPlaying ? 'text-primary' : ''}`}>{c.title}</p>
+                </button>
+                <button
+                  onClick={() => {
+                    const idx = chapters.findIndex((ch) => ch.id === c.id)
+                    startPlay(idx, 0)
+                  }}
+                  className="flex-1 min-w-0 text-left"
+                >
+                  <p className={`text-sm font-medium line-clamp-1 ${isPlaying ? 'text-primary' : 'group-hover:text-primary'}`}>{c.title}</p>
                   <p className="text-xs text-muted-foreground">
                     {formatCharCount(c.wordCount * 5)} · ~{estMinutes(c.wordCount * 5)} phút
                   </p>
                   {pct > 0 && <Progress value={pct} className="h-1 mt-1" />}
-                </div>
-                {isPlaying && <Volume2 className="h-4 w-4 text-primary shrink-0" />}
+                </button>
+                {isPlaying && <Volume2 className="h-4 w-4 text-primary shrink-0 animate-pulse" />}
                 {isListened && !isPlaying && <Headphones className="h-4 w-4 text-muted-foreground shrink-0" />}
-              </button>
+                <button
+                  onClick={async () => {
+                    if (!user) {
+                      toast.info('Vui lòng đăng nhập để đánh dấu.', { action: { label: 'Đăng nhập', onClick: () => navigate({ view: 'login' }) } })
+                      return
+                    }
+                    try {
+                      await api.createBookmark({ seriesId, chapterId: c.id, charIndex: 0 })
+                      toast.success(`Đã đánh dấu Chương ${c.orderNo}`)
+                    } catch (e) {
+                      toast.error('Đánh dấu thất bại.')
+                    }
+                  }}
+                  className="shrink-0 p-1.5 text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 transition-opacity"
+                  aria-label={`Đánh dấu ${c.title}`}
+                  title="Đánh dấu chương này"
+                >
+                  <Bookmark className="h-4 w-4" />
+                </button>
+              </div>
             )
           })}
           {filteredChapters.length === 0 && (

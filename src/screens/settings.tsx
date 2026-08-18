@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect } from 'react'
-import { Type, AlignLeft, Gauge, Moon, BookOpen, RotateCcw } from 'lucide-react'
+import { useEffect, useRef } from 'react'
+import { Type, AlignLeft, Gauge, Moon, BookOpen, RotateCcw, Download, Upload } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import { useReaderSettings, FONT_FAMILY_LABELS, FONT_FAMILY_CSS, type FontFamily } from '@/store/use-reader-settings'
 import { Button } from '@/components/ui/button'
@@ -22,6 +22,7 @@ const FONT_FAMILIES: FontFamily[] = ['system', 'serif', 'sans', 'mono']
 export function SettingsScreen() {
   const { theme, setTheme, navigate } = useAppStore()
   const { fontSize, fontFamily, lineHeight, hydrate, setFontSize, setFontFamily, setLineHeight } = useReaderSettings()
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { hydrate() }, [hydrate])
 
@@ -32,13 +33,68 @@ export function SettingsScreen() {
     toast.success('Đã đặt lại cài đặt đọc.')
   }
 
+  const exportSettings = () => {
+    const data = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      theme,
+      reader: { fontSize, fontFamily, lineHeight },
+    }
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `sonovel-settings-${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success('Đã xuất cài đặt ra file JSON.')
+  }
+
+  const importSettings = async (file: File) => {
+    try {
+      const text = await file.text()
+      const data = JSON.parse(text)
+      if (data.theme) {
+        const valid = ['light', 'dark', 'sepia', 'amoled']
+        if (valid.includes(data.theme)) setTheme(data.theme as any)
+      }
+      if (data.reader) {
+        if (typeof data.reader.fontSize === 'number') setFontSize(data.reader.fontSize)
+        if (data.reader.fontFamily) setFontFamily(data.reader.fontFamily as FontFamily)
+        if (typeof data.reader.lineHeight === 'number') setLineHeight(data.reader.lineHeight)
+      }
+      toast.success('Đã nhập cài đặt từ file JSON.')
+    } catch (e) {
+      toast.error('File không hợp lệ: ' + (e as Error).message)
+    }
+  }
+
   return (
     <div className="mx-auto max-w-2xl px-3 sm:px-4 py-4 sm:py-6 space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-2xl font-bold">Cài đặt</h1>
-        <Button variant="ghost" size="sm" onClick={reset}>
-          <RotateCcw className="h-4 w-4 mr-1" /> Đặt lại
-        </Button>
+        <div className="flex gap-1">
+          <Button variant="ghost" size="sm" onClick={exportSettings} title="Xuất cài đặt ra file JSON">
+            <Download className="h-4 w-4 mr-1" /> Xuất
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => fileInputRef.current?.click()} title="Nhập cài đặt từ file JSON">
+            <Upload className="h-4 w-4 mr-1" /> Nhập
+          </Button>
+          <Button variant="ghost" size="sm" onClick={reset} title="Đặt lại mặc định">
+            <RotateCcw className="h-4 w-4 mr-1" /> Đặt lại
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              if (f) importSettings(f)
+              e.target.value = ''
+            }}
+          />
+        </div>
       </div>
 
       {/* Theme */}
