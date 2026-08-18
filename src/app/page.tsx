@@ -1,12 +1,11 @@
 'use client'
 
 import { useEffect } from 'react'
+import dynamic from 'next/dynamic'
 import { useAppStore } from '@/store/use-app-store'
 import { TopBar } from '@/components/sonovel/top-bar'
 import { BottomNav } from '@/components/sonovel/bottom-nav'
 import { PlayerBar } from '@/components/player/player-bar'
-import { PWARegister } from '@/components/sonovel/pwa-register'
-import { InstallPrompt } from '@/components/sonovel/install-prompt'
 import { HomeScreen } from '@/screens/home'
 import { SearchScreen } from '@/screens/search'
 import { StoryDetailScreen } from '@/screens/story-detail'
@@ -19,6 +18,10 @@ import { AboutScreen } from '@/screens/about'
 import { StatsScreen } from '@/screens/stats'
 import { LoginScreen } from '@/screens/login'
 import { AdminShell } from '@/screens/admin/shell'
+
+// Lazy-load InstallPrompt + PWARegister để tránh HMR module factory error
+const InstallPrompt = dynamic(() => import('@/components/sonovel/install-prompt').then(m => ({ default: m.InstallPrompt })), { ssr: false })
+const PWARegister = dynamic(() => import('@/components/sonovel/pwa-register').then(m => ({ default: m.PWARegister })), { ssr: false })
 
 export default function Home() {
   const { view, initAuth, initTheme, user, authReady } = useAppStore()
