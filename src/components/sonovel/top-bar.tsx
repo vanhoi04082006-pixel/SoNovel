@@ -46,6 +46,12 @@ export function TopBar() {
               <Button variant={view.view === 'history' ? 'secondary' : 'ghost'} size="sm" onClick={() => navigate({ view: 'history' })}>
                 Lịch sử
               </Button>
+              <Button variant={view.view === 'bookmarks' ? 'secondary' : 'ghost'} size="sm" onClick={() => navigate({ view: 'bookmarks' })}>
+                Đánh dấu
+              </Button>
+              <Button variant={view.view === 'profile' ? 'secondary' : 'ghost'} size="sm" onClick={() => navigate({ view: 'profile' })}>
+                Tài khoản
+              </Button>
             </>
           )}
           {user?.role === 'admin' && (

@@ -140,3 +140,27 @@ Agent: supabase-builder (subagent)
 Task: Build supabase/ SQL artifact per §5
 Status: HOÀN THÀNH — 5 file (schema.sql 466 dòng + 002_expand/003_tags/004_word_count + README). chapters.status CHECK draft|published only, series.word_count trigger tự cập nhật, RLS đầy đủ, 15 tag seed + 3 series/8 chương seed.
 
+
+---
+Task ID: 11-15
+Agent: orchestrator (main) — tiếp tục hoàn thiện
+Task: Thêm trang Profile, Bookmarks, cải thiện Player overlay
+
+Work Log:
+- Task 11 (Profile screen): tạo src/screens/profile.tsx — avatar + email + role badge, quick links (Yêu thích/Lịch sử/Đánh dấu), 4 theme cards, 5 rate presets (lưu user_settings.playbackSpeed), admin link, logout. Cập nhật store view 'profile', BottomNav + TopBar điều hướng.
+- Task 12 (Bookmarks): 
+  - API: GET/POST /api/bookmarks, DELETE /api/bookmarks/[id] (owner-only).
+  - Schema fix: thêm relation Bookmark.series (thiếu gây Prisma validation error). db:push OK.
+  - Screen: src/screens/bookmarks.tsx — list với cover, char count, time-ago, note, play-from-bookmark, delete.
+  - PlayerBar overlay: thêm nút "Đánh dấu vị trí hiện tại" ở header → tạo bookmark tại (seriesId, chapterId, currentChar).
+- Task 13 (Player overlay): thêm keyboard shortcuts hint section trong SettingsTab (Space, ←/→, ↑/↓) với ShortcutRow component + kbd styling.
+- Task 14 (Empty states): Bookmarks screen có empty state với icon BookmarkX + CTA "Khám phá truyện". Profile screen có LoginCTA khi chưa đăng nhập.
+- Task 15 (Toast feedback): bookmark tạo thành công → toast "Đã đánh dấu tại N ký tự — Chương X"; profile rate change → toast confirm.
+
+Stage Summary:
+- bun run lint: 0 errors, 0 warnings.
+- API verification qua curl: login admin → POST /api/bookmarks 200, GET /api/bookmarks 200 trả 2 bookmark đã tạo (Vạn Cổ Thần Vương, charIndex 0).
+- Browser verification: Profile render đầy đủ (avatar, themes, rates, admin link, logout); Bookmarks empty state đúng; bookmark creation từ PlayerBar overlay hoạt động (POST 200).
+- Dev server: setsid/nohup để persist; cần restart sau schema change để Prisma client regenerate.
+- UI 100% tiếng Việt. Mở rộng §7 (web) thêm Bookmarks + Profile (vượt spec tối thiểu, tăng UX).
+

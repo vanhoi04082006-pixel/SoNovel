@@ -45,6 +45,7 @@ model Series {
   progress  Progress[]
   favorites Favorite[]
   history   History[]
+  bookmarks Bookmark[]
 
   @@index([status])
   @@index([updatedAt])
@@ -120,7 +121,8 @@ model Bookmark {
   note      String   @default("")
   createdAt DateTime @default(now())
 
-  user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+  series Series  @relation(fields: [seriesId], references: [id], onDelete: Cascade)
 
   @@index([userId, seriesId])
 }

@@ -23,13 +23,14 @@ export function BottomNav() {
     >
       <div className="grid grid-cols-5">
         {TABS.map((t) => {
-          const isActive = active === t.key || (t.key === 'login' && active === 'login')
+          const isActive = active === t.key
           const Icon = t.icon
           const label = t.key === 'login' ? (user ? 'Tài khoản' : 'Đăng nhập') : t.label
+          const target = t.key === 'login' ? (user ? { view: 'profile' as const } : { view: 'login' as const }) : { view: t.key as any }
           return (
             <button
               key={t.key}
-              onClick={() => navigate({ view: t.key } as any)}
+              onClick={() => navigate(target as any)}
               className={cn(
                 'flex flex-col items-center justify-center gap-1 py-2 text-[11px] font-medium transition-colors',
                 isActive ? 'text-primary' : 'text-muted-foreground hover:text-foreground'

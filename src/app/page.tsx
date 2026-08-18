@@ -10,6 +10,8 @@ import { SearchScreen } from '@/screens/search'
 import { StoryDetailScreen } from '@/screens/story-detail'
 import { FavoritesScreen } from '@/screens/favorites'
 import { HistoryScreen } from '@/screens/history'
+import { BookmarksScreen } from '@/screens/bookmarks'
+import { ProfileScreen } from '@/screens/profile'
 import { LoginScreen } from '@/screens/login'
 import { AdminShell } from '@/screens/admin/shell'
 
@@ -44,6 +46,8 @@ export default function Home() {
         {view.view === 'story' && <StoryDetailScreen />}
         {view.view === 'favorites' && <FavoritesScreen />}
         {view.view === 'history' && <HistoryScreen />}
+        {view.view === 'bookmarks' && <BookmarksScreen />}
+        {view.view === 'profile' && <ProfileScreen />}
         {view.view === 'login' && <LoginScreen />}
         {view.view === 'admin' && user?.role === 'admin' && <AdminShell />}
         {view.view === 'admin' && user?.role !== 'admin' && (

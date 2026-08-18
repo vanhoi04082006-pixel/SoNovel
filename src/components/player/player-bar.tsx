@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import {
   Play, Pause, SkipBack, SkipForward, Square, ChevronUp, ChevronDown,
-  List, FileText, Settings, X, Repeat, Moon, Gauge, BookOpen,
+  List, FileText, Settings, X, Repeat, Moon, Gauge, BookOpen, Bookmark, Keyboard,
 } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import { usePlayerStore, RATE_PRESETS, type SleepMode } from '@/store/use-player-store'
@@ -158,6 +158,22 @@ function PlayerOverlay() {
   const player = usePlayerStore()
   const [tab, setTab] = useState<'chapters' | 'text' | 'settings'>('text')
 
+  const onBookmark = async () => {
+    if (!player.seriesId) return
+    const ch = player.chapters[player.currentIndex]
+    if (!ch) return
+    try {
+      await api.createBookmark({
+        seriesId: player.seriesId,
+        chapterId: ch.id,
+        charIndex: player.currentChar,
+      })
+      toast.success(`Đã đánh dấu tại ${formatCharCount(player.currentChar)} — Chương ${ch.orderNo}`)
+    } catch (e) {
+      toast.error('Đánh dấu thất bại. Có thể bạn chưa đăng nhập.')
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background">
       {/* header */}
@@ -166,6 +182,9 @@ function PlayerOverlay() {
           <p className="text-xs text-muted-foreground">Đang phát</p>
           <p className="text-sm font-semibold line-clamp-1">{player.seriesTitle}</p>
         </div>
+        <Button variant="ghost" size="icon" onClick={onBookmark} aria-label="Đánh dấu vị trí hiện tại" title="Đánh dấu vị trí hiện tại">
+          <Bookmark className="h-5 w-5" />
+        </Button>
         <Button variant="ghost" size="icon" onClick={() => setOverlayOpen(false)} aria-label="Thu gọn">
           <ChevronDown className="h-5 w-5" />
         </Button>
@@ -440,6 +459,17 @@ function SettingsTab() {
         </Button>
       </section>
 
+      {/* Keyboard shortcuts */}
+      <section>
+        <h3 className="text-sm font-semibold mb-2 flex items-center gap-1.5"><Keyboard className="h-4 w-4" /> Phím tắt</h3>
+        <div className="rounded-lg border border-border divide-y divide-border text-sm">
+          <ShortcutRow keys="Space" desc="Phát / Tạm dừng" />
+          <ShortcutRow keys="← / →" desc="Lùi / Tiến 5%" />
+          <ShortcutRow keys="↑ / ↓" desc="Chương trước / sau" />
+        </div>
+        <p className="text-xs text-muted-foreground mt-1.5">Chỉ hoạt động khi overlay đóng và focus không nằm trong ô nhập.</p>
+      </section>
+
       {player.seriesEnded && (
         <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-center">
           <p className="font-medium">Đã nghe hết bộ truyện!</p>
@@ -448,6 +478,15 @@ function SettingsTab() {
           </Button>
         </div>
       )}
+    </div>
+  )
+}
+
+function ShortcutRow({ keys, desc }: { keys: string; desc: string }) {
+  return (
+    <div className="flex items-center justify-between px-3 py-2">
+      <span className="text-muted-foreground">{desc}</span>
+      <kbd className="rounded border border-border bg-muted px-2 py-0.5 text-xs font-mono">{keys}</kbd>
     </div>
   )
 }

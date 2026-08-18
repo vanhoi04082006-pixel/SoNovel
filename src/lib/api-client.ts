@@ -103,6 +103,12 @@ export const api = {
   // ---- continue listening ----
   continueListening: () => json<{ items: any[] }>('/api/continue-listening'),
 
+  // ---- bookmarks ----
+  listBookmarks: () => json<{ items: any[] }>('/api/bookmarks'),
+  createBookmark: (data: { seriesId: string; chapterId: string; charIndex: number; note?: string }) =>
+    json('/api/bookmarks', { method: 'POST', body: JSON.stringify(data) }),
+  deleteBookmark: (id: string) => json(`/api/bookmarks/${id}`, { method: 'DELETE' }),
+
   // ---- admin ----
   stats: () => json('/api/stats'),
   upload: (file: File) => {
