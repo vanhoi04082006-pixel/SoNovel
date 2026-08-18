@@ -164,3 +164,23 @@ Stage Summary:
 - Dev server: setsid/nohup để persist; cần restart sau schema change để Prisma client regenerate.
 - UI 100% tiếng Việt. Mở rộng §7 (web) thêm Bookmarks + Profile (vượt spec tối thiểu, tăng UX).
 
+
+---
+Task ID: 16
+Agent: orchestrator (main)
+Task: Push code lên GitHub repo vanhoi04082006-pixel/SoNovel
+
+Work Log:
+- Tạo README.md root (mô tả dự án: tính năng, kiến trúc, công nghệ, cách chạy, tuân thủ SPEC).
+- git add README.md + git commit -m "first commit" (commit f4654d3).
+- git branch -M main.
+- git remote add origin git@github.com:vanhoi04082006-pixel/SoNovel.git (SSH — thất bại do sandbox không có ssh binary).
+- Đổi sang HTTPS + PAT: git remote set-url origin https://<PAT>@github.com/vanhoi04082006-pixel/SoNovel.git.
+- git push -u origin main → thành công (new branch main, tracking origin/main).
+- Xóa token khỏi remote URL để an toàn: git remote set-url origin https://github.com/vanhoi04082006-pixel/SoNovel.git.
+
+Stage Summary:
+- Repo GitHub: https://github.com/vanhoi04082006-pixel/SoNovel
+- Branch: main, HEAD 8a6452f, 200 file đã push.
+- Bao gồm: src/ (Next.js app), prisma/ (schema+seed), mobile/ (Expo+Kotlin), supabase/ (SQL), README.md.
+- PAT đã được xóa khỏi git config local (chỉ dùng 1 lần cho push).
