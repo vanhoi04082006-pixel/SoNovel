@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import {
   Headphones, Clock, BookOpen, Heart, Bookmark, TrendingUp,
-  BarChart3, ChevronLeft, Play, Calendar,
+  BarChart3, ChevronLeft, Play, Calendar, Flame, Trophy,
 } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import { api } from '@/lib/api-client'
@@ -20,6 +20,7 @@ export function StatsScreen() {
   const { user, navigate } = useAppStore()
   const [stats, setStats] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [streak, setStreak] = useState<any>(null)
   const playChapter = usePlayerStore((s) => s.playChapter)
   const setPlayerActive = useAppStore((s) => s.setPlayerActive)
 
@@ -29,8 +30,11 @@ export function StatsScreen() {
     ;(async () => {
       setLoading(true)
       try {
-        const r = await api.readingStats()
-        if (!cancelled) setStats(r.stats)
+        const [r, s] = await Promise.all([api.readingStats(), api.streakStats()])
+        if (!cancelled) {
+          setStats(r.stats)
+          setStreak(s.stats)
+        }
       } catch {
         toast.error('Không tải được thống kê.')
       } finally {
@@ -141,6 +145,55 @@ export function StatsScreen() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Streak + heatmap */}
+          {streak && (
+            <Card className="card-lift">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Flame className="h-4 w-4 text-orange-500" /> Chuỗi ngày nghe
+                </CardTitle>
+                <CardDescription>Duy trì thói quen nghe truyện mỗi ngày</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="rounded-lg bg-muted/50 p-3 text-center">
+                    <Flame className="mx-auto h-5 w-5 text-orange-500" />
+                    <p className="mt-1 text-2xl font-bold tabular-nums">{streak.currentStreak}</p>
+                    <p className="text-xs text-muted-foreground">hiện tại</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/50 p-3 text-center">
+                    <Trophy className="mx-auto h-5 w-5 text-amber-500" />
+                    <p className="mt-1 text-2xl font-bold tabular-nums">{streak.longestStreak}</p>
+                    <p className="text-xs text-muted-foreground">dài nhất</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/50 p-3 text-center">
+                    <Calendar className="mx-auto h-5 w-5 text-primary" />
+                    <p className="mt-1 text-2xl font-bold tabular-nums">{streak.totalDays}</p>
+                    <p className="text-xs text-muted-foreground">tổng ngày</p>
+                  </div>
+                </div>
+                {/* 30-day heatmap */}
+                <div>
+                  <p className="text-xs text-muted-foreground mb-2">30 ngày gần nhất</p>
+                  <div className="grid grid-cols-10 gap-1">
+                    {streak.heatmap?.map((day: any, i: number) => (
+                      <div
+                        key={i}
+                        title={`${day.date}${day.listened ? ' — đã nghe' : ''}`}
+                        className={`aspect-square rounded-sm ${day.listened ? 'bg-primary' : 'bg-muted'}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+                {streak.currentStreak > 0 && (
+                  <div className="rounded-lg bg-orange-500/10 border border-orange-500/30 p-2 text-center text-sm text-orange-600 dark:text-orange-400">
+                    🔥 Đang chuỗi {streak.currentStreak} ngày! Nghe tiếp để duy trì.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Series progress list */}
           <Card>

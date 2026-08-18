@@ -6,6 +6,7 @@ import { TopBar } from '@/components/sonovel/top-bar'
 import { BottomNav } from '@/components/sonovel/bottom-nav'
 import { PlayerBar } from '@/components/player/player-bar'
 import { PWARegister } from '@/components/sonovel/pwa-register'
+import { InstallPrompt } from '@/components/sonovel/install-prompt'
 import { HomeScreen } from '@/screens/home'
 import { SearchScreen } from '@/screens/search'
 import { StoryDetailScreen } from '@/screens/story-detail'
@@ -45,6 +46,7 @@ export default function Home() {
     <div className="min-h-screen flex flex-col bg-background">
       <TopBar />
       <PWARegister />
+      <InstallPrompt />
       <main className="flex-1 pb-28 md:pb-8">
         {view.view === 'home' && <HomeScreen />}
         {view.view === 'search' && <SearchScreen />}

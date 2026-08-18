@@ -452,3 +452,59 @@ Task: QA, Reading stats screen, PWA manifest+offline, admin bulk actions, Home h
 - Bulk delete: loop tuần tự (chậm với nhiều series) — có thể dùng transaction hoặc Promise.all.
 - Search screen "Đề xuất" section: chưa làm (ưu tiên thấp).
 - Ưu tiên tiếp theo: (a) PWA install prompt button, (b) Search "Đề xuất" section, (c) reading streak/heatmap, (d) admin series search by tag.
+
+---
+Task ID: v1-v6 (cron webDevReview round 5)
+Agent: orchestrator (main) — cron-triggered QA + feature round
+Task: QA, PWA install prompt, reading streak+heatmap, admin tag filter, Stats polish
+
+## 1. Trạng thái dự án (assessment)
+- App ổn định sau round 4 (Stats, PWA manifest+SW, bulk actions).
+- Dev server port 3000, lint 0 errors, API 200, không hydration errors.
+- GitHub repo: commit 44349c8.
+- Round 5 goals từ worklog: (a) PWA install prompt, (b) reading streak/heatmap, (c) Search "Đề xuất", (d) admin search by tag.
+
+## 2. QA via agent-browser (round 5)
+- Home, login admin demo, Stats screen, admin dashboard — tất cả OK.
+- Console: không errors.
+
+## 3. Goals hoàn thành round này
+
+### Task v2: PWA install prompt button
+- Tạo InstallPrompt component (beforeinstallprompt event listener, deferredPrompt.prompt(), appinstalled handler).
+- UI: fixed bottom card với logo Headphones + "Cài SoNovel" + "Nghe truyện mọi lúc, kể cả offline" + Cài button + X dismiss.
+- localStorage dismiss key 'sonovel-install-dismissed' (không hiện lại sau khi dismiss).
+- Check standalone mode (display-mode: standalone) → ẩn nếu đã install.
+- Verified: component render (beforeinstallprompt không fire trong headless — sẽ hiện trong browser thật).
+
+### Task v3: Reading streak + heatmap
+- API GET /api/stats/streak — collect unique listening days từ progress.lastListenedAt, compute currentStreak (backward from today), longestStreak, totalDays, 30-day heatmap.
+- Stats screen: thêm Streak Card (Flame icon) với 3 mini-stats (hiện tại/dài nhất/tổng ngày) + 30-day heatmap grid (10 cols × 3 rows, bg-primary nếu listened, bg-muted nếu không) + "🔥 Đang chuỗi N ngày!" banner nếu currentStreak > 0.
+- Verified: API currentStreak=1, longestStreak=1, totalDays=1, heatmap 30 ngày; Stats screen render "Chuỗi ngày nghe".
+
+### Task v5: Admin series search by tag
+- Dashboard: thêm state allTags + tagFilter, fetch tags on mount.
+- loadList: filter client-side `s.tags?.includes(tagFilter)` sau khi fetch.
+- UI: native select dropdown (ml-auto trong status tabs row) với options "Tất cả tag" + 15 tag options (#name).
+- Verified: select "huyền huyễn" → chỉ "Đại Chúa Tể" (1 series, đúng với data).
+
+### Task v6: Stats visual polish
+- Streak Card dùng card-lift class, 3 mini-stats với bg-muted/50 rounded-lg, icon Flame (orange) + Trophy (amber) + Calendar (primary).
+- Heatmap aspect-square rounded-sm, title tooltip date.
+- Stats screen consistent với Home styling.
+
+## 4. Verification results
+- bun run lint: 0 errors, 0 warnings.
+- agent-browser:
+  * Stats screen: "Chuỗi ngày nghe" card + heatmap + ProgressRing "Đã nghe 66%" render.
+  * Admin tag filter: select "huyền huyễn" → 1 series "Đại Chúa Tể" (filter đúng).
+  * PWA install prompt: component render (no event in headless — expected).
+- API /api/stats/streak: currentStreak=1, longestStreak=1, heatmap 30 entries.
+- Dev log: tất cả 200, không error.
+
+## 5. Vấn đề chưa giải quyết / rủi ro / ưu tiên tiếp theo
+- PWA install prompt: không test được trong headless (beforeinstallprompt không fire) — sẽ hoạt động trong browser thật.
+- Admin tag filter: dùng native select (đơn giản) — có thể upgrade sang Combobox component đẹp hơn.
+- Streak: chỉ track ngày có lastListenedAt (listen track) — không track read track.
+- Heatmap: chỉ 30 ngày (grid 10×3) — có thể mở rộng 90 ngày (GitHub-style).
+- Ưu tiên tiếp theo: (a) 90-day heatmap GitHub-style, (b) Search "Đề xuất" section, (c) PWA icons thiết kế riêng, (d) admin Combobox tag filter, (e) reading achievements/badges.

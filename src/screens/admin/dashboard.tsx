@@ -37,6 +37,8 @@ export function AdminDashboard() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkMode, setBulkMode] = useState(false)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [allTags, setAllTags] = useState<{ id: string; name: string }[]>([])
+  const [tagFilter, setTagFilter] = useState<string>('')
   const limit = 12
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -48,13 +50,24 @@ export function AdminDashboard() {
     } catch {}
   }, [])
 
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const r = await api.listTags()
+        setAllTags(r.items)
+      } catch {}
+    })()
+  }, [])
+
   const loadList = useCallback(async (resetOffset = true) => {
     setLoading(true)
     const o = resetOffset ? 0 : offset
     try {
       const statusParam = statusTab === 'all' ? 'draft,published,completed,hidden' : statusTab
       const res = await api.listSeries({ q, status: statusParam, sort: 'new', limit, offset: o })
-      setItems(resetOffset ? res.items : [...items, ...res.items])
+      let filtered = res.items
+      if (tagFilter) filtered = filtered.filter((s) => s.tags?.includes(tagFilter))
+      setItems(resetOffset ? filtered : [...items, ...filtered])
       setTotal(res.total)
       if (resetOffset) setOffset(0)
     } catch {
@@ -62,14 +75,14 @@ export function AdminDashboard() {
     } finally {
       setLoading(false)
     }
-  }, [q, statusTab, offset, items])
+  }, [q, statusTab, tagFilter, offset, items])
 
   useEffect(() => { loadStats() }, [loadStats])
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => loadList(true), 300)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
-  }, [q, statusTab])
+  }, [q, statusTab, tagFilter])
 
   const confirmDelete = async () => {
     if (!deleteTarget) return
@@ -168,7 +181,7 @@ export function AdminDashboard() {
       </div>
 
       {/* Status tabs */}
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap gap-1.5 items-center">
         {STATUS_TABS.map((t) => (
           <button
             key={t.key}
@@ -184,6 +197,19 @@ export function AdminDashboard() {
             </span>
           </button>
         ))}
+        {allTags.length > 0 && (
+          <select
+            value={tagFilter}
+            onChange={(e) => setTagFilter(e.target.value)}
+            className="ml-auto rounded-full border border-border bg-background px-3 py-1 text-sm hover:border-primary cursor-pointer"
+            aria-label="Lọc theo tag"
+          >
+            <option value="">Tất cả tag</option>
+            {allTags.map((t) => (
+              <option key={t.id} value={t.name}>#{t.name}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       {/* Series grid */}
