@@ -1,6 +1,6 @@
 'use client'
 
-import { LogOut, Shield, User as UserIcon } from 'lucide-react'
+import { LogOut, Shield, User as UserIcon, Settings as SettingsIcon, Bookmark, Info } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import {
   DropdownMenu,
@@ -54,6 +54,15 @@ export function UserMenu() {
         )}
         <DropdownMenuItem onClick={() => navigate({ view: 'history' })} className="cursor-pointer">
           <UserIcon className="h-4 w-4 mr-2" /> Lịch sử nghe
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => navigate({ view: 'bookmarks' })} className="cursor-pointer">
+          <Bookmark className="h-4 w-4 mr-2" /> Đánh dấu
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => navigate({ view: 'settings' })} className="cursor-pointer">
+          <SettingsIcon className="h-4 w-4 mr-2" /> Cài đặt
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => navigate({ view: 'about' })} className="cursor-pointer">
+          <Info className="h-4 w-4 mr-2" /> Giới thiệu
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem

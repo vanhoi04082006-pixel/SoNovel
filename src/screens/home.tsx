@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Headphones, ChevronRight, Sparkles, TrendingUp, Play } from 'lucide-react'
+import { Headphones, ChevronRight, Sparkles, TrendingUp, Play, Star, BookOpen } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import { api, type SeriesItem } from '@/lib/api-client'
 import { StoryCard } from '@/components/sonovel/story-card'
@@ -98,7 +98,7 @@ export function HomeScreen() {
         />
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-10 gap-3">
           {loading
-            ? Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} className="aspect-[3/4] w-full rounded-lg" />)
+            ? Array.from({ length: 10 }).map((_, i) => <div key={i} className="aspect-[3/4] w-full rounded-lg skeleton-shimmer" />)
             : recent.map((s) => <StoryCard key={s.id} series={s} />)}
         </div>
       </section>
@@ -112,10 +112,22 @@ export function HomeScreen() {
         />
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-10 gap-3">
           {loading
-            ? Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} className="aspect-[3/4] w-full rounded-lg" />)
+            ? Array.from({ length: 10 }).map((_, i) => <div key={i} className="aspect-[3/4] w-full rounded-lg skeleton-shimmer" />)
             : popular.map((s) => <StoryCard key={s.id} series={s} />)}
         </div>
       </section>
+
+      {/* Đề xuất (featured — pick from popular by max chapters) */}
+      {!loading && popular.length > 0 && (
+        <section>
+          <SectionHeader icon={<Star className="h-5 w-5" />} title="Đề xuất cho bạn" />
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {popular.slice(0, 3).map((s, i) => (
+              <FeaturedCard key={s.id} series={s} rank={i + 1} />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Genres */}
       <section>
@@ -207,6 +219,37 @@ function ContinueCard({ item }: { item: any }) {
       >
         <Play className="h-5 w-5 fill-current" />
       </button>
+    </div>
+  )
+}
+
+function FeaturedCard({ series, rank }: { series: SeriesItem; rank: number }) {
+  const navigate = useAppStore((s) => s.navigate)
+  const listenMin = Math.max(1, Math.round((series.wordCount || 0) / 270))
+  const rankColors = ['text-amber-500', 'text-zinc-400', 'text-orange-700']
+
+  return (
+    <div
+      onClick={() => navigate({ view: 'story', seriesId: series.id })}
+      className="group relative flex gap-3 rounded-xl border border-border bg-card p-3 cursor-pointer card-lift overflow-hidden"
+    >
+      {/* Rank badge */}
+      <div className={`absolute -top-1 -left-1 grid h-8 w-8 place-items-center rounded-full bg-background border-2 border-border font-bold text-lg ${rankColors[rank - 1] || 'text-muted-foreground'}`}>
+        {rank}
+      </div>
+      <CoverImage title={series.title} coverUrl={series.coverUrl} className="h-24 w-16 shrink-0 ml-2" />
+      <div className="flex-1 min-w-0 flex flex-col">
+        <h3 className="font-semibold text-sm line-clamp-2 group-hover:text-primary transition-colors">{series.title}</h3>
+        <p className="text-xs text-muted-foreground line-clamp-1">{series.author || 'Không rõ'}</p>
+        {series.genres?.[0] && (
+          <span className="mt-1 inline-block text-[10px] text-primary font-medium w-fit">{series.genres[0]}</span>
+        )}
+        <p className="text-xs text-muted-foreground line-clamp-2 mt-1 flex-1">{series.description}</p>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+          <span className="flex items-center gap-0.5"><BookOpen className="h-3 w-3" /> {series.chapterCount ?? 0} chương</span>
+          <span className="flex items-center gap-0.5"><Headphones className="h-3 w-3" /> ~{listenMin} phút</span>
+        </div>
+      </div>
     </div>
   )
 }

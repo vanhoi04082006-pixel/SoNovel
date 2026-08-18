@@ -184,3 +184,69 @@ Stage Summary:
 - Branch: main, HEAD 8a6452f, 200 file đã push.
 - Bao gồm: src/ (Next.js app), prisma/ (schema+seed), mobile/ (Expo+Kotlin), supabase/ (SQL), README.md.
 - PAT đã được xóa khỏi git config local (chỉ dùng 1 lần cho push).
+
+---
+Task ID: r1-r6 (cron webDevReview round 1)
+Agent: orchestrator (main) — cron-triggered QA + feature round
+Task: QA app + thêm Settings/About screens + cải thiện Home/StoryCard styling
+
+## 1. Trạng thái dự án (assessment)
+- App SoNovel đã hoàn thành §12 checklist + mở rộng (Profile, Bookmarks, keyboard hints).
+- Dev server chạy ổn định port 3000; tất cả API trả 200.
+- Lint: 0 errors, 0 warnings.
+- GitHub repo: https://github.com/vanhoi04082006-pixel/SoNovel (đã push 200 file).
+- mobile/ + supabase/ artifacts hoàn chỉnh (tsc PASS, SQL idempotent).
+
+## 2. QA via agent-browser (round 1)
+- Test flows: Home → Login (admin demo) → Admin Dashboard → StoryDetail → Play → PlayerBar → Overlay (3 tabs) → Settings tab → Bookmarks → Profile → Mobile responsive.
+- Screenshots: qa-home.png, qa-admin.png, qa-story.png, qa-player.png, qa-overlay.png, qa-text.png, qa-settings.png, qa-mobile.png, qa-about.png, qa-settings-page.png, qa-text-serif.png, qa-home-featured.png, qa-storycard.png.
+- Console: chỉ 1 warning "TTS error synthesis-failed" (headless browser không có engine TTS thật — không phải bug app).
+- Không có hydration/JS errors.
+
+## 3. Goals hoàn thành round này
+
+### Task r2: Trang Settings riêng (src/screens/settings.tsx)
+- Tạo store use-reader-settings.ts (fontSize, fontFamily, lineHeight; hydrate từ server + localStorage; sync lên user_settings qua API).
+- Settings screen: 4 theme cards (preview màu), 4 font family cards (preview text "Aa Ông Âu 2025"), font size slider (14-32px) với live preview, line height slider (1.3-2.4) với 3-line preview, nút "Đặt lại".
+- TextTab trong PlayerBar overlay giờ dùng reader settings (font-size, font-family, line-height apply qua inline style).
+- Verified: đổi font sang Serif → localStorage save `{"fontSize":18,"fontFamily":"serif","lineHeight":1.8}` → tab Xem chữ render font Georgia.
+
+### Task r5: Trang About (src/screens/about.tsx)
+- Hero card với logo gradient + version badges.
+- 6 FeatureCard: Thư viện đa dạng, Nghe bằng TTS, Tiếp tục nghe, Hẹn giờ tắt, Yêu thích & Đánh dấu, 4 giao diện.
+- Tech card: Next.js 16, Expo SDK 57, Prisma, Tailwind 4, Be Vietnam Pro.
+- Privacy card: giải thích chính sách dữ liệu.
+- Footer "Made with ❤ in Vietnam".
+
+### Task r4: Cải thiện Home
+- Thêm section "Đề xuất cho bạn" với 3 FeaturedCard (rank badge #1/#2/#3 màu amber/zinc/orange, cover + description + stats).
+- Skeleton shimmer animation (class .skeleton-shimmer) thay Skeleton component cho Recent + Popular sections.
+- Thêm CSS: @keyframes shimmer, fadeInUp, card-lift hover, progress-ring.
+
+### Task r6: Cải thiện StoryCard
+- Hover: -translate-y-1 + scale-105 cover + shadow-lg + border-primary/40.
+- Top badges: "Đang ra" (emerald), "Hoàn thành" (secondary), "Nháp" (outline).
+- Heart icon (rose fill) khi favorited.
+- Bottom gradient stronger (from-black/80).
+- Genre chip text-primary/80 dưới title.
+- Stats rút gọn "N ch" + "~M phút".
+
+### Navigation updates
+- TopBar desktop: thêm "Giới thiệu" button.
+- UserMenu dropdown: thêm Đánh dấu, Cài đặt, Giới thiệu items.
+- Profile quick links: thêm Cài đặt, Giới thiệu (5 cards total).
+- Footer: thêm link Giới thiệu + Cài đặt.
+
+## 4. Verification results
+- bun run lint: 0 errors, 0 warnings.
+- agent-browser: Settings page render đúng (theme cards, font cards với preview, sliders); About page render đầy đủ; Home có section "Đề xuất cho bạn"; StoryCard hover effects hoạt động.
+- localStorage persist reader settings; tab Xem chữ apply font đúng (verified via getComputedStyle → "Georgia, Times New Roman, serif").
+- Dev log: tất cả API 200, không có error.
+
+## 5. Vấn đề chưa giải quyết / rủi ro / ưu tiên tiếp theo
+- Task r7 (Command palette Cmd+K): chưa làm — có thể thêm round sau để tăng UX power users.
+- Bookmark creation từ guest (chưa login) hiện trả 401 silent — nên thêm toast "Vui lòng đăng nhập" rõ hơn.
+- Search screen chưa dùng skeleton-shimmer (vẫn Skeleton component) — consistency có thể cải thiện.
+- Player overlay TextTab: khi đổi font size slider trong Settings, cần reopen overlay để apply (do store hydrate 1 lần) — có thể subscribe real-time.
+- Mobile: BottomNav chỉ 5 tab, chưa có way vào Settings/About từ mobile (cần qua Profile) — chấp nhận được.
+- Ưu tiên tiếp theo: (a) Command palette, (b) toast cho guest bookmark, (c) real-time reader settings sync, (d) thêm seed data (hiện chỉ 3 series).

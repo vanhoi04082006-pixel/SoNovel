@@ -14,6 +14,8 @@ type ViewState =
   | { view: 'history' }
   | { view: 'bookmarks' }
   | { view: 'profile' }
+  | { view: 'settings' }
+  | { view: 'about' }
   | { view: 'login' }
   | { view: 'admin'; tab: 'dashboard' | 'seriesForm' | 'seriesDetail' | 'tags'; seriesId?: string }
 

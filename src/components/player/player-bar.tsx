@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import { usePlayerStore, RATE_PRESETS, type SleepMode } from '@/store/use-player-store'
+import { useReaderSettings, FONT_FAMILY_CSS } from '@/store/use-reader-settings'
 import { CoverImage } from '@/components/sonovel/cover-image'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -320,6 +321,8 @@ function ChaptersTab() {
 
 function TextTab() {
   const player = usePlayerStore()
+  const { fontSize, fontFamily, lineHeight, hydrate } = useReaderSettings()
+  useEffect(() => { hydrate() }, [hydrate])
   const ch = player.chapters[player.currentIndex]
   const containerRef = useRef<HTMLDivElement>(null)
   const [follow, setFollow] = useState(true)
@@ -368,7 +371,7 @@ function TextTab() {
         ref={containerRef}
         onScroll={onScroll}
         className="flex-1 overflow-y-auto px-4 py-3"
-        style={{ lineHeight: 1.8, fontSize: '1rem' }}
+        style={{ lineHeight, fontSize: `${fontSize}px`, fontFamily: FONT_FAMILY_CSS[fontFamily] }}
       >
         {paragraphs.map((p, i) => (
           <p

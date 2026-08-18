@@ -12,6 +12,8 @@ import { FavoritesScreen } from '@/screens/favorites'
 import { HistoryScreen } from '@/screens/history'
 import { BookmarksScreen } from '@/screens/bookmarks'
 import { ProfileScreen } from '@/screens/profile'
+import { SettingsScreen } from '@/screens/settings'
+import { AboutScreen } from '@/screens/about'
 import { LoginScreen } from '@/screens/login'
 import { AdminShell } from '@/screens/admin/shell'
 
@@ -48,6 +50,8 @@ export default function Home() {
         {view.view === 'history' && <HistoryScreen />}
         {view.view === 'bookmarks' && <BookmarksScreen />}
         {view.view === 'profile' && <ProfileScreen />}
+        {view.view === 'settings' && <SettingsScreen />}
+        {view.view === 'about' && <AboutScreen />}
         {view.view === 'login' && <LoginScreen />}
         {view.view === 'admin' && user?.role === 'admin' && <AdminShell />}
         {view.view === 'admin' && user?.role !== 'admin' && (
@@ -60,9 +64,13 @@ export default function Home() {
       <BottomNav />
       {hasPlayer && <div className="hidden md:block h-16" />}
       <footer className="hidden md:block border-t border-border bg-muted/30 mt-auto">
-        <div className="mx-auto max-w-6xl px-4 py-4 text-xs text-muted-foreground flex items-center justify-between">
+        <div className="mx-auto max-w-6xl px-4 py-4 text-xs text-muted-foreground flex flex-wrap items-center justify-between gap-2">
           <span>SoNovel — Ứng dụng nghe truyện chữ tiếng Việt</span>
-          <span>Web Speech API · Tự dựng theo SPEC §7</span>
+          <div className="flex items-center gap-3">
+            <button onClick={() => useAppStore.getState().navigate({ view: 'about' })} className="hover:text-primary">Giới thiệu</button>
+            <button onClick={() => useAppStore.getState().navigate({ view: 'settings' })} className="hover:text-primary">Cài đặt</button>
+            <span className="opacity-60">Web Speech API · v1.0</span>
+          </div>
         </div>
       </footer>
     </div>

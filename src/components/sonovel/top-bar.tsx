@@ -49,11 +49,11 @@ export function TopBar() {
               <Button variant={view.view === 'bookmarks' ? 'secondary' : 'ghost'} size="sm" onClick={() => navigate({ view: 'bookmarks' })}>
                 Đánh dấu
               </Button>
-              <Button variant={view.view === 'profile' ? 'secondary' : 'ghost'} size="sm" onClick={() => navigate({ view: 'profile' })}>
-                Tài khoản
-              </Button>
             </>
           )}
+          <Button variant={view.view === 'about' ? 'secondary' : 'ghost'} size="sm" onClick={() => navigate({ view: 'about' })}>
+            Giới thiệu
+          </Button>
           {user?.role === 'admin' && (
             <Button variant={view.view === 'admin' ? 'secondary' : 'ghost'} size="sm" onClick={() => navigate({ view: 'admin', tab: 'dashboard' })}>
               <Shield className="h-4 w-4 mr-1" /> Quản trị

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import {
   User as UserIcon, LogOut, Settings, Moon, Gauge, Heart, Clock, Bookmark,
-  ChevronRight, Shield, Headphones,
+  ChevronRight, Shield, Info,
 } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import { api } from '@/lib/api-client'
@@ -94,6 +94,8 @@ export function ProfileScreen() {
         <QuickLink icon={<Heart className="h-5 w-5" />} label="Yêu thích" onClick={() => navigate({ view: 'favorites' })} />
         <QuickLink icon={<Clock className="h-5 w-5" />} label="Lịch sử" onClick={() => navigate({ view: 'history' })} />
         <QuickLink icon={<Bookmark className="h-5 w-5" />} label="Đánh dấu" onClick={() => navigate({ view: 'bookmarks' })} />
+        <QuickLink icon={<Settings className="h-5 w-5" />} label="Cài đặt" onClick={() => navigate({ view: 'settings' })} />
+        <QuickLink icon={<Info className="h-5 w-5" />} label="Giới thiệu" onClick={() => navigate({ view: 'about' })} />
       </div>
 
       {/* Theme settings */}
