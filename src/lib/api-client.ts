@@ -116,6 +116,8 @@ export const api = {
   streakStats: () => json<{ stats: any }>('/api/stats/streak'),
   achievementsStats: () => json<{ achievements: any[]; summary: any }>('/api/stats/achievements'),
   challengeStats: () => json<{ challenges: any[]; summary: any }>('/api/stats/challenge'),
+  saveSession: (data: { seriesId: string; chapterId?: string; durationSec: number }) =>
+    json('/api/stats/session', { method: 'POST', body: JSON.stringify(data) }),
   upload: (file: File) => {
     const fd = new FormData()
     fd.append('file', file)

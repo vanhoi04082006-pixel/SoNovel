@@ -21,16 +21,16 @@ export async function GET() {
     db.bookmark.count({ where: { userId: user.id } }),
   ])
 
-  // Tổng thời gian nghe ước tính (phút) = sum(listenCharIndex / 270)
-  let totalListenMin = 0
+  // Tổng thời gian nghe thực tế (phút) = sum(audioSec) / 60
+  // Fallback to charIndex estimate if audioSec = 0
+  let totalListenSec = 0
   let chaptersCompleted = 0
   const seriesStats = progress.map((p) => {
     const chapterTotalChars = (p.listenChapter?.wordCount || 0) * 5
     const seriesTotalChars = (p.series.wordCount || 0)
-    const charPerMin = 270
-    const listenMin = Math.round((p.listenCharIndex || 0) / charPerMin)
-    totalListenMin += listenMin
-    // chương hoàn thành = charIndex >= 95% chapter total
+    // Use actual audioSec if > 0, else estimate from charIndex
+    const sessionSec = p.audioSec || Math.round((p.listenCharIndex || 0) / 270 * 60)
+    totalListenSec += sessionSec
     if (chapterTotalChars > 0 && (p.listenCharIndex || 0) >= chapterTotalChars * 0.95) {
       chaptersCompleted++
     }
@@ -46,6 +46,7 @@ export async function GET() {
       listenChapterOrderNo: p.listenChapter?.orderNo,
       listenChapterTitle: p.listenChapter?.title,
       listenCharIndex: p.listenCharIndex,
+      audioSec: sessionSec,
       percent: seriesPct,
       lastListenedAt: p.lastListenedAt,
     }
@@ -53,7 +54,8 @@ export async function GET() {
 
   return NextResponse.json({
     stats: {
-      totalListenMin,
+      totalListenMin: Math.round(totalListenSec / 60),
+      totalListenSec,
       chaptersCompleted,
       seriesFollowing: progress.length,
       favoritesCount: favorites,

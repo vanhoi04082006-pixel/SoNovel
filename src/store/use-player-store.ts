@@ -262,6 +262,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
           listenChapterId: ch?.id,
           listenCharIndex: st.currentChar,
           playbackSpeed: st.rate,
+        }).then(() => {
+          checkAchievementUnlocks()
+        }).catch(() => {})
+        // Track actual listening seconds (30s per tick)
+        api.saveSession({
+          seriesId: st.seriesId,
+          chapterId: ch?.id,
+          durationSec: SAVE_INTERVAL_MS / 1000,
         }).catch(() => {})
       }
     }, SAVE_INTERVAL_MS)

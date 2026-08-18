@@ -10,19 +10,20 @@ export async function GET() {
   const [progress, favorites, history, bookmarks] = await Promise.all([
     db.progress.findMany({
       where: { userId: user.id, listenChapterId: { not: null } },
-      select: { listenCharIndex: true, lastListenedAt: true, listenChapter: { select: { wordCount: true } } },
+      select: { listenCharIndex: true, lastListenedAt: true, audioSec: true, listenChapter: { select: { wordCount: true } } },
     }),
     db.favorite.count({ where: { userId: user.id } }),
     db.history.count({ where: { userId: user.id } }),
     db.bookmark.count({ where: { userId: user.id } }),
   ])
 
-  let totalListenMin = 0
+  let totalListenSec = 0
   let chaptersCompleted = 0
   const days = new Set<string>()
 
   progress.forEach((p) => {
-    totalListenMin += Math.round((p.listenCharIndex || 0) / 270)
+    // Use actual audioSec, fallback to charIndex estimate
+    totalListenSec += p.audioSec || Math.round((p.listenCharIndex || 0) / 270 * 60)
     const wc = (p.listenChapter?.wordCount || 0) * 5
     if (wc > 0 && (p.listenCharIndex || 0) >= wc * 0.95) chaptersCompleted++
     if (p.lastListenedAt) {
@@ -31,6 +32,8 @@ export async function GET() {
       days.add(key)
     }
   })
+
+  const totalListenMin = Math.round(totalListenSec / 60)
 
   const totalDays = days.size
   const seriesCount = progress.length

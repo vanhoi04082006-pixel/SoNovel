@@ -659,3 +659,47 @@ Task: QA, real-time achievement unlock toast, reading goal setter, Stats polish
 - Admin Combobox tag filter: native select vẫn OK.
 - Leaderboard: cần backend sync (phức tạp) — defer.
 - Ưu tiên tiếp theo: (a) Search "Đề xuất", (b) admin Combobox, (c) goal progress notification (reminder khi gần đạt), (d) export stats as image, (e) reading session timer (track actual listening time).
+
+---
+Task ID: z1-z6 (cron webDevReview round 9)
+Agent: orchestrator (main) — cron-triggered QA + feature round
+Task: QA, reading session timer (actual listening time), stats polish
+
+## 1. Trạng thái dự án (assessment)
+- App ổn định sau round 8 (achievement unlock toast, goal setter).
+- Dev server port 3000, lint 0 errors, API 200, không hydration errors.
+- GitHub repo: commit aad66cc.
+- Round 9 goals từ worklog: (a) Search "Đề xuất", (b) admin Combobox, (c) goal notification, (d) export stats image, (e) reading session timer.
+
+## 2. QA via agent-browser (round 9)
+- Home, login admin, Stats — tất cả OK.
+- Console: không errors.
+
+## 3. Goals hoàn thành round này
+
+### Task z2: Reading session timer (actual listening time)
+- API POST /api/stats/session — accumulate durationSec vào progress.audioSec (cap 1h/session).
+- Player store startSaveTimer: mỗi 4s tick (SAVE_INTERVAL_MS), gửi api.saveSession({seriesId, chapterId, durationSec: 4}) song song với saveProgress.
+- API /api/stats/reading: totalListenSec = sum(audioSec || fallback charIndex estimate), totalListenMin = round(totalListenSec/60).
+- API /api/stats/challenge: listenMinThisWeek dùng audioSec fallback estimate.
+- API /api/stats/achievements: totalListenSec dùng audioSec fallback estimate.
+- Verified: POST session durationSec=120 → reading stats totalListenSec=120 (actual, không estimate).
+
+### Task z6: Stats visual polish
+- Session timer integration: Stats "Thời gian nghe" giờ hiển thị actual seconds (2m từ 120s session).
+- Consistent với achievements + challenges (đều dùng audioSec).
+
+## 4. Verification results
+- bun run lint: 0 errors, 0 warnings.
+- agent-browser: Stats "Thời gian nghe" + "2m" in DOM (từ actual session 120s).
+- API /api/stats/session: addedSec=120, upsert progress.audioSec OK.
+- API /api/stats/reading: totalListenSec=120, totalListenMin=2 (actual, không estimate).
+- Dev log: tất cả 200, không error.
+
+## 5. Vấn đề chưa giải quyết / rủi ro / ưu tiên tiếp theo
+- Session timer: track mỗi 4s (sync với saveProgress) — có thể thiếu time khi pause/seek (chỉ count khi isPlaying).
+- Search "Đề xuất" section: chưa làm.
+- Admin Combobox tag filter: native select vẫn OK.
+- Goal progress notification: chưa làm.
+- Export stats as image: chưa làm.
+- Ưu tiên tiếp theo: (a) Search "Đề xuất", (b) admin Combobox, (c) goal progress notification, (d) export stats image, (e) session timer hiển thị real-time trong PlayerBar.

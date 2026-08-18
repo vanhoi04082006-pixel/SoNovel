@@ -21,13 +21,14 @@ export async function GET() {
       listenChapterId: { not: null },
       lastListenedAt: { gte: weekStart },
     },
-    select: { listenCharIndex: true, listenChapterId: true, lastListenedAt: true },
+    select: { listenCharIndex: true, listenChapterId: true, lastListenedAt: true, audioSec: true },
   })
 
   // Chapters listened this week (distinct)
   const chaptersThisWeek = new Set(progress.filter(p => p.listenChapterId).map(p => p.listenChapterId)).size
-  // Total listen minutes this week (sum of charIndex/270)
-  const listenMinThisWeek = progress.reduce((sum, p) => sum + Math.round((p.listenCharIndex || 0) / 270), 0)
+  // Total listen minutes this week — use actual audioSec, fallback to charIndex estimate
+  const listenSecThisWeek = progress.reduce((sum, p) => sum + (p.audioSec || Math.round((p.listenCharIndex || 0) / 270 * 60)), 0)
+  const listenMinThisWeek = Math.round(listenSecThisWeek / 60)
   // Days listened this week
   const daysThisWeek = new Set(
     progress
