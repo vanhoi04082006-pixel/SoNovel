@@ -508,3 +508,52 @@ Task: QA, PWA install prompt, reading streak+heatmap, admin tag filter, Stats po
 - Streak: chỉ track ngày có lastListenedAt (listen track) — không track read track.
 - Heatmap: chỉ 30 ngày (grid 10×3) — có thể mở rộng 90 ngày (GitHub-style).
 - Ưu tiên tiếp theo: (a) 90-day heatmap GitHub-style, (b) Search "Đề xuất" section, (c) PWA icons thiết kế riêng, (d) admin Combobox tag filter, (e) reading achievements/badges.
+
+---
+Task ID: w1-w6 (cron webDevReview round 6)
+Agent: orchestrator (main) — cron-triggered QA + feature round
+Task: QA, reading achievements/badges, 90-day heatmap GitHub-style, Stats polish
+
+## 1. Trạng thái dự án (assessment)
+- App ổn định sau round 5 (PWA install prompt, streak+heatmap, admin tag filter).
+- Dev server port 3000, lint 0 errors, API 200, không hydration errors.
+- GitHub repo: commit 518259f.
+- Round 6 goals từ worklog: (a) 90-day heatmap, (b) Search "Đề xuất", (c) PWA icons, (d) admin Combobox, (e) achievements.
+
+## 2. QA via agent-browser (round 6)
+- Home, login admin, Stats, admin dashboard — tất cả OK.
+- Console: không errors.
+
+## 3. Goals hoàn thành round này
+
+### Task w2: Reading achievements/badges
+- API GET /api/stats/achievements — 12 huy hiệu (4 tier: listening time 30m/5h/50h, chapters 1/10/100, streak 7/30, series 5/20, favorites 5, bookmarks 10) với progress + unlocked + tier (bronze/silver/gold).
+- Stats screen: Achievements Card (Award icon) với grid 2-3 cols, mỗi badge có icon emoji + title + desc + progress bar (h-1 bg-primary), unlocked = full color gradient tier, locked = grayscale opacity-40 + Lock icon top-right.
+- Summary header "Đã mở X/Y huy hiệu · Z%".
+- Verified: API trả 12 achievements đúng progress; Stats render "Thành tích" + badges.
+
+### Task w3: 90-day heatmap GitHub-style
+- API /api/stats/streak: mở rộng heatmap từ 30 → 90 ngày.
+- Stats screen: heatmap grid-flow-col grid-rows-7 (GitHub-style, 13 tuần × 7 ngày), cells h-2.5 w-2.5 rounded-sm, overflow-x-auto no-scrollbar, legend "Ít → Nhiều" (muted → primary/40 → primary/70 → primary).
+- Verified: API 90 entries; DOM 90 cells render đúng.
+
+### Task w6: Stats visual polish
+- Achievements Card card-lift, gradient tier colors (bronze amber-700, silver zinc-400, gold amber-500).
+- Heatmap legend, tooltip date, GitHub-style layout.
+- Consistent với Home + Streak cards.
+
+## 4. Verification results
+- bun run lint: 0 errors, 0 warnings.
+- agent-browser:
+  * Stats: "Thành tích" card render, 90-day heatmap 90 cells (verified via DOM query).
+  * Achievements: "Đã mở ... huy hiệu" text in DOM.
+- API /api/stats/achievements: 12 achievements với progress + unlocked + tier.
+- API /api/stats/streak: heatmap 90 entries.
+- Dev log: tất cả 200, không error.
+
+## 5. Vấn đề chưa giải quyết / rủi ro / ưu tiên tiếp theo
+- Search "Đề xuất" section: chưa làm (ưu tiên thấp, Home đã có).
+- Admin Combobox tag filter: native select vẫn OK.
+- PWA icons thiết kế riêng: chưa làm (logo.svg scale đủ dùng).
+- Achievements: chưa có toast khi unlock (chỉ hiển thị tĩnh).
+- Ưu tiên tiếp theo: (a) toast notification khi unlock achievement, (b) Search "Đề xuất" section, (c) admin Combobox, (d) reading challenge (mục tiêu tuần), (e) share achievements (social).

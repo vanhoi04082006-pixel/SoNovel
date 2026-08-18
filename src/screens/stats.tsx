@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import {
   Headphones, Clock, BookOpen, Heart, Bookmark, TrendingUp,
-  BarChart3, ChevronLeft, Play, Calendar, Flame, Trophy,
+  BarChart3, ChevronLeft, Play, Calendar, Flame, Trophy, Award, Lock,
 } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import { api } from '@/lib/api-client'
@@ -21,6 +21,7 @@ export function StatsScreen() {
   const [stats, setStats] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [streak, setStreak] = useState<any>(null)
+  const [achievements, setAchievements] = useState<any>(null)
   const playChapter = usePlayerStore((s) => s.playChapter)
   const setPlayerActive = useAppStore((s) => s.setPlayerActive)
 
@@ -30,10 +31,15 @@ export function StatsScreen() {
     ;(async () => {
       setLoading(true)
       try {
-        const [r, s] = await Promise.all([api.readingStats(), api.streakStats()])
+        const [r, s, a] = await Promise.all([
+          api.readingStats(),
+          api.streakStats(),
+          api.achievementsStats(),
+        ])
         if (!cancelled) {
           setStats(r.stats)
           setStreak(s.stats)
+          setAchievements(a)
         }
       } catch {
         toast.error('Không tải được thống kê.')
@@ -175,15 +181,27 @@ export function StatsScreen() {
                 </div>
                 {/* 30-day heatmap */}
                 <div>
-                  <p className="text-xs text-muted-foreground mb-2">30 ngày gần nhất</p>
-                  <div className="grid grid-cols-10 gap-1">
-                    {streak.heatmap?.map((day: any, i: number) => (
-                      <div
-                        key={i}
-                        title={`${day.date}${day.listened ? ' — đã nghe' : ''}`}
-                        className={`aspect-square rounded-sm ${day.listened ? 'bg-primary' : 'bg-muted'}`}
-                      />
-                    ))}
+                  <p className="text-xs text-muted-foreground mb-2">90 ngày gần nhất (GitHub-style)</p>
+                  <div className="overflow-x-auto no-scrollbar">
+                    <div className="grid grid-flow-col grid-rows-7 gap-0.5 min-w-max">
+                      {streak.heatmap?.map((day: any, i: number) => (
+                        <div
+                          key={i}
+                          title={`${day.date}${day.listened ? ' — đã nghe' : ''}`}
+                          className={`h-2.5 w-2.5 rounded-sm ${day.listened ? 'bg-primary' : 'bg-muted'}`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 mt-2 text-[10px] text-muted-foreground">
+                    <span>Ít</span>
+                    <div className="flex gap-0.5">
+                      <div className="h-2 w-2 rounded-sm bg-muted" />
+                      <div className="h-2 w-2 rounded-sm bg-primary/40" />
+                      <div className="h-2 w-2 rounded-sm bg-primary/70" />
+                      <div className="h-2 w-2 rounded-sm bg-primary" />
+                    </div>
+                    <span>Nhiều</span>
                   </div>
                 </div>
                 {streak.currentStreak > 0 && (
@@ -191,6 +209,62 @@ export function StatsScreen() {
                     🔥 Đang chuỗi {streak.currentStreak} ngày! Nghe tiếp để duy trì.
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Achievements */}
+          {achievements && (
+            <Card className="card-lift">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Award className="h-4 w-4 text-amber-500" /> Thành tích
+                </CardTitle>
+                <CardDescription>
+                  Đã mở {achievements.summary.unlocked}/{achievements.summary.total} huy hiệu · {achievements.summary.progress}%
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {achievements.achievements.map((a: any) => {
+                    const tierColors: Record<string, string> = {
+                      bronze: 'from-amber-700/20 to-amber-600/10 border-amber-700/30',
+                      silver: 'from-zinc-400/20 to-zinc-300/10 border-zinc-400/30',
+                      gold: 'from-amber-500/30 to-yellow-400/10 border-amber-500/40',
+                    }
+                    return (
+                      <div
+                        key={a.id}
+                        title={`${a.title} — ${a.desc}`}
+                        className={`relative rounded-lg border bg-gradient-to-br p-3 text-center transition-all ${
+                          a.unlocked
+                            ? `${tierColors[a.tier] || tierColors.bronze} opacity-100`
+                            : 'opacity-40 grayscale'
+                        }`}
+                      >
+                        <div className="text-2xl mb-1">{a.icon}</div>
+                        <p className="text-xs font-semibold line-clamp-1">{a.title}</p>
+                        <p className="text-[10px] text-muted-foreground line-clamp-1 mt-0.5">{a.desc}</p>
+                        {!a.unlocked && (
+                          <div className="absolute top-1 right-1">
+                            <Lock className="h-3 w-3 text-muted-foreground" />
+                          </div>
+                        )}
+                        <div className="mt-1.5">
+                          <div className="h-1 rounded-full bg-muted overflow-hidden">
+                            <div
+                              className="h-full bg-primary transition-all"
+                              style={{ width: `${Math.min(100, (a.progress / a.goal) * 100)}%` }}
+                            />
+                          </div>
+                          <p className="text-[10px] text-muted-foreground mt-0.5 tabular-nums">
+                            {a.progress}/{a.goal}
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
               </CardContent>
             </Card>
           )}

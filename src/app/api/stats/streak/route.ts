@@ -22,11 +22,11 @@ export async function GET() {
     }
   })
 
-  // Build last 30 days heatmap
+  // Build last 90 days heatmap (GitHub-style: 13 weeks × 7 days)
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const heatmap: { date: string; listened: boolean }[] = []
-  for (let i = 29; i >= 0; i--) {
+  for (let i = 89; i >= 0; i--) {
     const d = new Date(today)
     d.setDate(d.getDate() - i)
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
