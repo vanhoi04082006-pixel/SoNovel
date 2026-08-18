@@ -36,12 +36,17 @@ export function PlayerBar() {
   const player = usePlayerStore()
   const {
     seriesTitle, coverUrl, chapters, currentIndex, currentChar,
-    isPlaying, isPaused, busy, seriesEnded, rate, error, sleepMode, sleepEndTime,
+    isPlaying, isPaused, busy, seriesEnded, rate, error, sleepMode, sleepEndTime, sessionSeconds,
   } = player
 
   const ch = chapters[currentIndex]
   const contentLen = ch?.content?.length || 1
   const progressFrac = Math.min(1, currentChar / contentLen)
+
+  // Format session time MM:SS
+  const sessionMin = Math.floor(sessionSeconds / 60)
+  const sessionSec = sessionSeconds % 60
+  const sessionTime = `${String(sessionMin).padStart(2, '0')}:${String(sessionSec).padStart(2, '0')}`
 
   // hotkeys
   useEffect(() => {
@@ -128,8 +133,14 @@ export function PlayerBar() {
             </div>
           </div>
           {/* status row */}
-          {(sleepMode !== 'off' || error || seriesEnded) && (
+          {(sessionSeconds > 0 || sleepMode !== 'off' || error || seriesEnded) && (
             <div className="flex items-center gap-2 pb-1.5 text-[10px]">
+              {sessionSeconds > 0 && (
+                <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 tabular-nums ${isPlaying ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'bg-muted text-muted-foreground'}`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${isPlaying ? 'bg-emerald-500 animate-pulse' : 'bg-muted-foreground'}`} />
+                  {sessionTime}
+                </span>
+              )}
               {sleepMode !== 'off' && (
                 <span className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-primary">
                   <Moon className="h-3 w-3" />

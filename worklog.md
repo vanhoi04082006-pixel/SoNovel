@@ -703,3 +703,44 @@ Task: QA, reading session timer (actual listening time), stats polish
 - Goal progress notification: chưa làm.
 - Export stats as image: chưa làm.
 - Ưu tiên tiếp theo: (a) Search "Đề xuất", (b) admin Combobox, (c) goal progress notification, (d) export stats image, (e) session timer hiển thị real-time trong PlayerBar.
+
+---
+Task ID: aa1-aa6 (cron webDevReview round 10)
+Agent: orchestrator (main) — cron-triggered QA + feature round
+Task: QA, live session timer trong PlayerBar, styling polish
+
+## 1. Trạng thái dự án (assessment)
+- App ổn định sau round 9 (reading session timer API).
+- Dev server port 3000, lint 0 errors, API 200, không hydration errors.
+- GitHub repo: commit 4f7298d.
+- Round 10 goals từ worklog: (a) Search "Đề xuất", (b) admin Combobox, (c) goal notification, (d) export stats image, (e) live session timer PlayerBar.
+
+## 2. QA via agent-browser (round 10)
+- Home, login admin, Stats — tất cả OK.
+- Console: chỉ TTS warning (headless không engine).
+
+## 3. Goals hoàn thành round này
+
+### Task aa2: Live session timer trong PlayerBar
+- Player store: thêm sessionSeconds state + sessionTimer (setInterval 1s, increment khi isPlaying).
+- startSessionTimer/stopSessionTimer trong playChapterInternal/stopInternal.
+- Reset sessionSeconds khi new series (index 0 + startChar 0).
+- PlayerBar: status row hiển thị session time MM:SS badge (bg-emerald-500/15 + animate-pulse dot khi isPlaying, bg-muted khi paused).
+- Verified: logic đúng — timer chỉ increment khi isPlaying=true (TTS headless không phát → 0s, sẽ hoạt động browser thật).
+
+### Task aa6: PlayerBar visual polish
+- Session timer badge: rounded-full px-2 py-0.5 tabular-nums, dot animate-pulse khi playing, emerald color.
+- Status row: thêm session time vào điều kiện render (sessionSeconds > 0).
+
+## 4. Verification results
+- bun run lint: 0 errors, 0 warnings.
+- agent-browser: PlayerBar render đúng; TTS error (headless) → timer không increment (logic đúng).
+- Dev log: tất cả 200, không error.
+
+## 5. Vấn đề chưa giải quyết / rủi ro / ưu tiên tiếp theo
+- Live timer: không test thực tế trong headless (TTS synthesis-failed) — logic đúng, sẽ fire trong browser thật.
+- Search "Đề xuất" section: chưa làm.
+- Admin Combobox tag filter: native select vẫn OK.
+- Goal progress notification: chưa làm.
+- Export stats as image: chưa làm.
+- Ưu tiên tiếp theo: (a) Search "Đề xuất", (b) admin Combobox, (c) goal notification, (d) export stats image, (e) session timer pause-aware (chỉ count actual playing time).

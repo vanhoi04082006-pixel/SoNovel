@@ -26,6 +26,7 @@ interface PlayerState {
   busy: boolean
   seriesEnded: boolean
   error: string | null
+  sessionSeconds: number // live session timer (seconds played this session)
 
   sleepMode: SleepMode
   sleepEndTime: number | null // epoch ms
@@ -101,6 +102,7 @@ let currentChunks: { text: string; offset: number }[] = []
 let currentChunkIdx = 0
 let saveTimer: ReturnType<typeof setInterval> | null = null
 let sleepTimer: ReturnType<typeof setInterval> | null = null
+let sessionTimer: ReturnType<typeof setInterval> | null = null
 let titleAnnouncedForChapter = -1
 
 function getSynth(): SpeechSynthesis | null {
@@ -231,6 +233,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     const st = get()
     const ch = st.chapters[index]
     if (!ch) return
+    // Reset session timer khi bắt đầu series mới (index 0 + startChar 0)
+    const isNewSeries = index === 0 && startChar === 0 && st.currentIndex !== 0
     set({
       currentIndex: index,
       currentChar: startChar,
@@ -239,6 +243,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
       busy: true,
       seriesEnded: false,
       error: null,
+      sessionSeconds: isNewSeries ? 0 : st.sessionSeconds,
     })
     get().emit('chapterChange', { index })
     currentChunks = chunkText(ch.content || '')
@@ -248,6 +253,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     speakCurrentChunk()
     startSaveTimer()
     startSleepTimer()
+    startSessionTimer()
     flushSave()
   }
 
@@ -277,6 +283,21 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
 
   const stopSaveTimer = () => {
     if (saveTimer) { clearInterval(saveTimer); saveTimer = null }
+  }
+
+  // Live session timer — increment sessionSeconds mỗi giây khi isPlaying
+  const startSessionTimer = () => {
+    stopSessionTimer()
+    sessionTimer = setInterval(() => {
+      const st = get()
+      if (st.isPlaying) {
+        set({ sessionSeconds: st.sessionSeconds + 1 })
+      }
+    }, 1000)
+  }
+
+  const stopSessionTimer = () => {
+    if (sessionTimer) { clearInterval(sessionTimer); sessionTimer = null }
   }
 
   // Track previous unlocked achievements to detect new unlocks
@@ -348,6 +369,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     currentUtterance = null
     stopSaveTimer()
     stopSleepTimer()
+    stopSessionTimer()
   }
 
   const updateMediaSession = () => {
@@ -379,6 +401,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     busy: false,
     seriesEnded: false,
     error: null,
+    sessionSeconds: 0,
     sleepMode: 'off',
     sleepEndTime: null,
     sleepChapterEndFlag: false,
