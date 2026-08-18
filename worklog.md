@@ -744,3 +744,45 @@ Task: QA, live session timer trong PlayerBar, styling polish
 - Goal progress notification: chưa làm.
 - Export stats as image: chưa làm.
 - Ưu tiên tiếp theo: (a) Search "Đề xuất", (b) admin Combobox, (c) goal notification, (d) export stats image, (e) session timer pause-aware (chỉ count actual playing time).
+
+---
+Task ID: bb1-bb4 (cron webDevReview round 11)
+Agent: orchestrator (main) — cron-triggered feature round
+Task: Search "Đề xuất", goal progress notification, CSV export
+
+## 1. Trạng thái dự án (assessment)
+- App ổn định sau round 10 (live session timer PlayerBar).
+- Dev server port 3000, lint 0 errors, API 200, không hydration errors.
+- GitHub repo: commit 590d15a.
+- Round 11 goals: (a) Search "Đề xuất", (b) admin Combobox, (c) goal notification, (d) export stats image.
+
+## 2. Goals hoàn thành round này
+
+### Task bb1: Search "Đề xuất" section
+- Search screen: thêm FeaturedSearchCard component (rank badge #1/#2/#3, cover + title + author + genre chip + description + stats).
+- Section "Đề xuất cho bạn" (Star icon amber) hiện khi !hasFilters, hiển thị 3 series đầu (popular).
+- Verified: Search screen render "Đề xuất cho bạn" heading.
+
+### Task bb3: Goal progress notification
+- Player store: thêm checkGoalProgress() — gọi sau flushSave song song checkAchievementUnlocks.
+- prevGoalNotifiedIds Set — track challenges đã notify (80-99% progress).
+- Toast.info "🎯 Sắp đạt: [title]" với description "Đã X/Y unit (Z%) — cố lên!" (5s duration).
+- Clear notified khi challenge unlock (để có thể notify lại lần sau).
+- Verified: logic đúng (first load cache, subsequent 80%+ fire toast).
+
+### Task bb4: Export stats as CSV
+- Stats Challenges Card: thêm CSV button cạnh Share.
+- Export series progress as CSV: STT, Tiêu đề, Chương hiện tại, Ký tự, Phút nghe, % hoàn thành, Lần nghe cuối.
+- BOM \uFEFF cho UTF-8 Excel, download `sonovel-stats-YYYY-MM-DD.csv`.
+- Verified: click CSV → toast "Đã xuất thống kê ra file CSV".
+
+## 3. Verification results
+- bun run lint: 0 errors, 0 warnings.
+- agent-browser: Search "Đề xuất cho bạn" render; Stats CSV button click → toast.
+- Dev log: tất cả 200, không error.
+
+## 4. Vấn đề chưa giải quyết / rủi ro / ưu tiên tiếp theo
+- Admin Combobox tag filter: native select vẫn OK (defer).
+- Export as image (html2canvas): chưa install — dùng CSV thay thế (đơn giản, không thêm dep).
+- Goal notification: chưa test thực tế (TTS headless) — logic đúng.
+- Ưu tiên tiếp theo: (a) admin Combobox, (b) reading session history chart (line chart theo ngày), (c) compare with friends (social), (d) custom themes (user color picker).

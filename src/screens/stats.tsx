@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import {
   Headphones, Clock, BookOpen, Heart, Bookmark, TrendingUp,
-  BarChart3, ChevronLeft, Play, Calendar, Flame, Trophy, Award, Lock, Target, Share2, Pencil, Check,
+  BarChart3, ChevronLeft, Play, Calendar, Flame, Trophy, Award, Lock, Target, Share2, Pencil, Check, Download,
 } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import { api } from '@/lib/api-client'
@@ -428,6 +428,36 @@ export function StatsScreen() {
                     }}
                   >
                     <Share2 className="h-4 w-4 mr-1" /> Chia sẻ
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      // Export series progress as CSV
+                      const rows = [['STT', 'Tiêu đề', 'Chương hiện tại', 'Ký tự', 'Phút nghe', '% hoàn thành', 'Lần nghe cuối']]
+                      ;(stats?.seriesStats || []).forEach((s: any, i: number) => {
+                        rows.push([
+                          String(i + 1),
+                          `"${s.title.replace(/"/g, '""')}"`,
+                          s.listenChapterOrderNo ? `Chương ${s.listenChapterOrderNo}` : '',
+                          String(s.listenCharIndex || 0),
+                          String(Math.round((s.audioSec || 0) / 60)),
+                          `${s.percent}%`,
+                          s.lastListenedAt ? new Date(s.lastListenedAt).toLocaleString('vi-VN') : '',
+                        ])
+                      })
+                      const csv = '\uFEFF' + rows.map(r => r.join(',')).join('\n')
+                      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+                      const url = URL.createObjectURL(blob)
+                      const a = document.createElement('a')
+                      a.href = url
+                      a.download = `sonovel-stats-${new Date().toISOString().slice(0, 10)}.csv`
+                      a.click()
+                      URL.revokeObjectURL(url)
+                      toast.success('Đã xuất thống kê ra file CSV.')
+                    }}
+                  >
+                    <Download className="h-4 w-4 mr-1" /> CSV
                   </Button>
                 </div>
               </CardContent>

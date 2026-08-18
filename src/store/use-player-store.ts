@@ -328,6 +328,40 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     } catch {}
   }
 
+  // Goal progress notification — toast khi challenge đạt 80%+
+  let prevGoalNotifiedIds: Set<string> | null = null
+
+  const checkGoalProgress = async () => {
+    try {
+      const r = await api.challengeStats()
+      // Find challenges at 80-99% (not yet unlocked)
+      const nearGoal = r.challenges.filter((c: any) => {
+        const pct = (c.progress / c.goal) * 100
+        return pct >= 80 && pct < 100
+      })
+      if (prevGoalNotifiedIds === null) {
+        prevGoalNotifiedIds = new Set()
+        return
+      }
+      nearGoal.forEach((c: any) => {
+        if (!prevGoalNotifiedIds!.has(c.id)) {
+          prevGoalNotifiedIds!.add(c.id)
+          import('sonner').then(({ toast }) => {
+            const pct = Math.round((c.progress / c.goal) * 100)
+            toast.info(`🎯 Sắp đạt: ${c.title}`, {
+              description: `Đã ${c.progress}/${c.goal} ${c.unit} (${pct}%) — cố lên!`,
+              duration: 5000,
+            })
+          })
+        }
+      })
+      // Clear notified khi đã unlock
+      r.challenges.filter((c: any) => c.unlocked).forEach((c: any) => {
+        prevGoalNotifiedIds!.delete(c.id)
+      })
+    } catch {}
+  }
+
   const flushSave = () => {
     const st = get()
     if (!st.seriesId) return
@@ -338,8 +372,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
       listenCharIndex: st.currentChar,
       playbackSpeed: st.rate,
     }).then(() => {
-      // Check for new achievement unlocks after progress save
+      // Check for new achievement unlocks + goal progress after progress save
       checkAchievementUnlocks()
+      checkGoalProgress()
     }).catch(() => {})
   }
 

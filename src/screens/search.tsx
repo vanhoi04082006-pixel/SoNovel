@@ -1,10 +1,11 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { Search as SearchIcon, X, ChevronRight, Clock } from 'lucide-react'
+import { Search as SearchIcon, X, ChevronRight, Clock, Star } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import { api, type SeriesItem } from '@/lib/api-client'
 import { StoryCard } from '@/components/sonovel/story-card'
+import { CoverImage } from '@/components/sonovel/cover-image'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
@@ -160,6 +161,20 @@ export function SearchScreen() {
         </div>
       )}
 
+      {/* Đề xuất — chỉ hiện khi không có filter */}
+      {!hasFilters && (
+        <div>
+          <h2 className="flex items-center gap-1.5 text-sm font-semibold text-muted-foreground mb-2">
+            <Star className="h-4 w-4 text-amber-500" /> Đề xuất cho bạn
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {items.slice(0, 3).map((s, i) => (
+              <FeaturedSearchCard key={s.id} series={s} rank={i + 1} />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Sort */}
       <div className="flex flex-wrap items-center gap-2">
         {SORTS.map((s) => (
@@ -244,6 +259,36 @@ export function SearchScreen() {
             )}
           </>
         )}
+      </div>
+    </div>
+  )
+}
+
+function FeaturedSearchCard({ series, rank }: { series: SeriesItem; rank: number }) {
+  const navigate = useAppStore((s) => s.navigate)
+  const listenMin = Math.max(1, Math.round((series.wordCount || 0) / 270))
+  const rankColors = ['text-amber-500', 'text-zinc-400', 'text-orange-700']
+
+  return (
+    <div
+      onClick={() => navigate({ view: 'story', seriesId: series.id })}
+      className="group relative flex gap-3 rounded-xl border border-border bg-card p-3 cursor-pointer card-lift overflow-hidden"
+    >
+      <div className={`absolute -top-1 -left-1 grid h-8 w-8 place-items-center rounded-full bg-background border-2 border-border font-bold text-lg ${rankColors[rank - 1] || 'text-muted-foreground'}`}>
+        {rank}
+      </div>
+      <CoverImage title={series.title} coverUrl={series.coverUrl} className="h-24 w-16 shrink-0 ml-2" />
+      <div className="flex-1 min-w-0 flex flex-col">
+        <h3 className="font-semibold text-sm line-clamp-2 group-hover:text-primary transition-colors">{series.title}</h3>
+        <p className="text-xs text-muted-foreground line-clamp-1">{series.author || 'Không rõ'}</p>
+        {series.genres?.[0] && (
+          <span className="mt-1 inline-block text-[10px] text-primary font-medium w-fit">{series.genres[0]}</span>
+        )}
+        <p className="text-xs text-muted-foreground line-clamp-2 mt-1 flex-1">{series.description}</p>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+          <span>{series.chapterCount ?? 0} chương</span>
+          <span>· ~{listenMin} phút</span>
+        </div>
       </div>
     </div>
   )
