@@ -8,10 +8,12 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  schemas  = ["web"]
 }
 
 // ---- Auth: profiles + users (mirror profiles + auth.users) ----
 model Profile {
+  @@schema("web")
   id        String   @id // = auth user id
   email     String   @unique
   role      String   @default("user") // 'user' | 'admin'
@@ -27,6 +29,7 @@ model Profile {
 
 // ---- series (bộ truyện) ----
 model Series {
+  @@schema("web")
   id          String   @id @default(cuid())
   title       String
   author      String   @default("")
@@ -53,6 +56,7 @@ model Series {
 
 // ---- chapters — ONLY 2 statuses: draft | published (§5.2, §10.5) ----
 model Chapter {
+  @@schema("web")
   id          String    @id @default(cuid())
   seriesId    String
   orderNo     Int
@@ -74,6 +78,7 @@ model Chapter {
 
 // ---- progress — dual track READ + LISTEN ----
 model Progress {
+  @@schema("web")
   id               String    @id @default(cuid())
   userId           String
   seriesId         String
@@ -101,6 +106,7 @@ model Progress {
 
 // ---- favorites (user_id + series_id PK) ----
 model Favorite {
+  @@schema("web")
   userId    String
   seriesId  String
   createdAt DateTime @default(now())
@@ -113,6 +119,7 @@ model Favorite {
 
 // ---- bookmarks ----
 model Bookmark {
+  @@schema("web")
   id        String   @id @default(cuid())
   userId    String
   seriesId  String
@@ -129,6 +136,7 @@ model Bookmark {
 
 // ---- history (user_id + series_id PK) ----
 model History {
+  @@schema("web")
   userId       String
   seriesId     String
   openedCount  Int      @default(1)
@@ -142,6 +150,7 @@ model History {
 
 // ---- user_settings ----
 model UserSettings {
+  @@schema("web")
   userId        String  @id
   // theme: 'light' | 'dark' | 'sepia' | 'amoled'
   theme         String  @default("light")
@@ -157,6 +166,7 @@ model UserSettings {
 
 // ---- chapter_audio (dự phòng, chưa dùng) ----
 model ChapterAudio {
+  @@schema("web")
   chapterId  String  @id
   audioUrl   String  @default("")
   durationSec Float  @default(0)
@@ -165,6 +175,7 @@ model ChapterAudio {
 
 // ---- tags master ----
 model Tag {
+  @@schema("web")
   id        String   @id @default(cuid())
   name      String   @unique
   createdAt DateTime @default(now())
