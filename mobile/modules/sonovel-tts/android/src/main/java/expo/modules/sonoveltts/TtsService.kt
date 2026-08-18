@@ -1,0 +1,844 @@
+package expo.modules.sonoveltts
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
+import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
+import android.os.Build
+import android.os.Bundle
+import android.os.Handler
+import android.os.IBinder
+import android.os.Looper
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
+import androidx.core.app.NotificationCompat
+import androidx.media.app.NotificationCompat.MediaStyle
+import androidx.media.session.MediaSessionCompat
+import androidx.media.session.PlaybackStateCompat
+import androidx.media.session.MediaMetadataCompat
+import org.json.JSONArray
+import java.util.Locale
+
+/**
+ * Foreground service chuyên phát TTS bằng Android system TextToSpeech engine.
+ *
+ * Đặc điểm cốt lõi (đã xử lý các bug §8.5):
+ *  - foregroundServiceType = mediaPlayback (chạy nền khi khóa màn hình).
+ *  - MediaSession + Notification với 4 action: prev / play-pause / next / stop.
+ *  - Watchdog WATCHDOG_MS=2000: nếu speak() trả OK nhưng engine không gọi onStart
+ *    → retry MAX_RETRY=2 → re-init engine → onErrorInternal.
+ *  - Init timeout INIT_TIMEOUT_MS=6000: nếu engine không gọi onInit → tự onError.
+ *  - speakSeq tăng dần + currentUtteranceId guard: callback lạc/trùng bị bỏ qua.
+ *  - onStateChange 'playing' chỉ emit từ onStart THẬT.
+ *  - onResume (notification play) dùng SETTLE_MS=200 trễ sau stop().
+ *  - playFrom khi !ttsReady → chain qua ensureTts (không bao giờ return im lặng).
+ */
+class TtsService : Service(), TextToSpeech.OnInitListener {
+
+    companion object {
+        const val ACTION_START = "com.sonovel.app.action.START"
+        const val ACTION_PAUSE = "com.sonovel.app.action.PAUSE"
+        const val ACTION_RESUME = "com.sonovel.app.action.RESUME"
+        const val ACTION_STOP = "com.sonovel.app.action.STOP"
+        const val ACTION_NEXT = "com.sonovel.app.action.NEXT"
+        const val ACTION_PREV = "com.sonovel.app.action.PREV"
+        const val ACTION_SEEK = "com.sonovel.app.action.SEEK"
+        const val ACTION_PLAY_CHAPTER = "com.sonovel.app.action.PLAY_CHAPTER"
+        const val ACTION_SET_RATE = "com.sonovel.app.action.SET_RATE"
+
+        const val EXTRA_SERIES_TITLE = "seriesTitle"
+        const val EXTRA_COVER_URL = "coverUrl"
+        const val EXTRA_CHAPTERS_JSON = "chaptersJson"
+        const val EXTRA_START_CHAPTER = "startChapterIndex"
+        const val EXTRA_START_CHAR = "startCharIndex"
+        const val EXTRA_RATE = "rate"
+        const val EXTRA_CHAPTER_INDEX = "chapterIndex"
+        const val EXTRA_CHAR_INDEX = "charIndex"
+
+        const val SETTLE_MS = 200L
+        const val WATCHDOG_MS = 2000L
+        const val INIT_TIMEOUT_MS = 6000L
+        const val MAX_RETRY = 2
+
+        const val CHANNEL_ID = "sonovel_tts_channel"
+        const val NOTIF_ID = 0x7f01
+
+        @Volatile
+        var instance: TtsService? = null
+    }
+
+    // --- TTS engine state ---
+    private var tts: TextToSpeech? = null
+    @Volatile private var ttsReady = false
+    private var pendingPlay: (() -> Unit)? = null
+
+    // --- Playback state ---
+    private var chapters: List<ChapterInfo> = emptyList()
+    @Volatile private var chapterIndex = 0
+    @Volatile private var charIndex = 0
+    @Volatile private var chunkIndex = 0
+    private var chunks: List<String> = emptyList()
+    @Volatile private var rate = 1.0f
+    @Volatile private var playing = false
+    @Volatile private var engineStarted = false
+    private var seriesTitle = ""
+    private var coverUrl = ""
+    private var announceTitle = false
+
+    // --- Utterance tracking ---
+    @Volatile private var currentUtteranceId: String? = null
+    private var speakSeq = 0
+    @Volatile private var pendingTargetChar = 0
+    private var retryCount = 0
+
+    // --- Handlers ---
+    private val main = Handler(Looper.getMainLooper())
+    private var watchdogRunnable: Runnable? = null
+    private var initTimeoutRunnable: Runnable? = null
+    private var settleRunnable: Runnable? = null
+
+    // --- Notification / MediaSession / Audio focus ---
+    private var notificationManager: NotificationManager? = null
+    private var audioManager: AudioManager? = null
+    private var mediaSession: MediaSessionCompat? = null
+    private var audioFocusRequest: AudioFocusRequest? = null
+    private var afChangeListener: AudioManager.OnAudioFocusChangeListener? = null
+    private var channelCreated = false
+
+    // -------------------------------------------------------------------
+    // Lifecycle
+    // -------------------------------------------------------------------
+
+    override fun onCreate() {
+        super.onCreate()
+        instance = this
+        notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
+        ensureChannel()
+        setupMediaSession()
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val action = intent?.action
+        when (action) {
+            ACTION_START -> handleStartAction(intent)
+            ACTION_PLAY_CHAPTER -> handlePlayChapterAction(intent)
+            ACTION_PAUSE -> onPause()
+            ACTION_RESUME -> onResume()
+            ACTION_STOP -> onStop(true)
+            ACTION_NEXT -> nextChapter()
+            ACTION_PREV -> prevChapter()
+            ACTION_SEEK -> {
+                val ch = intent?.getIntExtra(EXTRA_CHAR_INDEX, 0) ?: 0
+                ensureTts { playFrom(ch) }
+            }
+            ACTION_SET_RATE -> {
+                val r = intent?.getFloatExtra(EXTRA_RATE, 1.0f) ?: 1.0f
+                this.rate = r
+                try { tts?.setSpeechRate(r) } catch (_: Throwable) {}
+            }
+            else -> { /* no-op */ }
+        }
+        return START_STICKY
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        cancelWatchdog()
+        cancelInitTimeout()
+        try { tts?.stop() } catch (_: Throwable) {}
+        try { tts?.shutdown() } catch (_: Throwable) {}
+        tts = null
+        ttsReady = false
+        pendingPlay = null
+        releaseAudioFocus()
+        try { mediaSession?.release() } catch (_: Throwable) {}
+        mediaSession = null
+        instance = null
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    // -------------------------------------------------------------------
+    // ACTION handlers
+    // -------------------------------------------------------------------
+
+    private fun handleStartAction(intent: Intent) {
+        val seriesTitle = intent.getStringExtra(EXTRA_SERIES_TITLE) ?: ""
+        val coverUrl = intent.getStringExtra(EXTRA_COVER_URL) ?: ""
+        val chaptersJson = intent.getStringExtra(EXTRA_CHAPTERS_JSON) ?: "[]"
+        val startChapter = intent.getIntExtra(EXTRA_START_CHAPTER, 0)
+        val startChar = intent.getIntExtra(EXTRA_START_CHAR, 0)
+        val rate = intent.getFloatExtra(EXTRA_RATE, 1.0f)
+
+        this.seriesTitle = seriesTitle
+        this.coverUrl = coverUrl
+        this.chapters = parseChapters(chaptersJson)
+        this.chapterIndex = if (chapters.isEmpty()) 0 else startChapter.coerceIn(0, chapters.size - 1)
+        this.charIndex = startChar
+        this.announceTitle = (startChar == 0)
+        this.rate = rate
+        this.retryCount = 0
+
+        startForegroundNow()
+        requestAudioFocus()
+        updateMediaMetadata()
+        ensureTts { playFrom(charIndex) }
+    }
+
+    private fun handlePlayChapterAction(intent: Intent) {
+        if (chapters.isEmpty()) return
+        val idx = intent.getIntExtra(EXTRA_CHAPTER_INDEX, 0).coerceIn(0, chapters.size - 1)
+        val ch = intent.getIntExtra(EXTRA_CHAR_INDEX, 0)
+        this.chapterIndex = idx
+        this.charIndex = ch
+        this.announceTitle = (ch == 0)
+        this.retryCount = 0
+        updateMediaMetadata()
+        ensureTts { playFrom(ch) }
+    }
+
+    private fun parseChapters(json: String): List<ChapterInfo> {
+        return try {
+            val arr = JSONArray(json)
+            val out = ArrayList<ChapterInfo>(arr.length())
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                out.add(ChapterInfo(o.optString("title"), o.optString("content")))
+            }
+            out
+        } catch (_: Throwable) {
+            emptyList()
+        }
+    }
+
+    // -------------------------------------------------------------------
+    // Foreground + Notification
+    // -------------------------------------------------------------------
+
+    private fun ensureChannel() {
+        if (channelCreated) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val ch = NotificationChannel(
+                CHANNEL_ID,
+                "SoNovel — Đọc truyện",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Thông báo điều khiển nghe truyện SoNovel"
+                setShowBadge(false)
+            }
+            notificationManager?.createNotificationChannel(ch)
+        }
+        channelCreated = true
+    }
+
+    private fun startForegroundNow() {
+        ensureChannel()
+        val notif = buildNotification(playing)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+            } else {
+                startForeground(NOTIF_ID, notif)
+            }
+        } catch (_: SecurityException) {
+            // Thiếu permission FOREGROUND_SERVICE_MEDIA_PLAYBACK trên Android 14+
+            emitError(10, "Thiếu quyền FOREGROUND_SERVICE_MEDIA_PLAYBACK")
+        } catch (_: Throwable) {
+            emitError(11, "Không thể startForeground()")
+        }
+    }
+
+    private fun buildNotification(isPlaying: Boolean): Notification {
+        val title = seriesTitle.ifEmpty { "SoNovel" }
+        val text = if (chapters.isEmpty() || chapterIndex !in chapters.indices) "Đang chuẩn bị…"
+                   else "Chương ${chapterIndex + 1}. ${chapters[chapterIndex].title}"
+
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setOngoing(isPlaying)
+            .setOnlyAlertOnce(true)
+            .setShowWhen(false)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+
+        builder.addAction(android.R.drawable.ic_media_previous, "Trước",
+            buildAction(ACTION_PREV, 1))
+        val playPauseAction = if (isPlaying) ACTION_PAUSE else ACTION_RESUME
+        val playPauseIcon = if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
+        val playPauseLabel = if (isPlaying) "Tạm dừng" else "Phát"
+        builder.addAction(playPauseIcon, playPauseLabel, buildAction(playPauseAction, 2))
+        builder.addAction(android.R.drawable.ic_media_next, "Sau", buildAction(ACTION_NEXT, 3))
+        builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, "Dừng",
+            buildAction(ACTION_STOP, 4))
+
+        try {
+            mediaSession?.sessionToken?.let { token ->
+                builder.setStyle(MediaStyle()
+                    .setMediaSession(token)
+                    .setShowActionsInCompactView(0, 1, 2))
+            }
+        } catch (_: Throwable) {}
+
+        return builder.build()
+    }
+
+    private fun buildAction(action: String, requestCode: Int): PendingIntent {
+        val intent = Intent(this, TtsService::class.java).apply { this.action = action }
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        } else PendingIntent.FLAG_UPDATE_CURRENT
+        return PendingIntent.getService(this, requestCode, intent, flags)
+    }
+
+    private fun updateNotification() {
+        try {
+            notificationManager?.notify(NOTIF_ID, buildNotification(playing))
+        } catch (_: Throwable) {}
+    }
+
+    // -------------------------------------------------------------------
+    // MediaSession
+    // -------------------------------------------------------------------
+
+    private fun setupMediaSession() {
+        try {
+            val session = MediaSessionCompat(this, "SoNovelTts")
+            session.setFlags(
+                MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or
+                MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS
+            )
+            session.setCallback(object : MediaSessionCompat.Callback() {
+                override fun onPlay() { sendServiceAction(ACTION_RESUME) }
+                override fun onPause() { sendServiceAction(ACTION_PAUSE) }
+                override fun onSkipToNext() { sendServiceAction(ACTION_NEXT) }
+                override fun onSkipToPrevious() { sendServiceAction(ACTION_PREV) }
+                override fun onStop() { sendServiceAction(ACTION_STOP) }
+            })
+            session.isActive = true
+            mediaSession = session
+        } catch (_: Throwable) {}
+    }
+
+    private fun updateMediaMetadata() {
+        try {
+            val title = if (chapters.isEmpty() || chapterIndex !in chapters.indices) seriesTitle
+                else "Chương ${chapterIndex + 1}. ${chapters[chapterIndex].title}"
+            val md = MediaMetadataCompat.Builder()
+                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
+                .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, seriesTitle)
+                .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, "SoNovel")
+                .build()
+            mediaSession?.setMetadata(md)
+            mediaSession?.setPlaybackState(buildPlaybackState())
+        } catch (_: Throwable) {}
+    }
+
+    private fun buildPlaybackState(): PlaybackStateCompat {
+        val state = if (playing) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
+        return PlaybackStateCompat.Builder()
+            .setActions(
+                PlaybackStateCompat.ACTION_PLAY or
+                PlaybackStateCompat.ACTION_PAUSE or
+                PlaybackStateCompat.ACTION_PLAY_PAUSE or
+                PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
+                PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
+                PlaybackStateCompat.ACTION_STOP
+            )
+            .setState(state, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, rate)
+            .build()
+    }
+
+    private fun sendServiceAction(action: String) {
+        try {
+            val intent = Intent(this, TtsService::class.java).apply { this.action = action }
+            startService(intent)
+        } catch (_: Throwable) {}
+    }
+
+    // -------------------------------------------------------------------
+    // Audio focus
+    // -------------------------------------------------------------------
+
+    private fun requestAudioFocus() {
+        try {
+            if (afChangeListener == null) {
+                afChangeListener = AudioManager.OnAudioFocusChangeListener { change ->
+                    when (change) {
+                        AudioManager.AUDIOFOCUS_LOSS -> { stopSelf() }
+                        AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
+                        AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> onPause()
+                        AudioManager.AUDIOFOCUS_GAIN -> onResume()
+                    }
+                }
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val attrs = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+                val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                    .setAudioAttributes(attrs)
+                    .setAcceptsDelayedFocusGain(true)
+                    .setOnAudioFocusChangeListener(afChangeListener!!)
+                    .build()
+                audioFocusRequest = req
+                audioManager?.requestAudioFocus(req)
+            } else {
+                @Suppress("DEPRECATION")
+                audioManager?.requestAudioFocus(
+                    afChangeListener,
+                    AudioManager.STREAM_MUSIC,
+                    AudioManager.AUDIOFOCUS_GAIN
+                )
+            }
+        } catch (_: Throwable) {}
+    }
+
+    private fun releaseAudioFocus() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                audioFocusRequest?.let { audioManager?.abandonAudioFocusRequest(it) }
+                audioFocusRequest = null
+            } else {
+                @Suppress("DEPRECATION")
+                audioManager?.abandonAudioFocus(afChangeListener)
+            }
+        } catch (_: Throwable) {}
+    }
+
+    // -------------------------------------------------------------------
+    // TTS init
+    // -------------------------------------------------------------------
+
+    private fun initTts() {
+        try { tts?.shutdown() } catch (_: Throwable) {}
+        tts = null
+        ttsReady = false
+        tts = TextToSpeech(this, this)
+        cancelInitTimeout()
+        initTimeoutRunnable = Runnable {
+            if (!ttsReady) {
+                emitError(0, "TTS engine không khởi động được (init timeout)")
+                try { tts?.shutdown() } catch (_: Throwable) {}
+                tts = null
+                pendingPlay = null
+            }
+        }
+        main.postDelayed(initTimeoutRunnable!!, INIT_TIMEOUT_MS)
+    }
+
+    override fun onInit(status: Int) {
+        cancelInitTimeout()
+        if (status != TextToSpeech.SUCCESS) {
+            ttsReady = false
+            try { tts?.shutdown() } catch (_: Throwable) {}
+            tts = null
+            pendingPlay = null
+            emitError(0, "TTS engine báo lỗi khởi tạo")
+            return
+        }
+        val engine = tts ?: run {
+            ttsReady = false
+            return
+        }
+        ttsReady = true
+        engine.setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build()
+        )
+        val res = engine.setLanguage(Locale("vi", "VN"))
+        if (res == TextToSpeech.LANG_MISSING_DATA || res == TextToSpeech.LANG_NOT_SUPPORTED) {
+            try { engine.setLanguage(Locale.getDefault()) } catch (_: Throwable) {}
+            emitError(1, "Thiếu giọng tiếng Việt")
+        }
+        try { engine.setSpeechRate(rate) } catch (_: Throwable) {}
+        engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) { handleOnStart(utteranceId) }
+            override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
+                handleOnRangeStart(utteranceId, start, end)
+            }
+            override fun onDone(utteranceId: String?) { handleOnDone(utteranceId) }
+            @Deprecated("Deprecated in Java")
+            override fun onError(utteranceId: String?) { handleOnError(utteranceId, -1) }
+            override fun onError(utteranceId: String?, errorCode: Int) {
+                handleOnError(utteranceId, errorCode)
+            }
+        })
+        pendingPlay?.invoke()
+        pendingPlay = null
+    }
+
+    private fun ensureTts(then: () -> Unit) {
+        if (ttsReady && tts != null) {
+            then()
+            return
+        }
+        // Chưa ready — lưu pendingPlay, nếu tts==null thì init mới
+        pendingPlay = then
+        if (tts == null) initTts()
+    }
+
+    private fun cancelInitTimeout() {
+        initTimeoutRunnable?.let { main.removeCallbacks(it) }
+        initTimeoutRunnable = null
+    }
+
+    // -------------------------------------------------------------------
+    // Play flow
+    // -------------------------------------------------------------------
+
+    private fun playFrom(targetChar: Int) {
+        if (!ttsReady || tts == null) {
+            // KHÔNG return im lặng — chain qua ensureTts để watchdog không mất dấu.
+            ensureTts { playFrom(targetChar) }
+            return
+        }
+        cancelWatchdog()
+        val engine = tts ?: return
+        if (chapters.isEmpty()) {
+            emitError(2, "Không có chương để phát")
+            return
+        }
+        if (chapterIndex !in chapters.indices) chapterIndex = chapters.size - 1
+        val content = chapters[chapterIndex].content
+        val clamped = targetChar.coerceIn(0, content.length)
+        pendingTargetChar = clamped
+        engineStarted = false
+
+        chunks = TtsChunker.chunk(content)
+        if (chunks.isEmpty()) {
+            emit(Events.ON_CHAPTER_END, mapOf("chapterIndex" to chapterIndex))
+            moveToNextChapter()
+            return
+        }
+        val idx = TtsChunker.findChunkIndex(chunks, clamped)
+        chunkIndex = if (idx >= 0) idx else 0
+
+        // Đọc tiêu đề "Chương N. Title" nếu bắt đầu chương
+        if (announceTitle && clamped == 0) {
+            val title = "Chương ${chapterIndex + 1}. ${chapters[chapterIndex].title}"
+            val titleId = "sonovel_title_${chapterIndex}_${++speakSeq}"
+            val titleParams = Bundle().apply {
+                putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, titleId)
+            }
+            try {
+                engine.speak(title, TextToSpeech.QUEUE_FLUSH, titleParams, titleId)
+            } catch (t: Throwable) {
+                emitError(3, "Không gọi được speak() tiêu đề: ${t.message}")
+                return
+            }
+            // Sau tiêu đề, queue chunk đầu với QUEUE_ADD
+            val chunkId = "sonovel_${chapterIndex}_${chunkIndex}_${++speakSeq}"
+            val chunkParams = Bundle().apply {
+                putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, chunkId)
+            }
+            try {
+                engine.speak(chunks[chunkIndex], TextToSpeech.QUEUE_ADD, chunkParams, chunkId)
+            } catch (t: Throwable) {
+                emitError(3, "Không gọi được speak() chunk đầu: ${t.message}")
+                return
+            }
+            currentUtteranceId = chunkId
+            armWatchdog(chunkId)
+            return
+        }
+
+        val chunkId = "sonovel_${chapterIndex}_${chunkIndex}_${++speakSeq}"
+        currentUtteranceId = chunkId
+        val params = Bundle().apply {
+            putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, chunkId)
+        }
+        try {
+            val ok = engine.speak(chunks[chunkIndex], TextToSpeech.QUEUE_FLUSH, params, chunkId)
+            if (ok != TextToSpeech.SUCCESS) {
+                handleEngineSpeakFailure()
+                return
+            }
+        } catch (t: Throwable) {
+            emitError(3, "Không gọi được speak(): ${t.message}")
+            return
+        }
+        armWatchdog(chunkId)
+    }
+
+    private fun speakNextChunk() {
+        val engine = tts ?: return
+        if (chunkIndex !in chunks.indices) return
+        val chunkId = "sonovel_${chapterIndex}_${chunkIndex}_${++speakSeq}"
+        currentUtteranceId = chunkId
+        engineStarted = false
+        val params = Bundle().apply {
+            putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, chunkId)
+        }
+        try {
+            val ok = engine.speak(chunks[chunkIndex], TextToSpeech.QUEUE_FLUSH, params, chunkId)
+            if (ok != TextToSpeech.SUCCESS) {
+                handleEngineSpeakFailure()
+                return
+            }
+        } catch (t: Throwable) {
+            emitError(3, "speak(): ${t.message}")
+            return
+        }
+        armWatchdog(chunkId)
+    }
+
+    private fun armWatchdog(expectedId: String) {
+        cancelWatchdog()
+        watchdogRunnable = Runnable {
+            if (currentUtteranceId == expectedId && !engineStarted) {
+                if (retryCount < MAX_RETRY) {
+                    retryCount++
+                    ensureTts { playFrom(pendingTargetChar) }
+                } else {
+                    retryCount = 0
+                    try { tts?.shutdown() } catch (_: Throwable) {}
+                    tts = null
+                    ttsReady = false
+                    // Re-init engine; init-timeout sẽ báo lỗi nếu vẫn treo
+                    ensureTts { playFrom(pendingTargetChar) }
+                    // Safety: nếu re-init vẫn không onStart sau 2*WATCHDOG_MS → onError
+                    main.postDelayed({
+                        if (currentUtteranceId == expectedId && !engineStarted) {
+                            onErrorInternal("Engine TTS không phản hồi sau re-init")
+                        }
+                    }, WATCHDOG_MS * 2)
+                }
+            }
+        }
+        main.postDelayed(watchdogRunnable!!, WATCHDOG_MS)
+    }
+
+    private fun cancelWatchdog() {
+        watchdogRunnable?.let { main.removeCallbacks(it) }
+        watchdogRunnable = null
+    }
+
+    private fun handleEngineSpeakFailure() {
+        if (retryCount < MAX_RETRY) {
+            retryCount++
+            main.postDelayed({ ensureTts { playFrom(pendingTargetChar) } }, SETTLE_MS)
+        } else {
+            onErrorInternal("TTS engine trả lỗi speak() quá nhiều lần")
+        }
+    }
+
+    private fun onErrorInternal(message: String) {
+        playing = false
+        cancelWatchdog()
+        updateNotification()
+        updateMediaMetadata()
+        emitError(99, message)
+    }
+
+    // -------------------------------------------------------------------
+    // Utterance callbacks (đã guard)
+    // -------------------------------------------------------------------
+
+    private fun handleOnStart(utteranceId: String?) {
+        if (utteranceId == null) return
+        if (utteranceId != currentUtteranceId) return
+        if (utteranceId.startsWith("sonovel_title_")) {
+            // Tiêu đề bắt đầu phát — không emit state change
+            return
+        }
+        retryCount = 0
+        engineStarted = true
+        playing = true
+        cancelWatchdog()
+        emit(Events.ON_STATE_CHANGE, mapOf("state" to "playing"))
+        updateNotification()
+        updateMediaMetadata()
+    }
+
+    private fun handleOnRangeStart(utteranceId: String?, start: Int, end: Int) {
+        if (utteranceId == null) return
+        if (utteranceId != currentUtteranceId) return
+        if (utteranceId.startsWith("sonovel_title_")) return
+        val offset = TtsChunker.chunkOffset(chunks, chunkIndex)
+        val ci = offset + start
+        charIndex = ci
+        val contentLen = if (chapterIndex in chapters.indices) chapters[chapterIndex].content.length else 0
+        val frac = if (contentLen > 0) ci.toFloat() / contentLen else 0f
+        emit(Events.ON_PROGRESS, mapOf(
+            "chapterIndex" to chapterIndex,
+            "charIndex" to ci,
+            "charLength" to contentLen,
+            "fraction" to frac
+        ))
+    }
+
+    private fun handleOnDone(utteranceId: String?) {
+        if (utteranceId == null) return
+        if (utteranceId != currentUtteranceId) return
+        if (utteranceId.startsWith("sonovel_title_")) {
+            // Tiêu đề đọc xong — chờ chunk đầu phát (đã queue qua QUEUE_ADD)
+            return
+        }
+        emit(Events.ON_CHUNK_DONE, mapOf(
+            "chapterIndex" to chapterIndex,
+            "chunkIndex" to chunkIndex
+        ))
+        val offset = TtsChunker.chunkOffset(chunks, chunkIndex)
+        charIndex = offset + (if (chunkIndex in chunks.indices) chunks[chunkIndex].length else 0)
+        chunkIndex++
+        if (chunkIndex < chunks.size) {
+            speakNextChunk()
+        } else {
+            announceTitle = true
+            charIndex = 0
+            emit(Events.ON_CHAPTER_END, mapOf("chapterIndex" to chapterIndex))
+            moveToNextChapter()
+        }
+    }
+
+    private fun handleOnError(utteranceId: String?, errorCode: Int) {
+        if (utteranceId == null) return
+        if (utteranceId != currentUtteranceId) return
+        if (utteranceId.startsWith("sonovel_title_")) return
+        emitError(errorCode, "TTS engine lỗi utterance (code=$errorCode)")
+    }
+
+    // -------------------------------------------------------------------
+    // Chapter navigation
+    // -------------------------------------------------------------------
+
+    private fun moveToNextChapter() {
+        if (chapterIndex + 1 >= chapters.size) {
+            playing = false
+            updateNotification()
+            updateMediaMetadata()
+            emit(Events.ON_SERIES_END, emptyMap<String, Any?>())
+            stopSelf()
+            return
+        }
+        chapterIndex++
+        chunkIndex = 0
+        charIndex = 0
+        announceTitle = true
+        emit(Events.ON_CHAPTER_CHANGE, mapOf("chapterIndex" to chapterIndex))
+        updateMediaMetadata()
+        playFrom(0)
+    }
+
+    fun nextChapter() {
+        if (chapters.isEmpty()) return
+        if (chapterIndex + 1 >= chapters.size) {
+            playing = false
+            updateNotification()
+            updateMediaMetadata()
+            emit(Events.ON_SERIES_END, emptyMap<String, Any?>())
+            stopSelf()
+            return
+        }
+        chapterIndex++
+        chunkIndex = 0
+        charIndex = 0
+        announceTitle = true
+        emit(Events.ON_CHAPTER_CHANGE, mapOf("chapterIndex" to chapterIndex))
+        updateMediaMetadata()
+        ensureTts { playFrom(0) }
+    }
+
+    fun prevChapter() {
+        if (chapters.isEmpty()) return
+        if (chapterIndex <= 0) return
+        chapterIndex--
+        chunkIndex = 0
+        charIndex = 0
+        announceTitle = true
+        emit(Events.ON_CHAPTER_CHANGE, mapOf("chapterIndex" to chapterIndex))
+        updateMediaMetadata()
+        ensureTts { playFrom(0) }
+    }
+
+    // -------------------------------------------------------------------
+    // Pause / Resume / Stop
+    // -------------------------------------------------------------------
+
+    fun onPause() {
+        playing = false
+        engineStarted = false
+        cancelWatchdog()
+        try { tts?.stop() } catch (_: Throwable) {}
+        emit(Events.ON_STATE_CHANGE, mapOf("state" to "paused"))
+        updateNotification()
+        updateMediaMetadata()
+    }
+
+    fun onResume() {
+        // SETTLE_MS=200 trễ sau stop() — Android TTS hay "nuốt" speak() ngay sau stop().
+        settleRunnable?.let { main.removeCallbacks(it) }
+        settleRunnable = Runnable {
+            if (!playing) {
+                ensureTts { playFrom(charIndex) }
+            }
+        }
+        main.postDelayed(settleRunnable!!, SETTLE_MS)
+    }
+
+    fun onStop(stopService: Boolean) {
+        playing = false
+        engineStarted = false
+        cancelWatchdog()
+        try { tts?.stop() } catch (_: Throwable) {}
+        emit(Events.ON_STATE_CHANGE, mapOf("state" to "stopped"))
+        updateMediaMetadata()
+        releaseAudioFocus()
+        if (stopService) {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                } else {
+                    @Suppress("DEPRECATION")
+                    stopForeground(true)
+                }
+            } catch (_: Throwable) {}
+            stopSelf()
+        }
+    }
+
+    // -------------------------------------------------------------------
+    // State snapshot (for getState() AsyncFunction)
+    // -------------------------------------------------------------------
+
+    fun snapshotState(): Map<String, Any?> {
+        return mapOf(
+            "playing" to playing,
+            "chapterIndex" to chapterIndex,
+            "charIndex" to charIndex,
+            "rate" to rate.toDouble(),
+            "chaptersCount" to chapters.size,
+            "seriesTitle" to seriesTitle,
+            "ttsReady" to ttsReady,
+            "serviceRunning" to true
+        )
+    }
+
+    // -------------------------------------------------------------------
+    // Emit helpers
+    // -------------------------------------------------------------------
+
+    private fun emit(eventName: String, params: Map<String, Any?>) {
+        val module = SonovelTtsModule.instance ?: return
+        try {
+            module.emit(eventName, params)
+        } catch (_: Throwable) {}
+    }
+
+    private fun emitError(code: Int, message: String) {
+        playing = false
+        cancelWatchdog()
+        emit(Events.ON_ERROR, mapOf("code" to code, "message" to message))
+    }
+}

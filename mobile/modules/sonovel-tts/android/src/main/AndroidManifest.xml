@@ -1,0 +1,26 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Foreground service (Android 14+ yêu cầu cả 2 permission cụ thể) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+
+    <!-- Notification control trên Android 13+ -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Giữ CPU khi khóa màn hình -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- Queries TTS engine: kiểm tra TextToSpeech.Engine.ACTION_CHECK_TTS_DATA -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
+
+    <application>
+        <service
+            android:name="expo.modules.sonoveltts.TtsService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+    </application>
+</manifest>

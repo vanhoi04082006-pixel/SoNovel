@@ -1,0 +1,212 @@
+'use client'
+
+import { useEffect, useState, useCallback, useRef } from 'react'
+import { BookOpen, FileText, Users, Headphones, Search, Trash2, Settings2, Plus } from 'lucide-react'
+import { useAppStore } from '@/store/use-app-store'
+import { api, type SeriesItem } from '@/lib/api-client'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
+import { CoverImage } from '@/components/sonovel/cover-image'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
+import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
+
+const STATUS_TABS = [
+  { key: 'all', label: 'Tất cả' },
+  { key: 'published', label: 'Đang ra' },
+  { key: 'completed', label: 'Hoàn thành' },
+  { key: 'draft', label: 'Nháp' },
+  { key: 'hidden', label: 'Ẩn' },
+] as const
+
+export function AdminDashboard() {
+  const { navigate } = useAppStore()
+  const [stats, setStats] = useState<any>(null)
+  const [items, setItems] = useState<SeriesItem[]>([])
+  const [total, setTotal] = useState(0)
+  const [offset, setOffset] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [q, setQ] = useState('')
+  const [statusTab, setStatusTab] = useState<string>('all')
+  const [counts, setCounts] = useState<Record<string, number>>({})
+  const [deleteTarget, setDeleteTarget] = useState<SeriesItem | null>(null)
+  const limit = 12
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const loadStats = useCallback(async () => {
+    try {
+      const s = await api.stats()
+      setStats(s)
+      setCounts(s.byStatus || {})
+    } catch {}
+  }, [])
+
+  const loadList = useCallback(async (resetOffset = true) => {
+    setLoading(true)
+    const o = resetOffset ? 0 : offset
+    try {
+      const statusParam = statusTab === 'all' ? 'draft,published,completed,hidden' : statusTab
+      const res = await api.listSeries({ q, status: statusParam, sort: 'new', limit, offset: o })
+      setItems(resetOffset ? res.items : [...items, ...res.items])
+      setTotal(res.total)
+      if (resetOffset) setOffset(0)
+    } catch {
+      toast.error('Không tải được danh sách.')
+    } finally {
+      setLoading(false)
+    }
+  }, [q, statusTab, offset, items])
+
+  useEffect(() => { loadStats() }, [loadStats])
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => loadList(true), 300)
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  }, [q, statusTab])
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return
+    try {
+      await api.deleteSeries(deleteTarget.id)
+      toast.success(`Đã xóa "${deleteTarget.title}"`)
+      setDeleteTarget(null)
+      loadStats()
+      loadList(true)
+    } catch (e) {
+      toast.error('Xóa thất bại: ' + (e as Error).message)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Bảng điều khiển</h1>
+        <Button size="sm" onClick={() => navigate({ view: 'admin', tab: 'seriesForm' })}>
+          <Plus className="h-4 w-4 mr-1" /> Thêm truyện
+        </Button>
+      </div>
+
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatCard icon={<BookOpen className="h-5 w-5" />} label="Bộ truyện" value={stats?.series ?? '—'} color="text-amber-600" />
+        <StatCard icon={<FileText className="h-5 w-5" />} label="Chương" value={stats?.chapters ?? '—'} color="text-emerald-600" />
+        <StatCard icon={<Users className="h-5 w-5" />} label="Người dùng" value={stats?.users ?? '—'} color="text-rose-600" />
+        <StatCard icon={<Headphones className="h-5 w-5" />} label="Người nghe" value={stats?.listeners ?? '—'} color="text-violet-600" />
+      </div>
+
+      {/* Search */}
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tìm theo tên truyện…" className="pl-9" />
+      </div>
+
+      {/* Status tabs */}
+      <div className="flex flex-wrap gap-1.5">
+        {STATUS_TABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setStatusTab(t.key)}
+            className={cn(
+              'rounded-full border px-3 py-1 text-sm transition-colors',
+              statusTab === t.key ? 'border-primary bg-primary text-primary-foreground' : 'border-border hover:border-primary'
+            )}
+          >
+            {t.label}
+            <span className="ml-1.5 text-xs opacity-70">
+              {t.key === 'all' ? (stats?.series ?? 0) : (counts[t.key] ?? 0)}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* Series grid */}
+      {loading && items.length === 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-32 w-full rounded-lg" />)}
+        </div>
+      ) : items.length === 0 ? (
+        <div className="py-12 text-center text-muted-foreground">Chưa có truyện nào.</div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {items.map((s) => (
+            <Card key={s.id} className="overflow-hidden">
+              <CardContent className="p-3 flex gap-3">
+                <CoverImage title={s.title} coverUrl={s.coverUrl} className="h-24 w-16 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-sm line-clamp-1">{s.title}</h3>
+                  <p className="text-xs text-muted-foreground line-clamp-1">{s.author || 'Không rõ'}</p>
+                  <div className="mt-1 flex items-center gap-1.5">
+                    <StatusBadge status={s.status} />
+                    <span className="text-xs text-muted-foreground">{s.chapterCount ?? 0} chương</span>
+                  </div>
+                  <div className="mt-2 flex gap-1">
+                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => navigate({ view: 'admin', tab: 'seriesDetail', seriesId: s.id })}>
+                      <Settings2 className="h-3 w-3 mr-1" /> Quản lý
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive hover:text-destructive" onClick={() => setDeleteTarget(s)}>
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {offset + limit < total && (
+        <div className="text-center pt-2">
+          <Button variant="outline" onClick={() => loadList(false)} disabled={loading}>
+            Tải thêm ({total - offset - limit} còn lại)
+          </Button>
+        </div>
+      )}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xóa truyện?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Hành động này sẽ xóa vĩnh viễn truyện "{deleteTarget?.title}" cùng toàn bộ chương. Không thể hoàn tác.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Hủy</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Xóa
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  )
+}
+
+function StatCard({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: number | string; color: string }) {
+  return (
+    <Card>
+      <CardContent className="p-4 flex items-center gap-3">
+        <span className={cn('grid h-10 w-10 place-items-center rounded-lg bg-muted', color)}>{icon}</span>
+        <div>
+          <p className="text-2xl font-bold leading-none">{value}</p>
+          <p className="text-xs text-muted-foreground mt-1">{label}</p>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const map: Record<string, { label: string; variant: any }> = {
+    published: { label: 'Đang ra', variant: 'default' },
+    completed: { label: 'Hoàn thành', variant: 'secondary' },
+    draft: { label: 'Nháp', variant: 'outline' },
+    hidden: { label: 'Ẩn', variant: 'outline' },
+  }
+  const m = map[status] || { label: status, variant: 'outline' }
+  return <Badge variant={m.variant}>{m.label}</Badge>
+}
+

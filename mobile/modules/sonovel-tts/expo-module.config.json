@@ -1,0 +1,10 @@
+{
+  "platforms": ["android"],
+  "ios": {
+    "modules": []
+  },
+  "android": {
+    "modules": ["expo.modules.sonoveltts.SonovelTtsModule"]
+  },
+  "name": "sonovel-tts"
+}

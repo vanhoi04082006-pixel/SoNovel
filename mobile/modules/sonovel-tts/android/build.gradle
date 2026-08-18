@@ -1,0 +1,60 @@
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+apply plugin: 'maven-publish'
+
+group = 'expo.modules.sonoveltts'
+
+def kotlinVersion = rootProject.ext.find("kotlinVersion") ?: "1.9.24"
+def safeExtVersion = { prop, fallback ->
+    rootProject.ext.find(prop) ?: fallback
+}
+
+buildscript {
+    repositories {
+        mavenCentral()
+        google()
+    }
+    dependencies {
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:${kotlinVersion}")
+    }
+}
+
+android {
+    namespace "expo.modules.sonoveltts"
+    compileSdkVersion safeExtVersion("compileSdkVersion", 36)
+
+    defaultConfig {
+        minSdkVersion safeExtVersion("minSdkVersion", 24)
+        targetSdkVersion safeExtVersion("targetSdkVersion", 36)
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
+    lintOptions {
+        abortOnError false
+    }
+
+    buildFeatures {
+        buildConfig false
+    }
+}
+
+repositories {
+    mavenCentral()
+    google()
+}
+
+dependencies {
+    implementation "androidx.core:core-ktx:1.13.1"
+    implementation "androidx.media:media:1.7.0"
+    // expo-modules-core + React Native provided by host project
+    compileOnly project(":expo-modules-core")
+    compileOnly "com.facebook.react:react-native"
+}
