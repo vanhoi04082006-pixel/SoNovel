@@ -116,6 +116,7 @@ export const api = {
   streakStats: () => json<{ stats: any }>('/api/stats/streak'),
   achievementsStats: () => json<{ achievements: any[]; summary: any }>('/api/stats/achievements'),
   challengeStats: () => json<{ challenges: any[]; summary: any }>('/api/stats/challenge'),
+  historyStats: () => json<{ items: Array<{ date: string; seconds: number; label: string }> }>('/api/stats/history'),
   saveSession: (data: { seriesId: string; chapterId?: string; durationSec: number }) =>
     json('/api/stats/session', { method: 'POST', body: JSON.stringify(data) }),
   upload: (file: File) => {

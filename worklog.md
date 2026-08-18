@@ -786,3 +786,40 @@ Task: Search "Đề xuất", goal progress notification, CSV export
 - Export as image (html2canvas): chưa install — dùng CSV thay thế (đơn giản, không thêm dep).
 - Goal notification: chưa test thực tế (TTS headless) — logic đúng.
 - Ưu tiên tiếp theo: (a) admin Combobox, (b) reading session history chart (line chart theo ngày), (c) compare with friends (social), (d) custom themes (user color picker).
+
+---
+Task ID: cc1-cc2 (cron webDevReview round 12)
+Agent: orchestrator (main) — fix HMR error + history chart
+Task: Fix HMR module factory error, add reading session history line chart
+
+## 1. Trạng thái dự án (assessment)
+- App ổn định sau round 11 (Search đề xuất, goal notification, CSV export).
+- Phát hiện lỗi HMR: "Module install-prompt.tsx was instantiated... module factory is not available" → Fast Refresh full reload.
+- Nguyên nhân: Turbopack HMR với store modules (use-reader-settings, use-app-store) bị re-evaluate, mất factory reference.
+- Round 12 goals: fix HMR + history chart.
+
+## 2. Goals hoàn thành round này
+
+### Task cc1: Fix HMR error (globalThis guard cho stores)
+- use-reader-settings.ts: thêm globalForReader = globalThis as { __readerSettings? }; useReaderSettings = globalForReader.__readerSettings ?? create(...); assign globalForReader.__readerSettings = useReaderSettings if !production.
+- use-app-store.ts: tương tự với globalForApp + __appStore.
+- Pattern giống Prisma client (persist store instance qua HMR, tránh re-create).
+- Verified: agent-browser open → không còn "Fast Refresh had to perform a full reload" errors; Settings page render đúng; reader settings save localStorage OK.
+
+### Task cc2: Reading session history line chart
+- API GET /api/stats/history — 14 ngày gần nhất, seconds per day (sum audioSec từ progress, distribute theo lastListenedAt day).
+- Stats screen: thêm HistoryChart component (SVG line chart + area gradient fill, viewBox 100×40, points + circles, labels date).
+- Summary header: Tổng X phút · Trung bình Y phút/ngày.
+- Verified: API trả 14 entries (1 day 120s); Stats "Lịch sử nghe (14 ngày)" render + SVG chart.
+
+## 3. Verification results
+- bun run lint: 0 errors, 0 warnings.
+- agent-browser: Settings page render đúng; Stats "Lịch sử nghe (14 ngày)" + "Trung bình" render; SVG chart present.
+- API /api/stats/history: 14 days, 1 day with 120s activity.
+- Dev log: không còn HMR full reload errors.
+
+## 4. Vấn đề chưa giải quyết / rủi ro / ưu tiên tiếp theo
+- HMR fix: globalThis guard cho 2 stores (reader, app) — nên thêm cho use-player-store nữa nếu gặp lỗi.
+- History chart: distribute audioSec theo lastListenedAt day (rough) — có thể track per-day session riêng cho chính xác.
+- Chart: SVG tĩnh — có thể thêm tooltip hover.
+- Ưu tiên tiếp theo: (a) globalThis guard cho player store, (b) tooltip hover chart, (c) compare with friends, (d) custom themes, (e) admin Combobox.

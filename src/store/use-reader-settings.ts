@@ -7,7 +7,6 @@ import { api } from '@/lib/api-client'
 // Mirror user_settings: fontSize, fontFamily, lineHeight, theme, autoplayNext, playbackSpeed
 
 export type FontFamily = 'system' | 'serif' | 'sans' | 'mono'
-
 interface ReaderState {
   fontSize: number // px
   fontFamily: FontFamily
@@ -36,7 +35,10 @@ function saveLocal(s: { fontSize: number; fontFamily: FontFamily; lineHeight: nu
   try { localStorage.setItem(LS_KEY, JSON.stringify(s)) } catch {}
 }
 
-export const useReaderSettings = create<ReaderState>((set, get) => ({
+// Persist store qua HMR (giống pattern Prisma client)
+const globalForReader = globalThis as unknown as { __readerSettings?: typeof useReaderSettings }
+
+export const useReaderSettings = globalForReader.__readerSettings ?? create<ReaderState>((set, get) => ({
   fontSize: 18,
   fontFamily: 'system',
   lineHeight: 1.8,
@@ -81,6 +83,10 @@ export const useReaderSettings = create<ReaderState>((set, get) => ({
     api.saveSettings({ lineHeight: clamped }).catch(() => {})
   },
 }))
+
+if (process.env.NODE_ENV !== 'production' && !globalForReader.__readerSettings) {
+  globalForReader.__readerSettings = useReaderSettings
+}
 
 export const FONT_FAMILY_LABELS: Record<FontFamily, string> = {
   system: 'Mặc định',

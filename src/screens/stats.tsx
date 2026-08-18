@@ -23,6 +23,7 @@ export function StatsScreen() {
   const [streak, setStreak] = useState<any>(null)
   const [achievements, setAchievements] = useState<any>(null)
   const [challenge, setChallenge] = useState<any>(null)
+  const [history, setHistory] = useState<Array<{ date: string; seconds: number; label: string }>>([])
   const [customGoals, setCustomGoals] = useState<{ chapters: number; minutes: number; days: number }>({ chapters: 3, minutes: 60, days: 5 })
   const [editingGoals, setEditingGoals] = useState(false)
   const [goalDraft, setGoalDraft] = useState({ chapters: 3, minutes: 60, days: 5 })
@@ -54,17 +55,19 @@ export function StatsScreen() {
     ;(async () => {
       setLoading(true)
       try {
-        const [r, s, a, c] = await Promise.all([
+        const [r, s, a, c, h] = await Promise.all([
           api.readingStats(),
           api.streakStats(),
           api.achievementsStats(),
           api.challengeStats(),
+          api.historyStats(),
         ])
         if (!cancelled) {
           setStats(r.stats)
           setStreak(s.stats)
           setAchievements(a)
           setChallenge(c)
+          setHistory(h.items)
         }
       } catch {
         toast.error('Không tải được thống kê.')
@@ -234,6 +237,21 @@ export function StatsScreen() {
                     🔥 Đang chuỗi {streak.currentStreak} ngày! Nghe tiếp để duy trì.
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* History line chart */}
+          {history.length > 0 && (
+            <Card className="card-lift">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <TrendingUp className="h-4 w-4 text-primary" /> Lịch sử nghe (14 ngày)
+                </CardTitle>
+                <CardDescription>Thời gian nghe mỗi ngày (phút)</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <HistoryChart items={history} />
               </CardContent>
             </Card>
           )}
@@ -526,5 +544,53 @@ function StatCard({ icon, label, value, color }: { icon: React.ReactNode; label:
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+function HistoryChart({ items }: { items: Array<{ date: string; seconds: number; label: string }> }) {
+  const minutes = items.map(i => Math.round(i.seconds / 60))
+  const maxMin = Math.max(...minutes, 1)
+  const totalMin = minutes.reduce((a, b) => a + b, 0)
+  const avgMin = Math.round(totalMin / items.length)
+
+  // SVG line chart dimensions
+  const w = 100 // viewBox width units
+  const h = 40 // viewBox height units
+  const points = minutes.map((m, i) => {
+    const x = (i / (minutes.length - 1)) * w
+    const y = h - (m / maxMin) * h
+    return `${x},${y}`
+  }).join(' ')
+  const areaPoints = `0,${h} ${points} ${w},${h}`
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span>Tổng: <span className="font-semibold text-foreground tabular-nums">{totalMin} phút</span></span>
+        <span>Trung bình: <span className="font-semibold text-foreground tabular-nums">{avgMin} phút/ngày</span></span>
+      </div>
+      <div className="relative">
+        <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-32" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.4" />
+              <stop offset="100%" stopColor="var(--primary)" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <polygon points={areaPoints} fill="url(#chartGradient)" />
+          <polyline points={points} fill="none" stroke="var(--primary)" strokeWidth="0.8" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+          {minutes.map((m, i) => {
+            const x = (i / (minutes.length - 1)) * w
+            const y = h - (m / maxMin) * h
+            return <circle key={i} cx={x} cy={y} r="0.8" fill="var(--primary)" vectorEffect="non-scaling-stroke" />
+          })}
+        </svg>
+      </div>
+      <div className="flex justify-between text-[10px] text-muted-foreground">
+        {items.map((it, i) => (
+          <span key={i} className={i % 2 === 0 ? '' : 'opacity-50'}>{it.label}</span>
+        ))}
+      </div>
+    </div>
   )
 }

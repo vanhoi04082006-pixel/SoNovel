@@ -40,7 +40,9 @@ interface AppState {
   setPlayerOverlayOpen: (v: boolean) => void
 }
 
-export const useAppStore = create<AppState>((set, _get) => ({
+const globalForApp = globalThis as unknown as { __appStore?: typeof useAppStore }
+
+export const useAppStore = globalForApp.__appStore ?? create<AppState>((set, _get) => ({
   user: null,
   authReady: false,
   initAuth: async () => {
@@ -88,3 +90,7 @@ export const useAppStore = create<AppState>((set, _get) => ({
   playerOverlayOpen: false,
   setPlayerOverlayOpen: (v) => set({ playerOverlayOpen: v }),
 }))
+
+if (process.env.NODE_ENV !== 'production' && !globalForApp.__appStore) {
+  globalForApp.__appStore = useAppStore
+}
