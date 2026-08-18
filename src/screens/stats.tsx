@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import {
   Headphones, Clock, BookOpen, Heart, Bookmark, TrendingUp,
-  BarChart3, ChevronLeft, Play, Calendar, Flame, Trophy, Award, Lock,
+  BarChart3, ChevronLeft, Play, Calendar, Flame, Trophy, Award, Lock, Target, Share2,
 } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import { api } from '@/lib/api-client'
@@ -22,6 +22,7 @@ export function StatsScreen() {
   const [loading, setLoading] = useState(true)
   const [streak, setStreak] = useState<any>(null)
   const [achievements, setAchievements] = useState<any>(null)
+  const [challenge, setChallenge] = useState<any>(null)
   const playChapter = usePlayerStore((s) => s.playChapter)
   const setPlayerActive = useAppStore((s) => s.setPlayerActive)
 
@@ -31,15 +32,17 @@ export function StatsScreen() {
     ;(async () => {
       setLoading(true)
       try {
-        const [r, s, a] = await Promise.all([
+        const [r, s, a, c] = await Promise.all([
           api.readingStats(),
           api.streakStats(),
           api.achievementsStats(),
+          api.challengeStats(),
         ])
         if (!cancelled) {
           setStats(r.stats)
           setStreak(s.stats)
           setAchievements(a)
+          setChallenge(c)
         }
       } catch {
         toast.error('Không tải được thống kê.')
@@ -264,6 +267,85 @@ export function StatsScreen() {
                       </div>
                     )
                   })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Weekly challenges */}
+          {challenge && (
+            <Card className="card-lift">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Target className="h-4 w-4 text-primary" /> Thử thách tuần
+                </CardTitle>
+                <CardDescription>
+                  Còn {challenge.summary.daysLeft} ngày · Đã hoàn thành {challenge.summary.unlocked}/{challenge.summary.total}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {challenge.challenges.map((c: any) => {
+                  const pct = Math.min(100, (c.progress / c.goal) * 100)
+                  const tierColors: Record<string, string> = {
+                    bronze: 'border-amber-700/40 bg-amber-700/5',
+                    silver: 'border-zinc-400/40 bg-zinc-400/5',
+                    gold: 'border-amber-500/40 bg-amber-500/5',
+                  }
+                  return (
+                    <div
+                      key={c.id}
+                      className={`rounded-lg border p-3 ${c.unlocked ? tierColors[c.tier] : 'border-border bg-muted/30'}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl">{c.icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-semibold truncate">{c.title}</p>
+                            <span className="text-xs tabular-nums text-muted-foreground shrink-0">
+                              {c.progress}/{c.goal} {c.unit}
+                            </span>
+                          </div>
+                          <p className="text-xs text-muted-foreground truncate">{c.desc}</p>
+                          <div className="mt-1.5 h-1.5 rounded-full bg-muted overflow-hidden">
+                            <div
+                              className={`h-full transition-all ${c.unlocked ? 'bg-emerald-500' : 'bg-primary'}`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </div>
+                        {c.unlocked && <Trophy className="h-4 w-4 text-amber-500 shrink-0" />}
+                      </div>
+                    </div>
+                  )
+                })}
+                {/* Share achievements */}
+                <div className="flex justify-end pt-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      const a = achievements?.achievements || []
+                      const unlocked = a.filter((x: any) => x.unlocked)
+                      const text = `🎧 SoNovel — Thống kê nghe truyện\n\n` +
+                        `⏱ Tổng thời gian: ${listenHours > 0 ? `${listenHours}h ${listenMinRem}m` : `${stats?.totalListenMin ?? 0}m`}\n` +
+                        `📖 Chương hoàn thành: ${stats?.chaptersCompleted ?? 0}\n` +
+                        `🏆 Huy hiệu mở: ${unlocked.length}/${a.length}\n` +
+                        `🔥 Chuỗi dài nhất: ${streak?.longestStreak ?? 0} ngày\n\n` +
+                        `Nghe truyện cùng SoNovel!`
+                      try {
+                        if (navigator.share) {
+                          await navigator.share({ title: 'SoNovel — Thống kê nghe', text })
+                        } else {
+                          await navigator.clipboard.writeText(text)
+                          toast.success('Đã sao chép thống kê.')
+                        }
+                      } catch {
+                        toast.info('Đã hủy chia sẻ.')
+                      }
+                    }}
+                  >
+                    <Share2 className="h-4 w-4 mr-1" /> Chia sẻ
+                  </Button>
                 </div>
               </CardContent>
             </Card>

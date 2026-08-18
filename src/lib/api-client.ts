@@ -115,6 +115,7 @@ export const api = {
   readingStats: () => json<{ stats: any }>('/api/stats/reading'),
   streakStats: () => json<{ stats: any }>('/api/stats/streak'),
   achievementsStats: () => json<{ achievements: any[]; summary: any }>('/api/stats/achievements'),
+  challengeStats: () => json<{ challenges: any[]; summary: any }>('/api/stats/challenge'),
   upload: (file: File) => {
     const fd = new FormData()
     fd.append('file', file)

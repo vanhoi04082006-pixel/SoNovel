@@ -557,3 +557,53 @@ Task: QA, reading achievements/badges, 90-day heatmap GitHub-style, Stats polish
 - PWA icons thiết kế riêng: chưa làm (logo.svg scale đủ dùng).
 - Achievements: chưa có toast khi unlock (chỉ hiển thị tĩnh).
 - Ưu tiên tiếp theo: (a) toast notification khi unlock achievement, (b) Search "Đề xuất" section, (c) admin Combobox, (d) reading challenge (mục tiêu tuần), (e) share achievements (social).
+
+---
+Task ID: x1-x6 (cron webDevReview round 7)
+Agent: orchestrator (main) — cron-triggered QA + feature round
+Task: QA, weekly reading challenges, share achievements, Stats polish
+
+## 1. Trạng thái dự án (assessment)
+- App ổn định sau round 6 (achievements/badges, 90-day heatmap).
+- Dev server port 3000, lint 0 errors, API 200, không hydration errors.
+- GitHub repo: commit 0eff259.
+- Round 7 goals từ worklog: (a) toast unlock achievement, (b) Search "Đề xuất", (c) admin Combobox, (d) reading challenge, (e) share achievements.
+
+## 2. QA via agent-browser (round 7)
+- Home, login admin, Stats — tất cả OK.
+- Console: không errors.
+
+## 3. Goals hoàn thành round này
+
+### Task x2: Weekly reading challenges
+- API GET /api/stats/challenge — 3 challenges weekly reset (Monday-Sunday):
+  * Nghe 3 chương (bronze, goal=3, progress=chaptersThisWeek)
+  * Nghe 60 phút (silver, goal=60, progress=listenMinThisWeek)
+  * Nghe 5 ngày (gold, goal=5, progress=daysThisWeek)
+- Summary: unlocked/total + weekStart/weekEnd + daysLeft.
+- Stats screen: Challenges Card (Target icon) với 3 challenge rows (emoji + title + progress bar + Trophy khi unlocked), tier color border (bronze/silver/gold), "Còn N ngày" header.
+- Verified: API trả 3 challenges (progress 2/6/1, daysLeft=6), Stats render "Thử thách tuần" + "Chia sẻ".
+
+### Task x3: Share achievements
+- Share button trong Challenges Card footer.
+- Generate text: "🎧 SoNovel — Thống kê nghe truyện\n⏱ Tổng thời gian\n📖 Chương hoàn thành\n🏆 Huy hiệu mở\n🔥 Chuỗi dài nhất\nNghe truyện cùng SoNovel!"
+- navigator.share (mobile) fallback navigator.clipboard.writeText + toast "Đã sao chép thống kê".
+- Verified: button click OK, clipboard API attempt (no error in console).
+
+### Task x6: Stats visual polish
+- Challenges Card card-lift, tier border colors (bronze amber-700, silver zinc-400, gold amber-500).
+- Progress bar bg-emerald-500 khi unlocked, bg-primary khi chưa.
+- Trophy icon (amber) khi unlocked.
+
+## 4. Verification results
+- bun run lint: 0 errors, 0 warnings.
+- agent-browser: Stats "Thử thách tuần" card render + "Chia sẻ" button; click share no error.
+- API /api/stats/challenge: 3 challenges, daysLeft=6, weekStart/weekEnd đúng.
+- Dev log: tất cả 200, không error.
+
+## 5. Vấn đề chưa giải quyết / rủi ro / ưu tiên tiếp theo
+- Toast unlock achievement real-time: chưa làm (chỉ hiển thị tĩnh) — cần compare prev state + fire toast khi mới unlock.
+- Search "Đề xuất" section: chưa làm.
+- Admin Combobox tag filter: native select vẫn OK.
+- Share: dùng text format đơn giản — có thể thêm image/screenshot.
+- Ưu tiên tiếp theo: (a) real-time achievement unlock toast, (b) Search "Đề xuất", (c) admin Combobox, (d) reading goal setter (user custom goal), (e) leaderboard (so sánh với người dùng khác — cần backend sync).
