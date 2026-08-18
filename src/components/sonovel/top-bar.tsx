@@ -4,6 +4,7 @@ import { Headphones, Search, Shield } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import { ThemeMenu } from './theme-menu'
 import { UserMenu } from './user-menu'
+import { CommandPalette } from './command-palette'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 
@@ -70,6 +71,9 @@ export function TopBar() {
               className="pl-9 h-9"
               defaultValue={view.view === 'search' ? view.q || '' : ''}
             />
+            <kbd className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 hidden md:inline-flex h-5 select-none items-center gap-1 rounded border border-border bg-muted px-1.5 font-mono text-[10px] text-muted-foreground">
+              ⌘K
+            </kbd>
           </div>
         </form>
 
@@ -78,6 +82,7 @@ export function TopBar() {
           <UserMenu />
         </div>
       </div>
+      <CommandPalette />
     </header>
   )
 }

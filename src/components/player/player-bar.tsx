@@ -163,6 +163,14 @@ function PlayerOverlay() {
     if (!player.seriesId) return
     const ch = player.chapters[player.currentIndex]
     if (!ch) return
+    // Guest check — bookmark requires login
+    const user = useAppStore.getState().user
+    if (!user) {
+      toast.error('Vui lòng đăng nhập để đánh dấu vị trí.', {
+        action: { label: 'Đăng nhập', onClick: () => useAppStore.getState().navigate({ view: 'login' }) },
+      })
+      return
+    }
     try {
       await api.createBookmark({
         seriesId: player.seriesId,
@@ -171,7 +179,14 @@ function PlayerOverlay() {
       })
       toast.success(`Đã đánh dấu tại ${formatCharCount(player.currentChar)} — Chương ${ch.orderNo}`)
     } catch (e) {
-      toast.error('Đánh dấu thất bại. Có thể bạn chưa đăng nhập.')
+      const err = e as Error & { status?: number }
+      if (err.status === 401) {
+        toast.error('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.', {
+          action: { label: 'Đăng nhập', onClick: () => useAppStore.getState().navigate({ view: 'login' }) },
+        })
+      } else {
+        toast.error('Đánh dấu thất bại: ' + (e as Error).message)
+      }
     }
   }
 

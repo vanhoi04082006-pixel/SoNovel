@@ -250,3 +250,67 @@ Task: QA app + thêm Settings/About screens + cải thiện Home/StoryCard styli
 - Player overlay TextTab: khi đổi font size slider trong Settings, cần reopen overlay để apply (do store hydrate 1 lần) — có thể subscribe real-time.
 - Mobile: BottomNav chỉ 5 tab, chưa có way vào Settings/About từ mobile (cần qua Profile) — chấp nhận được.
 - Ưu tiên tiếp theo: (a) Command palette, (b) toast cho guest bookmark, (c) real-time reader settings sync, (d) thêm seed data (hiện chỉ 3 series).
+
+---
+Task ID: s1-s6 (cron webDevReview round 2)
+Agent: orchestrator (main) — cron-triggered QA + bug fix + feature round
+Task: QA app, fix guest bookmark bug, thêm Command palette, skeleton consistency, seed data
+
+## 1. Trạng thái dự án (assessment)
+- App SoNovel ổn định sau round 1 (Settings/About/StoryCard cải thiện).
+- Dev server port 3000, lint 0 errors, API 200, không hydration errors.
+- GitHub repo: 200 file đã push (commit a2dbbe3).
+- Phát hiện 1 bug qua QA: guest click bookmark → POST 401 silent, không toast rõ ràng.
+
+## 2. QA via agent-browser (round 2)
+- Test guest flow: Home → StoryDetail → Play → Overlay → Bookmark → verify 401 silent (bug).
+- Test Command palette: Cmd+K toggle, search "kiếm" → "Kiếm Lai" result → click → navigate StoryDetail.
+- Test reader settings: localStorage set font mono/22px/2.0 → reload → overlay tab Xem chữ apply đúng font.
+- Console: chỉ TTS warning (headless không có engine).
+
+## 3. Goals hoàn thành round này
+
+### Task s2: Fix guest bookmark 401 silent (BUG FIX)
+- PlayerBar onBookmark: check `useAppStore.getState().user` trước khi gọi API.
+- Guest: toast.error "Vui lòng đăng nhập để đánh dấu vị trí" với action button "Đăng nhập" → navigate login.
+- 401 (session expired): toast.error "Phiên đăng nhập hết hạn" + action login.
+- Verified: guest click → KHÔNG còn POST 401 (blocked client-side), toast hiện đúng.
+
+### Task s3: Command palette (Cmd+K)
+- Tạo CommandPalette component dùng cmdk + Dialog.
+- Cmd/Ctrl+K toggle, Escape close.
+- 4 groups: Điều hướng (Trang chủ/Tìm kiếm/Giới thiệu/Cài đặt), Tài khoản (Profile/Yêu thích/Lịch sử/Đánh dấu — khi login), Quản trị (Dashboard/SeriesForm/Tags — khi admin), Truyện (search results).
+- shouldFilter={false} + hide nav groups khi query >= 2 ký tự → chỉ show search results.
+- Debounced search 300ms qua api.listSeries (limit 8).
+- TopBar: thêm kbd "⌘K" hint trong search input.
+- Verified: gõ "kiếm" → group "Truyện (1)" hiện "Kiếm Lai" → click → StoryDetail.
+
+### Task s4: Real-time reader settings sync
+- useReaderSettings Zustand store đã reactive (subscribe).
+- TextTab trong overlay dùng hook → tự re-render khi settings đổi.
+- Verified: localStorage set font mono/22px/2.0 → reload → overlay apply đúng (getComputedStyle → "ui-monospace, Cascadia Code, monospace").
+
+### Task s5: Search screen skeleton-shimmer consistency
+- Thay Skeleton component bằng `skeleton-shimmer` class (CSS animation) cho loading state.
+- Consistent với Home (round 1 đã đổi).
+
+### Task s6: Thêm seed data (3 → 7 series)
+- prisma/seed.ts: thêm 4 series mới:
+  * series-0004: "Phàm Nhân Tu Tiên Chi Lộ" (Vong Ngữ, Tiên Hiệp, 3 chương)
+  * series-0005: "Kiếm Lai" (Phong Hỏa Hí Chư Hầu, Kiếm Hiệp, 3 chương)
+  * series-0006: "Đấu Pha Thương Khung" (Thiên Tằm Thổ Đậu, Huyền Huyễn, status=completed, 3 chương)
+  * series-0007: "Ngôn Tình: Năm Tháng Yêu Anh" (Mặc Bảo Phi Bảo, Ngôn Tình, 2 chương)
+- Run seed: 7 series + 19 chương tổng. Home hiển thị đầy đủ.
+
+## 4. Verification results
+- bun run lint: 0 errors, 0 warnings.
+- agent-browser: Command palette search "kiếm" → "Kiếm Lai" → click navigate OK; guest bookmark → toast "Vui lòng đăng nhập" + action button (no 401 POST); reader settings apply từ localStorage OK; Home 7 stories hiển thị.
+- Dev log: tất cả API 200, không error.
+
+## 5. Vấn đề chưa giải quyết / rủi ro / ưu tiên tiếp theo
+- Command palette: search results chỉ hiện khi query >= 2 ký tự (design choice) — có thể thêm fuzzy match 1 ký tự.
+- Bookmark toast action button: snapshot khó capture (sonner render ngoài tree, auto-dismiss 4s) — đã verify qua network (no 401 POST) + screenshot.
+- Seed data: 7 series vẫn ít — có thể thêm 5-10 series nữa cho catalogue phong phú.
+- Search screen: chưa có "Đề xuất cho bạn" section như Home — consistency.
+- Player: chưa có "Đánh dấu vị trí" trong danh sách chapters (chỉ có trong overlay header).
+- Ưu tiên tiếp theo: (a) thêm 10+ series seed, (b) reading progress ring trên StoryCard, (c) export/import settings, (d) dark mode cho admin dashboard.

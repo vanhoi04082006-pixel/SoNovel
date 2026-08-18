@@ -7,7 +7,6 @@ import { api, type SeriesItem } from '@/lib/api-client'
 import { StoryCard } from '@/components/sonovel/story-card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
 
 const SORTS = [
@@ -225,7 +224,7 @@ export function SearchScreen() {
         <p className="text-sm text-muted-foreground mb-3">{total} kết quả</p>
         {loading && items.length === 0 ? (
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
-            {Array.from({ length: 12 }).map((_, i) => <Skeleton key={i} className="aspect-[3/4] w-full rounded-lg" />)}
+            {Array.from({ length: 12 }).map((_, i) => <div key={i} className="aspect-[3/4] w-full rounded-lg skeleton-shimmer" />)}
           </div>
         ) : items.length === 0 ? (
           <div className="py-16 text-center">
