@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import {
   Headphones, Clock, BookOpen, Heart, Bookmark, TrendingUp,
-  BarChart3, ChevronLeft, Play, Calendar, Flame, Trophy, Award, Lock, Target, Share2,
+  BarChart3, ChevronLeft, Play, Calendar, Flame, Trophy, Award, Lock, Target, Share2, Pencil, Check,
 } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import { api } from '@/lib/api-client'
@@ -23,8 +23,30 @@ export function StatsScreen() {
   const [streak, setStreak] = useState<any>(null)
   const [achievements, setAchievements] = useState<any>(null)
   const [challenge, setChallenge] = useState<any>(null)
+  const [customGoals, setCustomGoals] = useState<{ chapters: number; minutes: number; days: number }>({ chapters: 3, minutes: 60, days: 5 })
+  const [editingGoals, setEditingGoals] = useState(false)
+  const [goalDraft, setGoalDraft] = useState({ chapters: 3, minutes: 60, days: 5 })
   const playChapter = usePlayerStore((s) => s.playChapter)
   const setPlayerActive = useAppStore((s) => s.setPlayerActive)
+
+  // Load custom goals from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('sonovel-weekly-goals')
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        setCustomGoals(parsed)
+        setGoalDraft(parsed)
+      }
+    } catch {}
+  }, [])
+
+  const saveGoals = () => {
+    setCustomGoals(goalDraft)
+    try { localStorage.setItem('sonovel-weekly-goals', JSON.stringify(goalDraft)) } catch {}
+    setEditingGoals(false)
+    toast.success('Đã lưu mục tiêu tuần.')
+  }
 
   useEffect(() => {
     if (!user) { setLoading(false); return }
@@ -278,14 +300,75 @@ export function StatsScreen() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Target className="h-4 w-4 text-primary" /> Thử thách tuần
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 ml-auto"
+                    onClick={() => { setGoalDraft(customGoals); setEditingGoals(!editingGoals) }}
+                    aria-label="Chỉnh sửa mục tiêu"
+                    title="Chỉnh sửa mục tiêu"
+                  >
+                    {editingGoals ? <Check className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
+                  </Button>
                 </CardTitle>
                 <CardDescription>
                   Còn {challenge.summary.daysLeft} ngày · Đã hoàn thành {challenge.summary.unlocked}/{challenge.summary.total}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
+                {editingGoals && (
+                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
+                    <p className="text-xs font-medium text-primary">Tùy chỉnh mục tiêu tuần</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="text-xs text-muted-foreground">Chương</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={50}
+                          value={goalDraft.chapters}
+                          onChange={(e) => setGoalDraft({ ...goalDraft, chapters: Math.max(1, Number(e.target.value) || 1) })}
+                          className="w-full rounded border border-border bg-background px-2 py-1 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground">Phút</label>
+                        <input
+                          type="number"
+                          min={10}
+                          max={600}
+                          step={10}
+                          value={goalDraft.minutes}
+                          onChange={(e) => setGoalDraft({ ...goalDraft, minutes: Math.max(10, Number(e.target.value) || 10) })}
+                          className="w-full rounded border border-border bg-background px-2 py-1 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground">Ngày</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={7}
+                          value={goalDraft.days}
+                          onChange={(e) => setGoalDraft({ ...goalDraft, days: Math.max(1, Math.min(7, Number(e.target.value) || 1)) })}
+                          className="w-full rounded border border-border bg-background px-2 py-1 text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <Button size="sm" variant="ghost" onClick={() => setEditingGoals(false)}>Hủy</Button>
+                      <Button size="sm" onClick={saveGoals}>Lưu</Button>
+                    </div>
+                  </div>
+                )}
                 {challenge.challenges.map((c: any) => {
-                  const pct = Math.min(100, (c.progress / c.goal) * 100)
+                  // Use custom goal if matches id
+                  let goal = c.goal
+                  if (c.id === 'weekly-chapters') goal = customGoals.chapters
+                  if (c.id === 'weekly-minutes') goal = customGoals.minutes
+                  if (c.id === 'weekly-days') goal = customGoals.days
+                  const pct = Math.min(100, (c.progress / goal) * 100)
+                  const unlocked = c.progress >= goal
                   const tierColors: Record<string, string> = {
                     bronze: 'border-amber-700/40 bg-amber-700/5',
                     silver: 'border-zinc-400/40 bg-zinc-400/5',
@@ -294,7 +377,7 @@ export function StatsScreen() {
                   return (
                     <div
                       key={c.id}
-                      className={`rounded-lg border p-3 ${c.unlocked ? tierColors[c.tier] : 'border-border bg-muted/30'}`}
+                      className={`rounded-lg border p-3 ${unlocked ? tierColors[c.tier] : 'border-border bg-muted/30'}`}
                     >
                       <div className="flex items-center gap-3">
                         <span className="text-2xl">{c.icon}</span>
@@ -302,18 +385,18 @@ export function StatsScreen() {
                           <div className="flex items-center justify-between gap-2">
                             <p className="text-sm font-semibold truncate">{c.title}</p>
                             <span className="text-xs tabular-nums text-muted-foreground shrink-0">
-                              {c.progress}/{c.goal} {c.unit}
+                              {c.progress}/{goal} {c.unit}
                             </span>
                           </div>
                           <p className="text-xs text-muted-foreground truncate">{c.desc}</p>
                           <div className="mt-1.5 h-1.5 rounded-full bg-muted overflow-hidden">
                             <div
-                              className={`h-full transition-all ${c.unlocked ? 'bg-emerald-500' : 'bg-primary'}`}
+                              className={`h-full transition-all ${unlocked ? 'bg-emerald-500' : 'bg-primary'}`}
                               style={{ width: `${pct}%` }}
                             />
                           </div>
                         </div>
-                        {c.unlocked && <Trophy className="h-4 w-4 text-amber-500 shrink-0" />}
+                        {unlocked && <Trophy className="h-4 w-4 text-amber-500 shrink-0" />}
                       </div>
                     </div>
                   )

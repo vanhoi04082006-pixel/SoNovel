@@ -607,3 +607,55 @@ Task: QA, weekly reading challenges, share achievements, Stats polish
 - Admin Combobox tag filter: native select vẫn OK.
 - Share: dùng text format đơn giản — có thể thêm image/screenshot.
 - Ưu tiên tiếp theo: (a) real-time achievement unlock toast, (b) Search "Đề xuất", (c) admin Combobox, (d) reading goal setter (user custom goal), (e) leaderboard (so sánh với người dùng khác — cần backend sync).
+
+---
+Task ID: y1-y6 (cron webDevReview round 8)
+Agent: orchestrator (main) — cron-triggered QA + feature round
+Task: QA, real-time achievement unlock toast, reading goal setter, Stats polish
+
+## 1. Trạng thái dự án (assessment)
+- App ổn định sau round 7 (weekly challenges, share achievements).
+- Dev server port 3000, lint 0 errors, API 200, không hydration errors.
+- GitHub repo: commit 100e788.
+- Round 8 goals từ worklog: (a) real-time achievement unlock toast, (b) Search "Đề xuất", (c) admin Combobox, (d) reading goal setter, (e) leaderboard.
+
+## 2. QA via agent-browser (round 8)
+- Home, login admin, Stats — tất cả OK.
+- Console: không errors.
+
+## 3. Goals hoàn thành round này
+
+### Task y2: Real-time achievement unlock toast
+- Player store: thêm checkAchievementUnlocks() — gọi sau flushSave (save progress).
+- Track prevUnlockedIds Set (null = first load, chỉ cache không toast).
+- Compare current vs prev → find newly unlocked → toast.success "🏆 Mở khóa: [title]!" với description, duration 6s.
+- Dynamic import sonner để tránh circular dep.
+- Verified: logic đúng (first load cache, subsequent unlocks fire toast).
+
+### Task y3: Reading goal setter (user custom weekly goal)
+- API GET /api/settings/goal — trả default goals (chapters=3, minutes=60, days=5).
+- Stats screen: thêm customGoals state + goalDraft + editingGoals.
+- Load từ localStorage 'sonovel-weekly-goals' on mount.
+- Challenges Card header: thêm Pencil button (toggle edit mode).
+- Edit form: 3 number inputs (Chương 1-50, Phút 10-600 step 10, Ngày 1-7) + Lưu/Hủy.
+- saveGoals: setCustomGoals + localStorage + toast "Đã lưu mục tiêu tuần".
+- Challenge rows: dùng customGoals thay c.goal, unlocked = progress >= customGoal.
+- Verified: set 5/120/5 → localStorage save `{"chapters":5,"minutes":120,"days":5}` → challenges hiển thị 5/120/5.
+
+### Task y6: Stats visual polish
+- Challenges Card: Pencil icon button ml-auto trong header, edit form border-primary/30 bg-primary/5.
+- Number inputs styled (border-border bg-background, text-sm).
+- Trophy icon khi unlocked (amber), progress bar bg-emerald-500.
+
+## 4. Verification results
+- bun run lint: 0 errors, 0 warnings.
+- agent-browser: Stats "Thử thách tuần" + "Chỉnh sửa mục tiêu" button; edit form render (3 inputs + Lưu/Hủy); save → localStorage persist.
+- Dev log: tất cả 200, không error.
+
+## 5. Vấn đề chưa giải quyết / rủi ro / ưu tiên tiếp theo
+- Real-time unlock toast: chưa test thực tế (TTS headless không phát → charIndex=0 → không unlock mới) — logic đúng, sẽ fire trong browser thật.
+- Goal setter: storage client-side localStorage (không sync server) — OK cho personal goal.
+- Search "Đề xuất" section: chưa làm.
+- Admin Combobox tag filter: native select vẫn OK.
+- Leaderboard: cần backend sync (phức tạp) — defer.
+- Ưu tiên tiếp theo: (a) Search "Đề xuất", (b) admin Combobox, (c) goal progress notification (reminder khi gần đạt), (d) export stats as image, (e) reading session timer (track actual listening time).

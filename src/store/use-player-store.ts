@@ -271,6 +271,34 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     if (saveTimer) { clearInterval(saveTimer); saveTimer = null }
   }
 
+  // Track previous unlocked achievements to detect new unlocks
+  let prevUnlockedIds: Set<string> | null = null
+
+  const checkAchievementUnlocks = async () => {
+    try {
+      const r = await api.achievementsStats()
+      const currentUnlocked = new Set(r.achievements.filter((a: any) => a.unlocked).map((a: any) => a.id))
+      if (prevUnlockedIds === null) {
+        // First load — just cache, don't toast
+        prevUnlockedIds = currentUnlocked
+        return
+      }
+      // Find newly unlocked (in current but not in prev)
+      const newUnlocks = r.achievements.filter((a: any) => a.unlocked && !prevUnlockedIds!.has(a.id))
+      prevUnlockedIds = currentUnlocked
+      // Fire toast for each new unlock
+      newUnlocks.forEach((a: any) => {
+        // dynamic import to avoid circular dep
+        import('sonner').then(({ toast }) => {
+          toast.success(`🏆 Mở khóa: ${a.title}!`, {
+            description: a.desc,
+            duration: 6000,
+          })
+        })
+      })
+    } catch {}
+  }
+
   const flushSave = () => {
     const st = get()
     if (!st.seriesId) return
@@ -280,6 +308,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
       listenChapterId: ch?.id,
       listenCharIndex: st.currentChar,
       playbackSpeed: st.rate,
+    }).then(() => {
+      // Check for new achievement unlocks after progress save
+      checkAchievementUnlocks()
     }).catch(() => {})
   }
 
