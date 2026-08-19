@@ -41,6 +41,13 @@ supabase/.temp/
 
 # mobile android build
 mobile/modules/sonovel-tts/android/.gradle/
+mobile/modules/sonovel-tts/android/build/
+
+# expo
+mobile/.expo/
+
+# expo prebuild generated native projects
+mobile/android/
 
 
 # typescript
