@@ -76,22 +76,79 @@ Thư mục `mobile/android/` là **prebuild sinh ra** (gitignored) — không s�
 - `babel.config.js`: thêm `react-native-reanimated/plugin` (cuối mảng) — bản này re-export
   `react-native-worklets/plugin`, là shim hợp lệ. App không import reanimated trong src.
 
-### 4.4. **Fix CHÍNH (chưa commit)** — crash `Cannot assign to property 'protocol'`
-- **Triệu chứng**: cài APK lên máy → mở app → flash trắng → thoát ngay, không dialog.
-- **Cách tìm**: `adb logcat -d -b crash` → `FATAL signal 6 (SIGABRT)` với
-  `JavascriptException: TypeError: Cannot assign to property 'protocol' which has only a getter`
-  stack từ `SupabaseClient → createClient` (module `src/lib/supabase.ts` load lúc bundle init).
-- **Root cause**: `@supabase/supabase-js` gọi `normalizeUrl()` → gán `url_.protocol = ...`
-  trên global `URL` của Hermes — nhưng URL này **read-only** (chỉ getter) → throw.
-  `index.js` là custom entry (`AppRegistry.registerComponent('main', ...)`) nên không có
-  URL polyfill của Expo, dẫn đến crash lúc module supabase load.
-- **Fix**:
-  1. `npm install react-native-url-polyfill` (v4.0.0) → thêm vào dependencies.
-  2. `index.js`: thêm dòng ĐẦU TIÊN `import 'react-native-url-polyfill/auto';`
-     (phải trước mọi import dùng supabase vì supabase chạy ở module scope).
-  3. Rebuild + cài lại + verify (xem §5).
-- Phương án B (nếu polyfill lỗi): thêm `import 'expo'` đầu `index.js` để bật winter URL của
-  Expo SDK 57 — nhưng polyfill v4 đã hoạt động tốt.
+### 4.4. **Fix CHÍNH (commit `62a1e1f`)** — crash `Cannot assign to property 'protocol'`
+
+**a) Triệu chứng (báo cáo từ user)**
+- Cài APK lần đầu lên máy TECNO CLA5 (Android 15) → mở app → **flash trắng rồi thoát ngay**,
+  không có dialog lỗi nào hiện ra.
+
+**b) Quá trình khắc phục — từng bước đã làm**
+
+1. **Thiết lập adb** — lúc đầu `adb devices` rỗng dù đã cắm USB. Xử lý:
+   `adb kill-server && adb start-server`, đồng thời hướng dẫn user bật
+   Developer options → USB debugging, đổi chế độ USB sang **File transfer/MTP**,
+   chấp nhận popup RSA "Allow USB debugging". Sau đó máy hiện:
+   `127763749D104047 device TECNO-CLA5` (Android 15).
+
+2. **Đọc crash buffer (bằng chứng quyết định)**:
+   ```
+   adb logcat -d -b crash -t 200
+   ```
+   Kết quả:
+   ```
+   F libc: Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid ... (mqt_v_js), pid ... (com.sonovel.app)
+   Abort message: 'terminating due to uncaught exception ... JavascriptException:
+   [runtime not ready]: TypeError: Cannot assign to property 'protocol' which has only a getter
+   stack: SupabaseClient → createClient → anonymous → loadModuleImplementation → metroRequire ...'
+   ```
+   → **Nguyên nhân trực tiếp**: JS exception **tại thời điểm load module** (bundle init),
+   phát sinh trong `createClient()` của `@supabase/supabase-js`.
+
+3. **Phân tích code để xác định gốc rễ**:
+   - `src/lib/supabase.ts` gọi `createClient(SUPABASE_URL, SUPABASE_ANON_KEY)` ở **module scope**
+     (dòng export const) → module này được kéo vào bundle ngay từ lúc app khởi động
+     (navigation → session/tts → supabase), nên lỗi xảy ra ngay khi app mở.
+   - Xem source supabase-js: `createClient` → `normalizeUrl()` chạy `url_.protocol = ...`
+     (gán property `protocol`).
+   - Trong Hermes (RN 0.86, release bundle), global `URL` chỉ có **getter** cho `protocol`
+     (URL này là của Hermes/RN, không settable) → gán vào property read-only ném
+     `TypeError: Cannot assign to property 'protocol' which has only a getter`.
+
+4. **Loại trừ các giả thuyết khác** (để chắc chắn không phải native module TTS):
+   - Kiểm tra `adb shell pm list packages` → app đã cài đúng `com.sonovel.app`.
+   - Rà toàn bộ code startup (App.tsx, index.js, navigation, session/tts/supabase/Home,
+     SonovelTtsModule.kt, TtsService.kt, Events.kt, TtsChunker.kt, MainApplication.kt):
+     mọi chỗ đều defensive, không thấy lỗi JS.
+   - Grep toàn src: không có import `react-native-reanimated` → loại reanimated.
+   - Kiểm tra bundle trong APK: `assets/index.android.bundle` (~2.9 MB) tồn tại, đủ lib native
+     (`libreanimated.so`, `libworklets.so`, `libreactnative.so`, `libexpo-modules-core.so`...).
+   - Giả thuyết "expo-modules-core chỉ có nested (57.0.11), require.resolve thất bại" — loại:
+     Metro vẫn bundle được, không liên quan crash runtime.
+   → **Kết luận**: crash là JS thuần từ URL của Hermes, không phải native.
+
+5. **Fix + rebuild + verify** (chi tiết lệnh ở §5):
+   - `npm install react-native-url-polyfill` (v4.0.0).
+   - `index.js`: thêm **dòng đầu tiên** `import 'react-native-url-polyfill/auto';`
+     (bắt buộc trước mọi import dùng supabase vì supabase chạy ở module scope).
+   - `gradlew assembleRelease` → BUILD SUCCESSFUL (Metro rebundle 1260 modules, 21s).
+   - `adb install -r` → `adb logcat -c` → `am start` → sau 15s:
+     - `adb shell pidof com.sonovel.app` → trả PID (app còn sống).
+     - `adb logcat -d -b crash` → rỗng (không crash).
+     - `dumpsys activity` → `mFocusedApp=com.sonovel.app/.MainActivity` (đang foreground).
+   → **Đã hết crash, app chạy ổn định.**
+
+**c) Root cause (tóm tắt)**
+- `@supabase/supabase-js` (2.45.4 → đang cài 2.112.3) gán `url.protocol` trên global `URL`
+  của Hermes — property này **read-only** → `TypeError` → JS exception không bắt → app thoát.
+- Entry `index.js` custom không kích hoạt URL polyfill của Expo → không có WHATWG URL settable.
+
+**d) Fix đã áp dụng**
+1. `react-native-url-polyfill` v4.0.0 vào `dependencies`.
+2. `index.js` line 1: `import 'react-native-url-polyfill/auto';`
+3. Rebuild + verify trên máy thật.
+
+- Phương án B (dự phòng nếu polyfill lỗi): thêm `import 'expo'` đầu `index.js` để bật winter URL
+  của Expo SDK 57 — polyfill v4 đã hoạt động tốt nên không cần.
 
 ---
 
