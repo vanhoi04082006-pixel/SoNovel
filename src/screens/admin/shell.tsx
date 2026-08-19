@@ -1,6 +1,6 @@
 'use client'
 
-import { ChevronLeft, LayoutDashboard, PlusCircle, Tag, BookOpen } from 'lucide-react'
+import { ChevronLeft, LayoutDashboard, PlusCircle, Tag, BookOpen, Users } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -8,6 +8,7 @@ import { AdminDashboard } from './dashboard'
 import { AdminSeriesForm } from './series-form'
 import { AdminSeriesDetail } from './series-detail'
 import { AdminTags } from './tags'
+import { AdminUsers } from './users'
 
 export function AdminShell() {
   const { view, navigate } = useAppStore()
@@ -29,6 +30,7 @@ export function AdminShell() {
             <NavItem icon={<LayoutDashboard className="h-4 w-4" />} label="Bảng điều khiển" active={tab === 'dashboard'} onClick={() => navigate({ view: 'admin', tab: 'dashboard' })} />
             <NavItem icon={<PlusCircle className="h-4 w-4" />} label="Thêm truyện" active={tab === 'seriesForm'} onClick={() => navigate({ view: 'admin', tab: 'seriesForm' })} />
             <NavItem icon={<Tag className="h-4 w-4" />} label="Quản lý tag" active={tab === 'tags'} onClick={() => navigate({ view: 'admin', tab: 'tags' })} />
+            <NavItem icon={<Users className="h-4 w-4" />} label="Người dùng" active={tab === 'users'} onClick={() => navigate({ view: 'admin', tab: 'users' })} />
           </nav>
         </aside>
 
@@ -38,6 +40,7 @@ export function AdminShell() {
           {tab === 'seriesForm' && <AdminSeriesForm key={seriesId || 'new'} seriesId={seriesId} />}
           {tab === 'seriesDetail' && seriesId && <AdminSeriesDetail seriesId={seriesId} />}
           {tab === 'tags' && <AdminTags />}
+          {tab === 'users' && <AdminUsers />}
         </div>
       </div>
     </div>

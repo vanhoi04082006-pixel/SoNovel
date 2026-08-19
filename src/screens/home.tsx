@@ -19,7 +19,7 @@ const GENRE_CHIPS = [
 ]
 
 export function HomeScreen() {
-  const { user, navigate } = useAppStore()
+  const { user, navigate, syncVersion } = useAppStore()
   const [recent, setRecent] = useState<SeriesItem[]>([])
   const [popular, setPopular] = useState<SeriesItem[]>([])
   const [continueItems, setContinueItems] = useState<any[]>([])
@@ -59,7 +59,7 @@ export function HomeScreen() {
       }
     })()
     return () => { cancelled = true }
-  }, [user])
+  }, [user, syncVersion])
 
   return (
     <div className="mx-auto max-w-6xl px-3 sm:px-4 py-4 sm:py-6 space-y-8">

@@ -23,14 +23,14 @@ create table if not exists public.progress (
 -- Track ĐỌC (read_chapter_id, read_char_index, read_percent, last_read_at)
 alter table public.progress add column if not exists read_chapter_id uuid references public.chapters(id) on delete set null;
 alter table public.progress add column if not exists read_char_index integer not null default 0;
-alter table public.progress add column if not exists read_percent numeric not null default 0;
+alter table public.progress add column if not exists read_percent double precision not null default 0;
 alter table public.progress add column if not exists last_read_at timestamptz;
 
 -- Track NGHE (listen_chapter_id, listen_char_index, audio_sec, playback_speed, last_listened_at)
 alter table public.progress add column if not exists listen_chapter_id uuid references public.chapters(id) on delete set null;
 alter table public.progress add column if not exists listen_char_index integer not null default 0;
-alter table public.progress add column if not exists audio_sec numeric not null default 0;
-alter table public.progress add column if not exists playback_speed numeric not null default 1.0;
+alter table public.progress add column if not exists audio_sec double precision not null default 0;
+alter table public.progress add column if not exists playback_speed double precision not null default 1.0;
 alter table public.progress add column if not exists last_listened_at timestamptz;
 
 -- Cột updated_at + ràng buộc unique(user_id, series_id)
@@ -74,10 +74,10 @@ create table if not exists public.history (
 create table if not exists public.user_settings (
   user_id uuid primary key references auth.users(id) on delete cascade,
   theme text not null default 'light' check (theme in ('light','dark','sepia','amoled')),
-  playback_speed numeric not null default 1.0,
+  playback_speed double precision not null default 1.0,
   font_size integer not null default 18,
   font_family text not null default 'system',
-  line_height numeric not null default 1.7,
+  line_height double precision not null default 1.7,
   autoplay_next boolean not null default true,
   updated_at timestamptz not null default now()
 );
@@ -88,7 +88,7 @@ create table if not exists public.user_settings (
 create table if not exists public.chapter_audio (
   chapter_id uuid primary key references public.chapters(id) on delete cascade,
   audio_url text not null default '',
-  duration_sec numeric not null default 0,
+  duration_sec double precision not null default 0,
   created_at timestamptz not null default now()
 );
 

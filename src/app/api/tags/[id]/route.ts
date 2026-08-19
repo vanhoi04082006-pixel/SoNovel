@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { serverDb } from '@/lib/server-data'
 import { requireAdmin } from '@/lib/session'
 
 // PATCH /api/tags/[id] — admin rename
@@ -11,17 +11,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (!name || !String(name).trim()) {
       return NextResponse.json({ error: 'Tên tag là bắt buộc.' }, { status: 400 })
     }
-    await db.tag.update({ where: { id }, data: { name: String(name).trim() } })
+    const { error } = await serverDb().from('tags').update({ name: String(name).trim() }).eq('id', id)
+    if (error) {
+      if ((error as any).code === '23505') return NextResponse.json({ error: 'Tag đã tồn tại.' }, { status: 400 })
+      throw error
+    }
     return NextResponse.json({ ok: true })
   } catch (e) {
     const msg = (e as Error).message
     if (msg === 'UNAUTHORIZED' || msg === 'FORBIDDEN') {
       return NextResponse.json({ error: 'Bạn không có quyền quản trị.' }, { status: 403 })
     }
-    if (msg.includes('Unique constraint')) {
-      return NextResponse.json({ error: 'Tag đã tồn tại.' }, { status: 400 })
-    }
-    return NextResponse.json({ error: 'Cập nhật tag thất bại.' }, { status: 500 })
+    return NextResponse.json({ error: 'Cập nhật tag thất bại: ' + msg }, { status: 500 })
   }
 }
 
@@ -30,13 +31,14 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   try {
     await requireAdmin()
     const { id } = await params
-    await db.tag.delete({ where: { id } })
+    const { error } = await serverDb().from('tags').delete().eq('id', id)
+    if (error) throw error
     return NextResponse.json({ ok: true })
   } catch (e) {
     const msg = (e as Error).message
     if (msg === 'UNAUTHORIZED' || msg === 'FORBIDDEN') {
       return NextResponse.json({ error: 'Bạn không có quyền quản trị.' }, { status: 403 })
     }
-    return NextResponse.json({ error: 'Xóa tag thất bại.' }, { status: 500 })
+    return NextResponse.json({ error: 'Xóa tag thất bại: ' + msg }, { status: 500 })
   }
 }

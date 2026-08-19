@@ -10,7 +10,7 @@ import { CoverImage } from '@/components/sonovel/cover-image'
 import { formatTimeAgo } from '@/lib/format'
 
 export function HistoryScreen() {
-  const { user, navigate } = useAppStore()
+  const { user, navigate, syncVersion } = useAppStore()
   const [items, setItems] = useState<SeriesItem[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -27,7 +27,7 @@ export function HistoryScreen() {
       }
     })()
     return () => { cancelled = true }
-  }, [user])
+  }, [user, syncVersion])
 
   if (!user) {
     return (

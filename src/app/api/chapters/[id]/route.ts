@@ -1,28 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
-import { chapterWordCount, recalcSeriesWordCount } from '@/lib/sonovel'
+import { serverDb, mapChapter } from '@/lib/server-data'
+import { chapterWordCount } from '@/lib/sonovel'
 import { requireAdmin } from '@/lib/session'
 
 // GET /api/chapters/[id]
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const c = await db.chapter.findUnique({
-    where: { id },
-    include: { series: { select: { id: true, title: true, coverUrl: true } } },
-  })
-  if (!c) return NextResponse.json({ error: 'Không tìm thấy chương.' }, { status: 404 })
-  return NextResponse.json({
-    id: c.id,
-    seriesId: c.seriesId,
-    series: c.series,
-    orderNo: c.orderNo,
-    title: c.title,
-    content: c.content,
-    status: c.status,
-    wordCount: c.wordCount,
-    publishedAt: c.publishedAt,
-    createdAt: c.createdAt,
-  })
+  try {
+    const supabase = serverDb()
+    const { data: c, error } = await supabase.from('chapters').select('*, series(*)').eq('id', id).maybeSingle()
+    if (error) throw error
+    if (!c) return NextResponse.json({ error: 'Không tìm thấy chương.' }, { status: 404 })
+    const s = c.series
+    const series = s ? { id: s.id, title: s.title, coverUrl: s.cover_url } : null
+    return NextResponse.json({ ...mapChapter(c), series })
+  } catch (e) {
+    return NextResponse.json({ error: 'Tải chương thất bại: ' + (e as Error).message }, { status: 500 })
+  }
 }
 
 // PATCH /api/chapters/[id] — admin update
@@ -31,36 +25,39 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     await requireAdmin()
     const { id } = await params
     const body = await req.json()
-    const existing = await db.chapter.findUnique({ where: { id } })
+
+    const { data: existing } = await serverDb().from('chapters').select('series_id').eq('id', id).maybeSingle()
     if (!existing) return NextResponse.json({ error: 'Không tìm thấy chương.' }, { status: 404 })
 
-    const data: any = {}
+    const data: Record<string, any> = {}
     if (body.title !== undefined) data.title = String(body.title).trim()
     if (body.content !== undefined) {
       data.content = String(body.content)
-      data.wordCount = chapterWordCount(String(body.content))
+      data.word_count = chapterWordCount(String(body.content))
     }
-    if (body.orderNo !== undefined && !isNaN(Number(body.orderNo))) data.orderNo = Number(body.orderNo)
+    if (body.orderNo !== undefined && !isNaN(Number(body.orderNo))) data.order_no = Number(body.orderNo)
     if (body.status !== undefined) {
       // §10.5: ONLY draft | published
       if (body.status === 'draft' || body.status === 'published') {
         data.status = body.status
-        data.publishedAt = body.status === 'published' ? (existing.publishedAt ?? new Date()) : null
+        data.published_at = body.status === 'published' ? new Date().toISOString() : null
       } else {
         return NextResponse.json({ error: 'Trạng thái chương chỉ được là Nháp hoặc Đã đăng.' }, { status: 400 })
       }
     }
 
-    await db.chapter.update({ where: { id }, data })
-    await recalcSeriesWordCount(existing.seriesId)
+    const { error } = await serverDb().from('chapters').update(data).eq('id', id)
+    if (error) {
+      if ((error as any).code === '23505') {
+        return NextResponse.json({ error: 'Số thứ tự chương đã tồn tại.' }, { status: 400 })
+      }
+      throw error
+    }
     return NextResponse.json({ ok: true })
   } catch (e) {
     const msg = (e as Error).message
     if (msg === 'UNAUTHORIZED' || msg === 'FORBIDDEN') {
       return NextResponse.json({ error: 'Bạn không có quyền quản trị.' }, { status: 403 })
-    }
-    if (msg.includes('Unique constraint')) {
-      return NextResponse.json({ error: 'Số thứ tự chương đã tồn tại.' }, { status: 400 })
     }
     return NextResponse.json({ error: 'Cập nhật chương thất bại: ' + msg }, { status: 500 })
   }
@@ -71,10 +68,10 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   try {
     await requireAdmin()
     const { id } = await params
-    const c = await db.chapter.findUnique({ where: { id }, select: { seriesId: true } })
+    const { data: c } = await serverDb().from('chapters').select('series_id').eq('id', id).maybeSingle()
     if (!c) return NextResponse.json({ error: 'Không tìm thấy chương.' }, { status: 404 })
-    await db.chapter.delete({ where: { id } })
-    await recalcSeriesWordCount(c.seriesId)
+    const { error } = await serverDb().from('chapters').delete().eq('id', id)
+    if (error) throw error
     return NextResponse.json({ ok: true })
   } catch (e) {
     const msg = (e as Error).message

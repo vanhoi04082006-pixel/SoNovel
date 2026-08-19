@@ -1,4 +1,4 @@
 {
   "framework": "nextjs",
-  "buildCommand": "npx prisma generate && npx prisma db push --accept-data-loss && next build"
+  "buildCommand": "next build"
 }

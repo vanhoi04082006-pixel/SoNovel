@@ -22,7 +22,7 @@ SoNovel/
 │   ├── screens/         # user + admin screens
 │   ├── components/      # sonovel/ + player/
 │   └── store/           # Zustand: app-store + player-store
-├── prisma/              # schema.prisma (mirror §5) + seed
+├── scripts/seed.ts      # seed dữ liệu lên Supabase
 ├── mobile/              # Expo SDK 57 + native Kotlin sonovel-tts (§8.5)
 └── supabase/            # SQL schema + migrations (§5)
 ```
@@ -33,7 +33,8 @@ SoNovel/
 |---|---|
 | Web + Admin | Next.js 16, React 19, TypeScript, Tailwind CSS 4, shadcn/ui |
 | Mobile | Expo SDK 57, React Native 0.86, Kotlin native module |
-| Database | Prisma + SQLite (mirror schema Supabase §5) |
+| Database | Supabase (PostgreSQL, schema `public`) — dùng chung cho web & mobile |
+| Data + Auth | `@supabase/supabase-js` + `@supabase/ssr` (service role cho server, Supabase Auth) |
 | TTS web | Web Speech API (`speechSynthesis`) |
 | TTS mobile | Android system TTS qua `sonovel-tts` (foreground service + watchdog) |
 
@@ -41,17 +42,18 @@ SoNovel/
 
 ```sh
 bun install
-bun run db:push      # sync Prisma schema
-bun run prisma/seed.ts   # seed 3 series + 8 chương + 15 tag + admin/user demo
-bun run dev          # http://localhost:3000
+# Cấu hình .env.local theo .env.example (SUPABASE_URL, anon key, service role key)
+bun run db:seed     # seed tags + 15 series + 43 chương + admin/user demo lên Supabase
+bun run dev         # http://localhost:3000
 ```
 
-Tài khoản demo:
+Tài khoản demo (tạo qua seed):
 - Quản trị: `admin@sonovel.app` / `admin123`
 - Người dùng: `user@sonovel.app` / `user123`
 
 ## Tuân thủ SPEC
 
-- §5 Schema: `chapters.status` chỉ `draft`/`published`; `series.word_count` tự cập nhật qua trigger.
-- §8.5 Native TTS: watchdog 2s + retry 2 + re-init engine, init-timeout 6s, SETTLE_MS 200 khi resume, utterance id duy nhất + callback guards, JS safety timeout 12s, resume luôn qua `ACTION_START`. **Không dùng `expo-speech`.**
+- §5 Schema: `chapters.status` chỉ `draft`/`published`; `series.word_count` tự cập nhật qua trigger `chapters_sync_word_count`.
+- §8.5 Native TTS: watchdog 2s + retry 2 + re-init engine, init-timeout 6s, SETTLE_MS 200 khi resume, utterance id duy nhất + callback guards, JS safety timeout 20s, resume luôn qua `ACTION_START`. **Không dùng `expo-speech`.**
+- Web & mobile dùng **chung Supabase** (DB + Auth) → tiến độ, yêu thích, lịch sử, đánh dấu đồng bộ 2 chiều.
 - UI 100% tiếng Việt, font Be Vietnam Pro.

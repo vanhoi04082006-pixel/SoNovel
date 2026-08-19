@@ -1,29 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { serverDb } from '@/lib/server-data'
 import { getSessionUser } from '@/lib/session'
 
-// GET /api/bookmarks — list user bookmarks (join series + chapter)
+// GET /api/bookmarks — list user bookmarks (join series)
 export async function GET() {
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ items: [] })
-  const bms = await db.bookmark.findMany({
-    where: { userId: user.id },
-    orderBy: { createdAt: 'desc' },
-    include: {
-      series: { select: { id: true, title: true, coverUrl: true } },
-    },
-  })
-  return NextResponse.json({
-    items: bms.map((b) => ({
-      id: b.id,
-      seriesId: b.seriesId,
-      chapterId: b.chapterId,
-      charIndex: b.charIndex,
-      note: b.note,
-      createdAt: b.createdAt,
-      series: b.series,
-    })),
-  })
+  try {
+    const { data, error } = await serverDb()
+      .from('bookmarks')
+      .select('id, series_id, chapter_id, char_index, note, created_at, series(id, title, cover_url)')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+    if (error) throw error
+
+    return NextResponse.json({
+      items: (data ?? []).map((b: any) => ({
+        id: b.id,
+        seriesId: b.series_id,
+        chapterId: b.chapter_id,
+        charIndex: b.char_index,
+        note: b.note,
+        createdAt: b.created_at,
+        series: b.series
+          ? { id: b.series.id, title: b.series.title, coverUrl: b.series.cover_url }
+          : null,
+      })),
+    })
+  } catch (e) {
+    return NextResponse.json({ error: 'Tải đánh dấu thất bại: ' + (e as Error).message }, { status: 500 })
+  }
 }
 
 // POST /api/bookmarks — create { seriesId, chapterId, charIndex, note? }
@@ -33,16 +39,19 @@ export async function POST(req: NextRequest) {
   try {
     const { seriesId, chapterId, charIndex, note } = await req.json()
     if (!seriesId || !chapterId) return NextResponse.json({ error: 'Thiếu seriesId/chapterId.' }, { status: 400 })
-    const bm = await db.bookmark.create({
-      data: {
-        userId: user.id,
-        seriesId,
-        chapterId,
-        charIndex: Number(charIndex) || 0,
+    const { data, error } = await serverDb()
+      .from('bookmarks')
+      .insert({
+        user_id: user.id,
+        series_id: seriesId,
+        chapter_id: chapterId,
+        char_index: Number(charIndex) || 0,
         note: String(note || ''),
-      },
-    })
-    return NextResponse.json({ ok: true, id: bm.id })
+      })
+      .select('id')
+      .single()
+    if (error) throw error
+    return NextResponse.json({ ok: true, id: data.id })
   } catch (e) {
     return NextResponse.json({ error: 'Tạo đánh dấu thất bại: ' + (e as Error).message }, { status: 500 })
   }

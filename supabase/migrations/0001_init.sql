@@ -55,13 +55,13 @@ create table if not exists public.progress (
   -- Track ĐỌC
   read_chapter_id uuid references public.chapters(id) on delete set null,
   read_char_index integer not null default 0,
-  read_percent numeric not null default 0,
+  read_percent double precision not null default 0,
   last_read_at timestamptz,
   -- Track NGHE
   listen_chapter_id uuid references public.chapters(id) on delete set null,
   listen_char_index integer not null default 0,
-  audio_sec numeric not null default 0,
-  playback_speed numeric not null default 1.0,
+  audio_sec double precision not null default 0,
+  playback_speed double precision not null default 1.0,
   last_listened_at timestamptz,
   -- Metadata
   updated_at timestamptz not null default now(),
@@ -100,10 +100,10 @@ create table if not exists public.history (
 create table if not exists public.user_settings (
   user_id uuid primary key references auth.users(id) on delete cascade,
   theme text not null default 'light' check (theme in ('light','dark','sepia','amoled')),
-  playback_speed numeric not null default 1.0,
+  playback_speed double precision not null default 1.0,
   font_size integer not null default 18,
   font_family text not null default 'system',
-  line_height numeric not null default 1.7,
+  line_height double precision not null default 1.7,
   autoplay_next boolean not null default true,
   updated_at timestamptz not null default now()
 );
@@ -112,7 +112,7 @@ create table if not exists public.user_settings (
 create table if not exists public.chapter_audio (
   chapter_id uuid primary key references public.chapters(id) on delete cascade,
   audio_url text not null default '',
-  duration_sec numeric not null default 0,
+  duration_sec double precision not null default 0,
   created_at timestamptz not null default now()
 );
 

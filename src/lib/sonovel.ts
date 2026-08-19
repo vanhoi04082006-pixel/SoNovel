@@ -1,9 +1,13 @@
 // SoNovel — shared lib helpers
 
-import { db } from '@/lib/db'
+import { serverDb } from '@/lib/server-data'
 
-// ---- JSON array helpers (SQLite không có text[]) ----
-export function parseArray(s: string | null | undefined): string[] {
+// ---- array helpers ----
+// Genres/tags là text[] thật trên Postgres; các helper giờ là pass-through
+// (giữ tên hàm cũ để các route không phải đổi). Vẫn chấp nhận chuỗi JSON cho
+// tương thích ngược nếu có dữ liệu cũ.
+export function parseArray(s: string | string[] | null | undefined): string[] {
+  if (Array.isArray(s)) return s
   if (!s) return []
   try {
     const v = JSON.parse(s)
@@ -13,26 +17,32 @@ export function parseArray(s: string | null | undefined): string[] {
   }
 }
 
-export function stringifyArray(arr: string[] | null | undefined): string {
-  return JSON.stringify(arr ?? [])
-}
-
-// ---- is_admin equivalent ----
-export async function isAdmin(userId: string | null | undefined): Promise<boolean> {
-  if (!userId) return false
-  const p = await db.profile.findUnique({ where: { id: userId }, select: { role: true } })
-  return p?.role === 'admin'
+export function stringifyArray(arr: string[] | string | null | undefined): string[] {
+  if (Array.isArray(arr)) return arr
+  if (typeof arr === 'string') {
+    const trimmed = arr.trim()
+    if (!trimmed) return []
+    if (trimmed.startsWith('[')) {
+      try {
+        const v = JSON.parse(trimmed)
+        return Array.isArray(v) ? v.map(String) : []
+      } catch {
+        /* fall through */
+      }
+    }
+    return trimmed.split(',').map((x) => x.trim()).filter(Boolean)
+  }
+  return []
 }
 
 // ---- word_count recalc (mirror §5.5 trigger recalc_series_word_count) ----
-// series.word_count = sum(length(content)/5) for published chapters
+// Trigger chapters_sync_word_count đã tự cập nhật; gọi lại qua RPC khi cần chắc chắn.
 export async function recalcSeriesWordCount(seriesId: string): Promise<void> {
-  const chapters = await db.chapter.findMany({
-    where: { seriesId, status: 'published' },
-    select: { content: true },
-  })
-  const wc = chapters.reduce((sum, c) => sum + Math.floor((c.content?.length ?? 0) / 5), 0)
-  await db.series.update({ where: { id: seriesId }, data: { wordCount: wc } })
+  try {
+    await serverDb().rpc('recalc_series_word_count', { p_series: seriesId })
+  } catch {
+    // trigger DB đã lo — bỏ qua lỗi RPC
+  }
 }
 
 // ---- chapter word_count (length/5) ----

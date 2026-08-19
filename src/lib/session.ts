@@ -1,8 +1,8 @@
-// SoNovel — session helper for API routes (reads cookie, returns user payload)
+// SoNovel — session helper for API routes (Supabase Auth).
+// Reads the auth session from cookies, re-checks role from public.profiles.
 
-import { cookies } from 'next/headers'
-import { verifySession, SESSION_COOKIE_NAME } from '@/lib/auth'
-import { db } from '@/lib/db'
+import { createServerSupabase } from '@/lib/supabase'
+import { serverDb } from '@/lib/server-data'
 
 export type SessionUser = {
   id: string
@@ -11,14 +11,20 @@ export type SessionUser = {
 }
 
 export async function getSessionUser(): Promise<SessionUser | null> {
-  const store = await cookies()
-  const token = store.get(SESSION_COOKIE_NAME)?.value
-  const payload = verifySession(token)
-  if (!payload) return null
-  // re-check role from DB (in case changed)
-  const p = await db.profile.findUnique({ where: { id: payload.uid }, select: { id: true, email: true, role: true } })
-  if (!p) return null
-  return { id: p.id, email: p.email, role: p.role as 'user' | 'admin' }
+  const supabase = await createServerSupabase()
+  const { data } = await supabase.auth.getUser()
+  const user = data.user
+  if (!user) return null
+
+  let role = 'user'
+  try {
+    const { data: p } = await serverDb().from('profiles').select('role').eq('id', user.id).maybeSingle()
+    if (p) role = p.role
+  } catch {
+    // profiles row may be missing — fall back to 'user'
+  }
+
+  return { id: user.id, email: user.email ?? '', role: role as 'user' | 'admin' }
 }
 
 export async function requireUser(): Promise<SessionUser> {

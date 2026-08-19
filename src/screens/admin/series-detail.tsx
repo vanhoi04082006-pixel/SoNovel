@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { toast } from 'sonner'
 import { formatCharCount, estMinutes } from '@/lib/format'
+import { ChapterBulkImport } from '@/screens/admin/chapter-bulk-import'
 
 export function AdminSeriesDetail({ seriesId }: { seriesId: string }) {
   const { navigate } = useAppStore()
@@ -193,6 +194,7 @@ export function AdminSeriesDetail({ seriesId }: { seriesId: string }) {
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Tìm chương…" className="pl-8 h-8 text-sm" />
           </div>
+          <ChapterBulkImport seriesId={seriesId} existingOrders={chapters.map((c) => c.orderNo)} onDone={load} />
         </div>
         <div className="rounded-xl border border-border divide-y divide-border overflow-hidden">
           {filteredChapters.map((c) => (

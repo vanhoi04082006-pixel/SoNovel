@@ -74,6 +74,8 @@ export const api = {
   listChapters: (seriesId: string, all = false, q = '') => json<{ items: ChapterItem[] }>(`/api/series/${seriesId}/chapters?${all ? 'all=1&' : ''}q=${encodeURIComponent(q)}`),
   getChapter: (id: string) => json<ChapterItem & { seriesId: string; series: any }>(`/api/chapters/${id}`),
   createChapter: (seriesId: string, data: any) => json(`/api/series/${seriesId}/chapters`, { method: 'POST', body: JSON.stringify(data) }),
+  bulkCreateChapters: (seriesId: string, chapters: { orderNo: number; title: string; content: string; status: string }[]) =>
+    json<{ ok: boolean; count: number; skipped: number }>(`/api/series/${seriesId}/chapters/bulk`, { method: 'POST', body: JSON.stringify({ chapters }) }),
   updateChapter: (id: string, data: any) => json(`/api/chapters/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteChapter: (id: string) => json(`/api/chapters/${id}`, { method: 'DELETE' }),
 
@@ -112,6 +114,9 @@ export const api = {
 
   // ---- admin ----
   stats: () => json('/api/stats'),
+  listUsers: (q = '') => json<{ items: Array<{ id: string; email: string; role: string; createdAt: string; lastSignInAt: string | null; banned: boolean; emailConfirmed: boolean }> }>(`/api/admin/users?q=${encodeURIComponent(q)}`),
+  updateUser: (id: string, data: { role?: string; action?: 'ban' | 'unban' }) =>
+    json(`/api/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   readingStats: () => json<{ stats: any }>('/api/stats/reading'),
   streakStats: () => json<{ stats: any }>('/api/stats/streak'),
   achievementsStats: () => json<{ achievements: any[]; summary: any }>('/api/stats/achievements'),

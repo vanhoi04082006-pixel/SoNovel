@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 
 export function FavoritesScreen() {
-  const { user, navigate } = useAppStore()
+  const { user, navigate, syncVersion } = useAppStore()
   const [items, setItems] = useState<SeriesItem[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -26,7 +26,7 @@ export function FavoritesScreen() {
       }
     })()
     return () => { cancelled = true }
-  }, [user])
+  }, [user, syncVersion])
 
   if (!user) {
     return (

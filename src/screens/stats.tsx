@@ -17,7 +17,7 @@ import { toast } from 'sonner'
 import { formatTimeAgo, formatCharCount } from '@/lib/format'
 
 export function StatsScreen() {
-  const { user, navigate } = useAppStore()
+  const { user, navigate, syncVersion } = useAppStore()
   const [stats, setStats] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [streak, setStreak] = useState<any>(null)
@@ -76,7 +76,7 @@ export function StatsScreen() {
       }
     })()
     return () => { cancelled = true }
-  }, [user])
+  }, [user, syncVersion])
 
   if (!user) {
     return (

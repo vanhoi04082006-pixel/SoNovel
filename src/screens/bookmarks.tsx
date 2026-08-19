@@ -13,7 +13,7 @@ import { toast } from 'sonner'
 import { formatTimeAgo, formatCharCount } from '@/lib/format'
 
 export function BookmarksScreen() {
-  const { user, navigate } = useAppStore()
+  const { user, navigate, syncVersion } = useAppStore()
   const [items, setItems] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const playChapter = usePlayerStore((s) => s.playChapter)
@@ -28,7 +28,7 @@ export function BookmarksScreen() {
     } catch {} finally { setLoading(false) }
   }
 
-  useEffect(() => { load() }, [user])
+  useEffect(() => { load() }, [user, syncVersion])
 
   const onPlay = async (bm: any) => {
     try {

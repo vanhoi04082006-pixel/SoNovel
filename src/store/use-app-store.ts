@@ -18,7 +18,7 @@ type ViewState =
   | { view: 'about' }
   | { view: 'stats' }
   | { view: 'login' }
-  | { view: 'admin'; tab: 'dashboard' | 'seriesForm' | 'seriesDetail' | 'tags'; seriesId?: string }
+  | { view: 'admin'; tab: 'dashboard' | 'seriesForm' | 'seriesDetail' | 'tags' | 'users'; seriesId?: string }
 
 interface AppState {
   user: SessionUser | null
@@ -38,6 +38,9 @@ interface AppState {
 
   playerOverlayOpen: boolean
   setPlayerOverlayOpen: (v: boolean) => void
+
+  syncVersion: number
+  bumpSync: () => void
 }
 
 const globalForApp = globalThis as unknown as { __appStore?: typeof useAppStore }
@@ -89,6 +92,9 @@ export const useAppStore = globalForApp.__appStore ?? create<AppState>((set, _ge
 
   playerOverlayOpen: false,
   setPlayerOverlayOpen: (v) => set({ playerOverlayOpen: v }),
+
+  syncVersion: 0,
+  bumpSync: () => set((s) => ({ syncVersion: s.syncVersion + 1 })),
 }))
 
 if (process.env.NODE_ENV !== 'production' && !globalForApp.__appStore) {

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
-import { parseArray } from '@/lib/sonovel'
+import { serverDb, mapSeries } from '@/lib/server-data'
 
 // GET /api/series — list with filters (public catalogue)
 export async function GET(req: NextRequest) {
@@ -14,41 +13,36 @@ export async function GET(req: NextRequest) {
   const offset = Math.max(0, Number(searchParams.get('offset') || 0))
 
   const statuses = status.split(',').filter(Boolean)
-  const where: any = { status: { in: statuses } }
 
-  if (q) {
-    where.OR = [
-      { title: { contains: q } },
-      { author: { contains: q } },
-    ]
+  try {
+    const supabase = serverDb()
+    let query = supabase
+      .from('series')
+      .select('*, chapters(count)', { count: 'exact' })
+      .in('status', statuses)
+
+    if (q) {
+      query = query.or(`title.ilike.%${q}%,author.ilike.%${q}%`)
+    }
+    if (genre) {
+      query = query.contains('genres', [genre])
+    }
+    if (tag) {
+      query = query.contains('tags', [tag])
+    }
+
+    if (sort === 'title') query = query.order('title', { ascending: true })
+    else if (sort === 'chapters') query = query.order('word_count', { ascending: false })
+    else query = query.order('updated_at', { ascending: false })
+
+    query = query.range(offset, offset + limit - 1)
+
+    const { data, count, error } = await query
+    if (error) throw error
+
+    const items = (data ?? []).map((s: any) => mapSeries(s, s.chapters?.[0]?.count ?? 0))
+    return NextResponse.json({ items, total: count ?? items.length, offset, limit })
+  } catch (e) {
+    return NextResponse.json({ error: 'Tải danh sách truyện thất bại: ' + (e as Error).message }, { status: 500 })
   }
-
-  // genre/tag filter done in-memory (SQLite can't query JSON array easily)
-  const all = await db.series.findMany({
-    where,
-    orderBy: sort === 'title' ? { title: 'asc' } : sort === 'chapters' ? { wordCount: 'desc' } : { updatedAt: 'desc' },
-    include: { _count: { select: { chapters: { where: { status: 'published' } } } } },
-  })
-
-  let filtered = all
-  if (genre) filtered = filtered.filter((s) => parseArray(s.genres).includes(genre))
-  if (tag) filtered = filtered.filter((s) => parseArray(s.tags).includes(tag))
-
-  const total = filtered.length
-  const items = filtered.slice(offset, offset + limit).map((s) => ({
-    id: s.id,
-    title: s.title,
-    author: s.author,
-    description: s.description,
-    coverUrl: s.coverUrl,
-    status: s.status,
-    genres: parseArray(s.genres),
-    tags: parseArray(s.tags),
-    wordCount: s.wordCount,
-    chapterCount: s._count.chapters,
-    createdAt: s.createdAt,
-    updatedAt: s.updatedAt,
-  }))
-
-  return NextResponse.json({ items, total, offset, limit })
 }

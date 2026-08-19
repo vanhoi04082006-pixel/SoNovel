@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { serverDb, mapProgress } from '@/lib/server-data'
 import { getSessionUser } from '@/lib/session'
 
 // GET /api/progress?series_id=xxx — get progress for a series (owner only)
@@ -9,10 +9,18 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const seriesId = searchParams.get('series_id')
   if (!seriesId) return NextResponse.json({ error: 'Thiếu series_id.' }, { status: 400 })
-  const p = await db.progress.findUnique({
-    where: { userId_seriesId: { userId: user.id, seriesId } },
-  })
-  return NextResponse.json({ progress: p })
+  try {
+    const { data, error } = await serverDb()
+      .from('progress')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('series_id', seriesId)
+      .maybeSingle()
+    if (error) throw error
+    return NextResponse.json({ progress: mapProgress(data) })
+  } catch (e) {
+    return NextResponse.json({ error: 'Tải tiến độ thất bại: ' + (e as Error).message }, { status: 500 })
+  }
 }
 
 // PUT /api/progress — upsert listen progress
@@ -24,29 +32,17 @@ export async function PUT(req: NextRequest) {
     const { seriesId, listenChapterId, listenCharIndex, playbackSpeed } = body
     if (!seriesId) return NextResponse.json({ error: 'Thiếu seriesId.' }, { status: 400 })
 
-    // ensure user_settings exists (mirror §5.5 ensure_user_settings trigger)
-    await db.userSettings.upsert({
-      where: { userId: user.id },
-      update: {},
-      create: { userId: user.id },
-    })
-
-    const data: any = {
-      lastListenedAt: new Date(),
+    const row: Record<string, any> = {
+      user_id: user.id,
+      series_id: seriesId,
+      last_listened_at: new Date().toISOString(),
     }
-    if (listenChapterId !== undefined) data.listenChapterId = listenChapterId || null
-    if (listenCharIndex !== undefined) data.listenCharIndex = Number(listenCharIndex) || 0
-    if (playbackSpeed !== undefined) data.playbackSpeed = Number(playbackSpeed) || 1.0
+    if (listenChapterId !== undefined) row.listen_chapter_id = listenChapterId || null
+    if (listenCharIndex !== undefined) row.listen_char_index = Number(listenCharIndex) || 0
+    if (playbackSpeed !== undefined) row.playback_speed = Number(playbackSpeed) || 1.0
 
-    await db.progress.upsert({
-      where: { userId_seriesId: { userId: user.id, seriesId } },
-      update: data,
-      create: {
-        userId: user.id,
-        seriesId,
-        ...data,
-      },
-    })
+    const { error } = await serverDb().from('progress').upsert(row, { onConflict: 'user_id,series_id' })
+    if (error) throw error
     return NextResponse.json({ ok: true })
   } catch (e) {
     return NextResponse.json({ error: 'Lưu tiến độ thất bại: ' + (e as Error).message }, { status: 500 })

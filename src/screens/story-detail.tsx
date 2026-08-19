@@ -15,7 +15,7 @@ import { usePlayerStore, type PlayerChapter } from '@/store/use-player-store'
 import { estMinutes, formatCharCount } from '@/lib/format'
 
 export function StoryDetailScreen() {
-  const { view, navigate, user, refreshUser } = useAppStore()
+  const { view, navigate, user, refreshUser, syncVersion } = useAppStore()
   const seriesId = view.view === 'story' ? view.seriesId : ''
   const [detail, setDetail] = useState<SeriesDetail | null>(null)
   const [progress, setProgress] = useState<any>(null)
@@ -47,7 +47,7 @@ export function StoryDetailScreen() {
     } finally {
       setLoading(false)
     }
-  }, [seriesId, user])
+  }, [seriesId, user, syncVersion])
 
   useEffect(() => { load() }, [load])
 
