@@ -817,10 +817,16 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
     // -------------------------------------------------------------------
 
     fun snapshotState(): Map<String, Any?> {
+        val contentLen = if (chapterIndex in chapters.indices) chapters[chapterIndex].content.length else 0
+        val chapterTitle = if (chapterIndex in chapters.indices) chapters[chapterIndex].title else ""
+        val orderNo = chapterIndex + 1
         return mapOf(
             "playing" to playing,
             "chapterIndex" to chapterIndex,
             "charIndex" to charIndex,
+            "charLength" to contentLen,
+            "chapterTitle" to chapterTitle,
+            "orderNo" to orderNo,
             "rate" to rate.toDouble(),
             "chaptersCount" to chapters.size,
             "seriesTitle" to seriesTitle,

@@ -23,6 +23,9 @@ export interface TtsStateSnapshot {
   playing: boolean;
   chapterIndex: number;
   charIndex: number;
+  charLength: number;
+  chapterTitle: string;
+  orderNo: number;
   rate: number;
   chaptersCount: number;
   seriesTitle: string;

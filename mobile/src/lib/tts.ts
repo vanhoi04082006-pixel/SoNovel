@@ -115,35 +115,58 @@ export async function flushTtsSave(): Promise<void> {
   }
 }
 
-// ---------- Busy safety net (20s timeout) + state polling ----------
-const BUSY_TIMEOUT_MS = 20000;
-let busyTimer: ReturnType<typeof setTimeout> | null = null;
+// ---------- State polling (sync UI với native) ----------
+// Poll native state mỗi 1s KHI đang playing — sync chapterIndex/charIndex/isPlaying.
+// Safety net cho sendEvent bị drop (expo-modules-core yêu cầu listener active trước).
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+const POLL_INTERVAL_MS = 1000;
 
-// Poll native state mỗi 800ms khi busy — safety net nếu sendEvent bị drop
-// (expo-modules-core sendEvent yêu cầu listener active trước, có thể race condition)
 function startPolling() {
   stopPolling();
   pollTimer = setInterval(async () => {
-    if (!busy) {
-      stopPolling();
-      return;
-    }
     try {
       const state = await nativeTts.getState();
-      if (state && state.playing) {
-        // Native đang thực sự phát → clear busy + sync state
-        clearBusy();
-        isPlaying = true;
+      if (!state) return;
+
+      // Sync playing state
+      const wasPlaying = isPlaying;
+      isPlaying = state.playing;
+
+      // Detect chapter change
+      if (state.chapterIndex !== currentIndex) {
         currentIndex = state.chapterIndex;
         currentChar = state.charIndex;
-        emitLocal('stateChange', { state: 'playing' as TtsState });
+        emitLocal('chapterChange', { chapterIndex: currentIndex });
+        emitLocal('nowPlaying');
+        scheduleSave();
+      } else if (state.charIndex !== currentChar) {
+        // Update charIndex (progress)
+        currentChar = state.charIndex;
+        const charLength = state.charLength || 0;
+        const fraction = charLength > 0 ? currentChar / charLength : 0;
+        emitLocal('progress', {
+          chapterIndex: currentIndex,
+          charIndex: currentChar,
+          charLength,
+          fraction,
+        });
+        emitLocal('nowPlaying');
+      }
+
+      // Clear busy nếu native đã playing
+      if (state.playing && busy) {
+        clearBusy();
+      }
+
+      // Emit stateChange nếu trạng thái playing thay đổi
+      if (isPlaying !== wasPlaying) {
+        emitLocal('stateChange', { state: isPlaying ? 'playing' as TtsState : 'paused' as TtsState });
         emitLocal('nowPlaying');
       }
     } catch (_e) {
       // ignore poll error
     }
-  }, 800);
+  }, POLL_INTERVAL_MS);
 }
 
 function stopPolling() {
@@ -152,6 +175,10 @@ function stopPolling() {
     pollTimer = null;
   }
 }
+
+// ---------- Busy safety net (20s timeout) ----------
+const BUSY_TIMEOUT_MS = 20000;
+let busyTimer: ReturnType<typeof setTimeout> | null = null;
 
 function setBusy(value: boolean) {
   if (busy === value) return;
@@ -162,13 +189,11 @@ function setBusy(value: boolean) {
     busyTimer = null;
   }
   if (value) {
-    // Poll native state mỗi 800ms — clear busy ngay khi native báo playing
+    // Polling sẽ clear busy khi native báo playing
     startPolling();
     busyTimer = setTimeout(() => {
-      // Native im lặng quá lâu — clear busy + stop service + emit error
       if (busy) {
         setBusy(false);
-        stopPolling();
         try { nativeTts.stop(); } catch (_e) {}
         emitLocal('error', {
           code: 504,
@@ -176,8 +201,6 @@ function setBusy(value: boolean) {
         });
       }
     }, BUSY_TIMEOUT_MS);
-  } else {
-    stopPolling();
   }
 }
 
@@ -321,6 +344,8 @@ export async function startTts(opts: {
   seriesEnded = false;
 
   setBusy(true);
+  // Start polling liên tục — sync UI với native state (chapter change, progress)
+  startPolling();
   emitLocal('nowPlaying');
 
   try {
@@ -335,10 +360,10 @@ export async function startTts(opts: {
       currentChar,
       rate
     );
-    // busy sẽ được clear bởi onStateChange/onProgress/onError.
-    // Safety net 12s đã arm trong setBusy.
+    // busy + UI sẽ được sync bởi polling (getState mỗi 1s)
   } catch (e: any) {
     setBusy(false);
+    stopPolling();
     emitLocal('error', { code: 500, message: `Không thể start TTS: ${e?.message ?? e}` });
   }
 }
@@ -420,6 +445,7 @@ export async function stopTts(): Promise<void> {
     clearTimeout(busyTimer);
     busyTimer = null;
   }
+  stopPolling();
   emitLocal('stateChange', { state: 'stopped' });
   emitLocal('nowPlaying');
 }
