@@ -823,3 +823,60 @@ Task: Fix HMR module factory error, add reading session history line chart
 - History chart: distribute audioSec theo lastListenedAt day (rough) — có thể track per-day session riêng cho chính xác.
 - Chart: SVG tĩnh — có thể thêm tooltip hover.
 - Ưu tiên tiếp theo: (a) globalThis guard cho player store, (b) tooltip hover chart, (c) compare with friends, (d) custom themes, (e) admin Combobox.
+
+---
+Task ID: fix-tts-ui (cron webDevReview round 13)
+Agent: orchestrator (main)
+Task: Fix bug TTS nút play xoay + error 12s, tạo CoverImage mobile, nâng cấp UI/UX
+
+## 1. Trạng thái dự án
+- App mobile chạy được trên máy thật (TECNO CLA5, Android 15) sau fix URL polyfill.
+- User báo 2 vấn đề: (1) nút play xoay + "TTS không phản hồi sau 12s", (2) không có ảnh bìa (chỉ ô chữ nhật).
+- GitHub repo: commit 6b2e8d6.
+
+## 2. Phân tích root cause bug TTS
+- Triệu chứng: bấm "Nghe từ đầu" → nút xoay ~3-5s → phát audio title "Chương 1. Chương 1: Xuyên không" → ~12s sau → toast "TTS không phản hồi sau 12 giây" → dừng.
+- Root cause: TtsService.kt playFrom() khi announceTitle=true queue chunk đầu cùng lúc với title (QUEUE_ADD). currentUtteranceId = chunkId, armWatchdog(chunkId) ngay. Title phát >2s → watchdog fire (chunk chưa onStart) → retry → re-init → error.
+- JS busy 12s timeout quá ngắn (init engine ~6s + title ~2s).
+
+## 3. Fix đã áp dụng
+
+### TtsService.kt
+- playFrom(): KHÔNG queue chunk cùng lúc title. Title đọc xong (handleOnDone với sonovel_title_*) → gọi speakNextChunk().
+- currentUtteranceId = titleId khi speak title (để handleOnStart/handleOnDone match).
+- handleOnStart(title): emit onProgress charIndex=0 → JS clear busy (tránh nút xoay trong lúc title đọc).
+- handleOnDone(title): set announceTitle=false + speakNextChunk().
+
+### tts.ts
+- BUSY_TIMEOUT_MS: 12s → 20s.
+- onChunkDone handler: thêm clearBusy() (chunk done = native đang hoạt động).
+
+## 4. CoverImage mobile (fix ô chữ nhật)
+- Tạo components/ui/CoverImage.tsx: 10 palettes gradient deterministic theo title hash, initial chữ cái đầu lớn (fontWeight 800), title nhỏ dưới (nếu width >= 80).
+- Áp dụng: SeriesCard, Home (continue + hero), Series (header), Player (cover), FloatingMiniPlayer.
+
+## 5. UI/UX upgrade
+- SeriesCard: status badge "Hoàn thành" top-right (bg primary), favorite heart top-left, pressed opacity 0.85.
+- Home hero: gradient primary + overlay rgba(0,0,0,0.15), title "🎧 SoNovel" trắng fontWeight 800, border radius 16.
+- Home continue card: "Còn X% · Y phút" thay vì % đã nghe.
+- FloatingMiniPlayer: ActivityIndicator khi busy (thay '…'), progress % thay char count, border radius 12.
+- Player cover: border radius 16.
+
+## 6. Verification
+- bun run lint: 0 errors, 0 warnings.
+- GitHub push: 6b2e8d6 → 719aa2e thành công.
+
+## 7. Hướng dẫn rebuild + test
+```powershell
+cd E:\SoNovel\mobile
+git pull origin main
+# JS thay đổi → chỉ cần gradlew assembleRelease (không cần prebuild)
+cd android
+.\gradlew.bat assembleRelease --no-daemon
+adb install -r app\build\outputs\apk\release\app-release.apk
+# Mở app → test: chọn truyện → "Nghe từ đầu" → nút play không xoay >2s, phát title → chunk 1 liên tục
+```
+
+## 8. Ưu tiên tiếp theo
+- Test TTS thật trên máy (foreground service, notification controls, pause/resume).
+- Nếu vẫn lỗi: lấy adb logcat -d -b crash + logcat *:V SoNovel:V TtsService:V để debug sâu.
