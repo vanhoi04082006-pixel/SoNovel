@@ -10,6 +10,7 @@ type ViewState =
   | { view: 'home' }
   | { view: 'search'; q?: string; genre?: string; tag?: string }
   | { view: 'story'; seriesId: string }
+  | { view: 'reader'; seriesId: string; chapterId: string }
   | { view: 'favorites' }
   | { view: 'history' }
   | { view: 'bookmarks' }

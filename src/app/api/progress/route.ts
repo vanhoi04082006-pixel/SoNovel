@@ -23,23 +23,36 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// PUT /api/progress — upsert listen progress
+// PUT /api/progress — upsert progress (listen + read track)
 export async function PUT(req: NextRequest) {
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ ok: true, skipped: true }) // guest: no-op
   try {
     const body = await req.json()
-    const { seriesId, listenChapterId, listenCharIndex, playbackSpeed } = body
+    const { seriesId, listenChapterId, listenCharIndex, playbackSpeed, readChapterId, readCharIndex } = body
     if (!seriesId) return NextResponse.json({ error: 'Thiếu seriesId.' }, { status: 400 })
 
     const row: Record<string, any> = {
       user_id: user.id,
       series_id: seriesId,
-      last_listened_at: new Date().toISOString(),
     }
-    if (listenChapterId !== undefined) row.listen_chapter_id = listenChapterId || null
-    if (listenCharIndex !== undefined) row.listen_char_index = Number(listenCharIndex) || 0
-    if (playbackSpeed !== undefined) row.playback_speed = Number(playbackSpeed) || 1.0
+    // LISTEN track
+    if (listenChapterId !== undefined || listenCharIndex !== undefined || playbackSpeed !== undefined) {
+      row.last_listened_at = new Date().toISOString()
+      if (listenChapterId !== undefined) row.listen_chapter_id = listenChapterId || null
+      if (listenCharIndex !== undefined) row.listen_char_index = Number(listenCharIndex) || 0
+      if (playbackSpeed !== undefined) row.playback_speed = Number(playbackSpeed) || 1.0
+    }
+    // READ track
+    if (readChapterId !== undefined || readCharIndex !== undefined) {
+      row.last_read_at = new Date().toISOString()
+      if (readChapterId !== undefined) row.read_chapter_id = readChapterId || null
+      if (readCharIndex !== undefined) {
+        row.read_char_index = Number(readCharIndex) || 0
+        // read_percent tính ở client gửi lên, nếu có thì dùng
+        if (body.readPercent !== undefined) row.read_percent = Number(body.readPercent) || 0
+      }
+    }
 
     const { error } = await serverDb().from('progress').upsert(row, { onConflict: 'user_id,series_id' })
     if (error) throw error

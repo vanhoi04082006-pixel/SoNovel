@@ -90,6 +90,8 @@ export const api = {
   getAllProgress: () => json<{ items: Array<{ seriesId: string; percent: number; listenCharIndex: number; listenChapterId: string | null; lastListenedAt: string | null }> }>('/api/progress/all'),
   saveProgress: (data: { seriesId: string; listenChapterId?: string; listenCharIndex?: number; playbackSpeed?: number }) =>
     json('/api/progress', { method: 'PUT', body: JSON.stringify(data) }),
+  saveReadProgress: (data: { seriesId: string; readChapterId?: string; readCharIndex?: number; readPercent?: number }) =>
+    json('/api/progress', { method: 'PUT', body: JSON.stringify(data) }),
 
   // ---- favorites ----
   listFavorites: () => json<{ items: SeriesItem[] }>('/api/favorites'),

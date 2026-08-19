@@ -10,6 +10,7 @@ import { PlayerBar } from '@/components/player/player-bar'
 import { HomeScreen } from '@/screens/home'
 import { SearchScreen } from '@/screens/search'
 import { StoryDetailScreen } from '@/screens/story-detail'
+import { ReaderScreen } from '@/screens/reader'
 import { FavoritesScreen } from '@/screens/favorites'
 import { HistoryScreen } from '@/screens/history'
 import { BookmarksScreen } from '@/screens/bookmarks'
@@ -56,6 +57,7 @@ export default function Home() {
         {view.view === 'home' && <HomeScreen />}
         {view.view === 'search' && <SearchScreen />}
         {view.view === 'story' && <StoryDetailScreen />}
+        {view.view === 'reader' && <ReaderScreen />}
         {view.view === 'favorites' && <FavoritesScreen />}
         {view.view === 'history' && <HistoryScreen />}
         {view.view === 'bookmarks' && <BookmarksScreen />}

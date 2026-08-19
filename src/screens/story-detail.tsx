@@ -185,6 +185,9 @@ export function StoryDetailScreen() {
               <Play className="h-4 w-4 mr-1 fill-current" />
               {listenChapterId ? 'Tiếp tục nghe' : 'Nghe từ đầu'}
             </Button>
+            <Button variant="outline" size="sm" onClick={() => navigate({ view: 'reader', seriesId, chapterId: progress?.readChapterId || '' })}>
+              <BookOpen className="h-4 w-4 mr-1" /> Đọc
+            </Button>
             <Button variant={favorited ? 'default' : 'outline'} size="sm" onClick={toggleFav}>
               <Heart className={`h-4 w-4 mr-1 ${favorited ? 'fill-current' : ''}`} />
               {favorited ? 'Đã thích' : 'Yêu thích'}
@@ -266,6 +269,14 @@ export function StoryDetailScreen() {
                 </button>
                 {isPlaying && <Volume2 className="h-4 w-4 text-primary shrink-0 animate-pulse" />}
                 {isListened && !isPlaying && <Headphones className="h-4 w-4 text-muted-foreground shrink-0" />}
+                <button
+                  onClick={() => navigate({ view: 'reader', seriesId, chapterId: c.id })}
+                  className="shrink-0 p-1.5 text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 transition-opacity"
+                  aria-label={`Đọc ${c.title}`}
+                  title="Đọc chương này"
+                >
+                  <BookOpen className="h-4 w-4" />
+                </button>
                 <button
                   onClick={async () => {
                     if (!user) {
