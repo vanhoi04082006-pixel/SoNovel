@@ -115,9 +115,43 @@ export async function flushTtsSave(): Promise<void> {
   }
 }
 
-// ---------- Busy safety net (20s timeout — tăng từ 12s do init engine + title announce có thể lâu) ----------
+// ---------- Busy safety net (20s timeout) + state polling ----------
 const BUSY_TIMEOUT_MS = 20000;
 let busyTimer: ReturnType<typeof setTimeout> | null = null;
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+// Poll native state mỗi 800ms khi busy — safety net nếu sendEvent bị drop
+// (expo-modules-core sendEvent yêu cầu listener active trước, có thể race condition)
+function startPolling() {
+  stopPolling();
+  pollTimer = setInterval(async () => {
+    if (!busy) {
+      stopPolling();
+      return;
+    }
+    try {
+      const state = await nativeTts.getState();
+      if (state && state.playing) {
+        // Native đang thực sự phát → clear busy + sync state
+        clearBusy();
+        isPlaying = true;
+        currentIndex = state.chapterIndex;
+        currentChar = state.charIndex;
+        emitLocal('stateChange', { state: 'playing' as TtsState });
+        emitLocal('nowPlaying');
+      }
+    } catch (_e) {
+      // ignore poll error
+    }
+  }, 800);
+}
+
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
 
 function setBusy(value: boolean) {
   if (busy === value) return;
@@ -128,10 +162,13 @@ function setBusy(value: boolean) {
     busyTimer = null;
   }
   if (value) {
+    // Poll native state mỗi 800ms — clear busy ngay khi native báo playing
+    startPolling();
     busyTimer = setTimeout(() => {
       // Native im lặng quá lâu — clear busy + stop service + emit error
       if (busy) {
         setBusy(false);
+        stopPolling();
         try { nativeTts.stop(); } catch (_e) {}
         emitLocal('error', {
           code: 504,
@@ -139,6 +176,8 @@ function setBusy(value: boolean) {
         });
       }
     }, BUSY_TIMEOUT_MS);
+  } else {
+    stopPolling();
   }
 }
 
@@ -147,6 +186,7 @@ function clearBusy() {
     clearTimeout(busyTimer);
     busyTimer = null;
   }
+  stopPolling();
   if (busy) {
     busy = false;
     emitLocal('nowPlaying');
