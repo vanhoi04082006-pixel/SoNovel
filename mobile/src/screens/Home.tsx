@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme } from '../theme';
 import { SeriesCard } from '../components/ui/SeriesCard';
+import { CoverImage } from '../components/ui/CoverImage';
 import { Chip } from '../components/ui/Chip';
 import { listSeries, listAllProgress, listChapters, SeriesRow, ProgressRow } from '../lib/progress';
 import { useAuth } from '../lib/session';
@@ -105,11 +106,14 @@ export function HomeScreen() {
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} colors={[t.primary]} tintColor={t.primary} />}
       >
         {/* Hero */}
-        <View style={[styles.hero, { backgroundColor: t.bgElevated, borderColor: t.border }]}>
-          <Text style={[styles.heroTitle, { color: t.text }]}>SoNovel</Text>
-          <Text style={[styles.heroSub, { color: t.textMuted }]}>
-            Nghe truyện chữ bằng giọng đọc tổng hợp — miễn phí, không quảng cáo.
-          </Text>
+        <View style={[styles.hero, { backgroundColor: t.primary }]}>
+          <View style={styles.heroOverlay} />
+          <View style={styles.heroContent}>
+            <Text style={styles.heroTitle}>🎧 SoNovel</Text>
+            <Text style={styles.heroSub}>
+              Nghe truyện chữ bằng giọng đọc tổng hợp — miễn phí, không quảng cáo.
+            </Text>
+          </View>
         </View>
 
         {/* Continue listening */}
@@ -121,17 +125,21 @@ export function HomeScreen() {
                 if (!s) return null;
                 const frac = s.word_count > 0 ? Math.min(1, (item.listen_char_index ?? 0) / Math.max(1, s.word_count * 5)) : 0;
                 return (
-                  <Pressable key={i} onPress={() => continueListen(item)} style={[styles.contCard, { backgroundColor: t.surface, borderColor: t.border }]}>
-                    {s.cover_url ? (
-                      <Image source={{ uri: s.cover_url }} style={styles.contCover} resizeMode="cover" />
-                    ) : (
-                      <View style={[styles.contCover, { backgroundColor: t.bgSubtle, alignItems: 'center', justifyContent: 'center' }]}>
-                        <Text style={{ color: t.textMuted }}>🎧</Text>
-                      </View>
-                    )}
+                  <Pressable
+                    key={i}
+                    onPress={() => continueListen(item)}
+                    style={({ pressed }) => [styles.contCard, { backgroundColor: t.surface, borderColor: t.border }, pressed && { opacity: 0.85 }]}
+                  >
+                    <CoverImage
+                      title={s.title}
+                      coverUrl={s.cover_url}
+                      width={114}
+                      height={152}
+                      borderRadius={8}
+                    />
                     <Text style={[styles.contTitle, { color: t.text }]} numberOfLines={1}>{s.title}</Text>
                     <Text style={[styles.contMeta, { color: t.textMuted }]} numberOfLines={1}>
-                      Chương {s.id ? '' : ''} · {Math.round(frac * 100)}%
+                      Còn {Math.round((1 - frac) * 100)}% · {Math.ceil((1 - frac) * (s.word_count / 270))} phút
                     </Text>
                     <View style={[styles.contBar, { backgroundColor: t.bgSubtle }]}>
                       <View style={[styles.contBarFill, { width: `${Math.round(frac * 100)}%`, backgroundColor: t.primary }]} />
@@ -209,13 +217,33 @@ function EmptyLabel({ t, text }: { t: ReturnType<typeof useTheme>; text: string 
 const styles = StyleSheet.create({
   hero: {
     marginHorizontal: 16,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 4,
+    borderRadius: 16,
+    overflow: 'hidden',
+    position: 'relative',
   },
-  heroTitle: { fontSize: 22, fontWeight: '700' },
-  heroSub: { fontSize: 13, lineHeight: 18 },
+  heroOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.15)',
+  },
+  heroContent: {
+    padding: 20,
+    gap: 6,
+  },
+  heroTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: 0.5,
+  },
+  heroSub: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: 'rgba(255,255,255,0.92)',
+  },
   section: { marginTop: 20 },
   sectionTitle: {
     fontSize: 16,
@@ -238,14 +266,9 @@ const styles = StyleSheet.create({
   contCard: {
     width: 130,
     padding: 8,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
     gap: 4,
-  },
-  contCover: {
-    width: '100%',
-    aspectRatio: 3 / 4,
-    borderRadius: 6,
   },
   contTitle: { fontSize: 13, fontWeight: '600' },
   contMeta: { fontSize: 11 },

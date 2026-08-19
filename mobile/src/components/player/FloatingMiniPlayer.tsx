@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../../theme';
 import { getNowPlaying, onTtsEvent, togglePlayPause } from '../../lib/tts';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
+import { CoverImage } from '../ui/CoverImage';
 
 /**
  * Floating mini player — nổi trên tab bar.
@@ -39,17 +40,15 @@ export function FloatingMiniPlayer() {
           });
         }
       }}
-      style={[styles.bar, { backgroundColor: t.surface, borderColor: t.border }]}
+      style={({ pressed }) => [styles.bar, { backgroundColor: t.surface, borderColor: t.border }, pressed && { opacity: 0.9 }]}
     >
-      <View style={styles.coverWrap}>
-        {np.coverUrl ? (
-          <Image source={{ uri: np.coverUrl }} style={styles.cover} resizeMode="cover" />
-        ) : (
-          <View style={[styles.cover, { backgroundColor: t.bgSubtle, alignItems: 'center', justifyContent: 'center' }]}>
-            <Text style={{ color: t.textMuted, fontSize: 16 }}>🎧</Text>
-          </View>
-        )}
-      </View>
+      <CoverImage
+        title={np.seriesTitle || 'SoNovel'}
+        coverUrl={np.coverUrl}
+        width={40}
+        height={40}
+        borderRadius={6}
+      />
       <View style={styles.meta}>
         <Text style={[styles.title, { color: t.text }]} numberOfLines={1}>{title}</Text>
         <View style={styles.progressWrap}>
@@ -57,7 +56,7 @@ export function FloatingMiniPlayer() {
             <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%`, backgroundColor: t.primary }]} />
           </View>
           <Text style={[styles.charCount, { color: t.textMuted }]}>
-            {np.currentChar} / {chapter?.content.length ?? 0}
+            {Math.round(progress * 100)}%
           </Text>
         </View>
       </View>
@@ -65,9 +64,13 @@ export function FloatingMiniPlayer() {
         onPress={(e) => { e.stopPropagation(); togglePlayPause(); }}
         style={[styles.playBtn, { backgroundColor: t.primary }]}
       >
-        <Text style={{ color: t.primaryText, fontSize: 18 }}>
-          {np.busy ? '…' : np.isPlaying ? '⏸' : '▶'}
-        </Text>
+        {np.busy ? (
+          <ActivityIndicator color={t.primaryText} size="small" />
+        ) : (
+          <Text style={{ color: t.primaryText, fontSize: 16, fontWeight: '700' }}>
+            {np.isPlaying ? '⏸' : '▶'}
+          </Text>
+        )}
       </Pressable>
     </Pressable>
   );
@@ -84,7 +87,7 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 8,
     paddingVertical: 6,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -92,8 +95,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  coverWrap: {},
-  cover: { width: 40, height: 40, borderRadius: 6 },
   meta: { flex: 1, gap: 4 },
   title: { fontSize: 13, fontWeight: '600' },
   progressWrap: { flexDirection: 'row', alignItems: 'center', gap: 6 },

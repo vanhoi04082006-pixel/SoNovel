@@ -14,6 +14,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../theme';
 import { Chip } from '../components/ui/Chip';
+import { CoverImage } from '../components/ui/CoverImage';
 import {
   ChapterRow,
   SeriesRow,
@@ -164,13 +165,13 @@ export function SeriesScreen({ route }: { route: SeriesRouteProp }) {
       <ScrollView contentContainerStyle={{ paddingBottom: pad + 16 }}>
         {/* Header */}
         <View style={[styles.head, { borderBottomColor: t.border }]}>
-          {series.cover_url ? (
-            <Image source={{ uri: series.cover_url }} style={styles.cover} resizeMode="cover" />
-          ) : (
-            <View style={[styles.cover, { backgroundColor: t.bgSubtle, alignItems: 'center', justifyContent: 'center' }]}>
-              <Text style={{ color: t.textMuted }}>Không bìa</Text>
-            </View>
-          )}
+          <CoverImage
+            title={series.title}
+            coverUrl={series.cover_url}
+            width={100}
+            height={140}
+            borderRadius={10}
+          />
           <View style={styles.meta}>
             <Text style={[styles.title, { color: t.text }]} numberOfLines={3}>{series.title}</Text>
             {series.author ? (

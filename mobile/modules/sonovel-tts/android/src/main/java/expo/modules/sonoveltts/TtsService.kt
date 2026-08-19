@@ -524,32 +524,26 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         val idx = TtsChunker.findChunkIndex(chunks, clamped)
         chunkIndex = if (idx >= 0) idx else 0
 
-        // Đọc tiêu đề "Chương N. Title" nếu bắt đầu chương
+        // Đọc tiêu đề "Chương N. Title" nếu bắt đầu chương.
+        // FIX: KHÔNG queue chunk cùng lúc với title — đợi title onDone rồi mới speakNextChunk().
+        // Lý do: queue chunk trước làm currentUtteranceId = chunkId, watchdog arm ngay →
+        // nếu title phát >2s thì watchdog fire sai (chunk chưa onStart) → retry/re-init → error 12s.
         if (announceTitle && clamped == 0) {
             val title = "Chương ${chapterIndex + 1}. ${chapters[chapterIndex].title}"
             val titleId = "sonovel_title_${chapterIndex}_${++speakSeq}"
             val titleParams = Bundle().apply {
                 putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, titleId)
             }
+            // currentUtteranceId giữ = titleId để handleOnStart/handleOnDone của title match.
+            // Title KHÔNG arm watchdog (ngắn, không cần) và KHÔNG emit stateChange.
+            currentUtteranceId = titleId
             try {
                 engine.speak(title, TextToSpeech.QUEUE_FLUSH, titleParams, titleId)
             } catch (t: Throwable) {
                 emitError(3, "Không gọi được speak() tiêu đề: ${t.message}")
                 return
             }
-            // Sau tiêu đề, queue chunk đầu với QUEUE_ADD
-            val chunkId = "sonovel_${chapterIndex}_${chunkIndex}_${++speakSeq}"
-            val chunkParams = Bundle().apply {
-                putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, chunkId)
-            }
-            try {
-                engine.speak(chunks[chunkIndex], TextToSpeech.QUEUE_ADD, chunkParams, chunkId)
-            } catch (t: Throwable) {
-                emitError(3, "Không gọi được speak() chunk đầu: ${t.message}")
-                return
-            }
-            currentUtteranceId = chunkId
-            armWatchdog(chunkId)
+            // chunk đầu sẽ được speakNextChunk() gọi từ handleOnDone(titleId)
             return
         }
 
@@ -649,7 +643,14 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         if (utteranceId == null) return
         if (utteranceId != currentUtteranceId) return
         if (utteranceId.startsWith("sonovel_title_")) {
-            // Tiêu đề bắt đầu phát — không emit state change
+            // Tiêu đề bắt đầu phát — emit progress với charIndex=0 để JS clear busy
+            // (tránh nút play xoay trong lúc title đang đọc).
+            emit(Events.ON_PROGRESS, mapOf(
+                "chapterIndex" to chapterIndex,
+                "charIndex" to 0,
+                "charLength" to if (chapterIndex in chapters.indices) chapters[chapterIndex].content.length else 0,
+                "fraction" to 0f
+            ))
             return
         }
         retryCount = 0
@@ -682,7 +683,10 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         if (utteranceId == null) return
         if (utteranceId != currentUtteranceId) return
         if (utteranceId.startsWith("sonovel_title_")) {
-            // Tiêu đề đọc xong — chờ chunk đầu phát (đã queue qua QUEUE_ADD)
+            // Tiêu đề đọc xong → phát chunk đầu (không queue trước để tránh watchdog fire sai).
+            // Reset announceTitle để chapter tiếp theo vẫn announce.
+            announceTitle = false
+            speakNextChunk()
             return
         }
         emit(Events.ON_CHUNK_DONE, mapOf(

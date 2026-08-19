@@ -11,6 +11,7 @@ import { RouteProp, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../theme';
+import { CoverImage } from '../components/ui/CoverImage';
 import { PlayerControls } from '../components/player/PlayerControls';
 import { TextSheet } from '../components/player/TextSheet';
 import { ChaptersSheet } from '../components/player/ChaptersSheet';
@@ -180,13 +181,13 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
       <View style={styles.wrap}>
         {/* Cover */}
         <View style={styles.coverWrap}>
-          {params.coverUrl ? (
-            <Image source={{ uri: params.coverUrl }} style={[styles.cover, { backgroundColor: t.bgSubtle }]} resizeMode="cover" />
-          ) : (
-            <View style={[styles.cover, { backgroundColor: t.bgSubtle, alignItems: 'center', justifyContent: 'center' }]}>
-              <Text style={{ color: t.textMuted, fontSize: 36 }}>🎧</Text>
-            </View>
-          )}
+          <CoverImage
+            title={params.seriesTitle || np.seriesTitle || 'SoNovel'}
+            coverUrl={params.coverUrl || np.coverUrl}
+            width={180}
+            height={240}
+            borderRadius={16}
+          />
         </View>
 
         {/* Title */}

@@ -115,8 +115,8 @@ export async function flushTtsSave(): Promise<void> {
   }
 }
 
-// ---------- Busy safety net (12s timeout) ----------
-const BUSY_TIMEOUT_MS = 12000;
+// ---------- Busy safety net (20s timeout — tăng từ 12s do init engine + title announce có thể lâu) ----------
+const BUSY_TIMEOUT_MS = 20000;
 let busyTimer: ReturnType<typeof setTimeout> | null = null;
 
 function setBusy(value: boolean) {
@@ -135,7 +135,7 @@ function setBusy(value: boolean) {
         try { nativeTts.stop(); } catch (_e) {}
         emitLocal('error', {
           code: 504,
-          message: 'TTS không phản hồi sau 12 giây — đã dừng.',
+          message: 'TTS không phản hồi sau 20 giây — đã dừng.',
         });
       }
     }, BUSY_TIMEOUT_MS);
@@ -185,6 +185,8 @@ function wireNative() {
 
   subs.push(
     nativeTts.addListener('onChunkDone', (event: { chapterIndex: number; chunkIndex: number }) => {
+      // Chunk done = native đang hoạt động → clear busy (tránh nút play xoay)
+      clearBusy();
       emitLocal('chunkDone', event);
     })
   );
