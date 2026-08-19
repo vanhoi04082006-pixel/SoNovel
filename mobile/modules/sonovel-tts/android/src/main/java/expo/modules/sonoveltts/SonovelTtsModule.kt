@@ -21,14 +21,6 @@ class SonovelTtsModule : Module() {
         var instance: SonovelTtsModule? = null
     }
 
-    override fun onCreate() {
-        instance = this
-    }
-
-    override fun onDestroy() {
-        instance = null
-    }
-
     private val ctx
         get() = appContext.reactContext
             ?: throw IllegalStateException("Không có React context")
@@ -53,6 +45,14 @@ class SonovelTtsModule : Module() {
 
     override fun definition() = ModuleDefinition {
         Name("SonovelTts")
+
+        OnCreate {
+            instance = this@SonovelTtsModule
+        }
+
+        OnDestroy {
+            instance = null
+        }
 
         Events(
             Events.ON_STATE_CHANGE,

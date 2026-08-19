@@ -31,7 +31,10 @@
       "edgeToEdgeEnabled": true
     },
     "plugins": [
-      "./modules/sonovel-tts"
+      "expo-asset",
+      "expo-font",
+      "expo-localization",
+      "expo-status-bar"
     ],
     "extra": {
       "eas": {

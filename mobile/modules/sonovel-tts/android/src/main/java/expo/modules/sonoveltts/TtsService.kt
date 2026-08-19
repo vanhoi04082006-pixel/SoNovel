@@ -19,9 +19,9 @@ import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import androidx.core.app.NotificationCompat
 import androidx.media.app.NotificationCompat.MediaStyle
-import androidx.media.session.MediaSessionCompat
-import androidx.media.session.PlaybackStateCompat
-import androidx.media.session.MediaMetadataCompat
+import android.support.v4.media.MediaMetadataCompat
+import android.support.v4.media.session.MediaSessionCompat
+import android.support.v4.media.session.PlaybackStateCompat
 import org.json.JSONArray
 import java.util.Locale
 
@@ -832,7 +832,7 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
     private fun emit(eventName: String, params: Map<String, Any?>) {
         val module = SonovelTtsModule.instance ?: return
         try {
-            module.emit(eventName, params)
+            module.sendEvent(eventName, params)
         } catch (_: Throwable) {}
     }
 
