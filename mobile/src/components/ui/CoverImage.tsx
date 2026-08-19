@@ -1,29 +1,31 @@
-import React, { useMemo } from 'react';
-import { Image, StyleSheet, Text, View, ViewStyle, ImageStyle } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { Image, StyleSheet, Text, View, ViewStyle, ImageStyle, DimensionValue, ActivityIndicator } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../theme';
 
 type Props = {
   title: string;
   coverUrl?: string | null;
-  width?: number | string;
-  height?: number | string;
+  width?: DimensionValue;
+  height?: DimensionValue;
   borderRadius?: number;
   style?: ViewStyle | ImageStyle;
   fontSize?: number;
+  shadow?: boolean;
 };
 
 // 10 palettes gradient — deterministic theo title hash
 const PALETTES: [string, string, string][] = [
-  ['#d97706', '#92400e', '#fbbf24'], // amber
-  ['#059669', '#065f46', '#34d399'], // emerald
-  ['#dc2626', '#7f1d1d', '#f87171'], // red
-  ['#7c3aed', '#4c1d95', '#a78bfa'], // violet
-  ['#0891b2', '#155e75', '#22d3ee'], // cyan
-  ['#c026d3', '#701a75', '#e879f9'], // fuchsia
-  ['#ea580c', '#7c2d12', '#fb923c'], // orange
-  ['#65a30d', '#365314', '#a3e635'], // lime
-  ['#0d9488', '#134e4a', '#2dd4bf'], // teal
-  ['#e11d48', '#881337', '#fb7185'], // rose
+  ['#f59e0b', '#b45309', '#fbbf24'], // amber
+  ['#10b981', '#065f46', '#34d399'], // emerald
+  ['#ef4444', '#7f1d1d', '#f87171'], // red
+  ['#8b5cf6', '#4c1d95', '#a78bfa'], // violet
+  ['#06b6d4', '#155e75', '#22d3ee'], // cyan
+  ['#d946ef', '#701a75', '#e879f9'], // fuchsia
+  ['#f97316', '#7c2d12', '#fb923c'], // orange
+  ['#84cc16', '#365314', '#a3e635'], // lime
+  ['#14b8a6', '#134e4a', '#2dd4bf'], // teal
+  ['#f43f5e', '#881337', '#fb7185'], // rose
 ];
 
 function hashString(s: string): number {
@@ -32,53 +34,64 @@ function hashString(s: string): number {
   return Math.abs(h);
 }
 
-export function CoverImage({ title, coverUrl, width = '100%', height, borderRadius = 8, style, fontSize }: Props) {
+export function CoverImage({ title, coverUrl, width = '100%', height, borderRadius = 8, style, fontSize, shadow }: Props) {
   const t = useTheme();
   const palette = useMemo(() => PALETTES[hashString(title) % PALETTES.length], [title]);
   const initial = useMemo(() => {
     const trimmed = (title || '?').trim();
     return trimmed.charAt(0).toUpperCase();
   }, [title]);
+  const [loading, setLoading] = useState(false);
+
+  const shadowStyle = shadow
+    ? {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.25,
+        shadowRadius: 8,
+        elevation: 4,
+      }
+    : null;
 
   if (coverUrl && coverUrl.length > 0) {
     return (
-      <Image
-        source={{ uri: coverUrl }}
-        style={[{ width, height, borderRadius }, style as ImageStyle]}
-        resizeMode="cover"
-      />
+      <View style={[{ width, height, borderRadius }, shadowStyle, style as ViewStyle]}>
+        <Image
+          source={{ uri: coverUrl }}
+          style={{ width: '100%', height: '100%', borderRadius, backgroundColor: t.bgSubtle }}
+          resizeMode="cover"
+          onLoadStart={() => setLoading(true)}
+          onLoadEnd={() => setLoading(false)}
+        />
+        {loading ? (
+          <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', borderRadius }]}>
+            <ActivityIndicator color={t.primary} size="small" />
+          </View>
+        ) : null}
+      </View>
     );
   }
 
-  // Gradient placeholder: 2 màu chồng nhau (RN không có LinearGradient native,
-  // dùng 2 View overlap với opacity tạo hiệu ứng gradient đơn giản).
-  const computedFontSize = fontSize ?? (typeof width === 'number' ? Math.max(20, width * 0.35) : 36);
+  // Gradient placeholder thật (LinearGradient) + initial + title
+  const computedFontSize = fontSize ?? (typeof width === 'number' ? Math.max(20, width * 0.32) : 36);
   const containerStyle: ViewStyle = {
     width,
     height,
     borderRadius,
-    backgroundColor: palette[0],
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
     ...((style as ViewStyle) || {}),
+    ...(shadowStyle as object),
   };
 
   return (
-    <View style={containerStyle}>
-      {/* Lớp overlay tạo chiều sâu gradient */}
-      <View
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: palette[1],
-          opacity: 0.55,
-        }}
-      />
-      {/* Initial chữ cái đầu — lớn, đậm */}
+    <LinearGradient
+      colors={[palette[0], palette[1]]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={containerStyle}
+    >
       <Text
         style={{
           color: palette[2],
@@ -91,7 +104,6 @@ export function CoverImage({ title, coverUrl, width = '100%', height, borderRadi
       >
         {initial}
       </Text>
-      {/* Title nhỏ ở dưới (nếu có chỗ) */}
       {typeof width === 'number' && width >= 80 ? (
         <Text
           style={{
@@ -109,6 +121,6 @@ export function CoverImage({ title, coverUrl, width = '100%', height, borderRadi
           {title}
         </Text>
       ) : null}
-    </View>
+    </LinearGradient>
   );
 }

@@ -1,10 +1,15 @@
 import React, { useCallback, useState } from 'react';
-import { FlatList, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useTheme } from '../theme';
+import { useTheme, TYPO, RADIUS, SPACING } from '../theme';
 import { LoginCTA } from '../components/ui/LoginCTA';
+import { Screen } from '../components/ui/Screen';
+import { ScreenHeader } from '../components/ui/ScreenHeader';
+import { EmptyState } from '../components/ui/EmptyState';
+import { CoverImage } from '../components/ui/CoverImage';
+import { Icon } from '../components/ui/Icon';
+import { SkeletonList } from '../components/ui/Skeleton';
 import { HistoryRow as HistoryRowType, listHistory, SeriesRow } from '../lib/progress';
 import { useAuth } from '../lib/session';
 import { RootStackParamList } from '../navigation/types';
@@ -38,17 +43,21 @@ export function HistoryScreen() {
   const auth = useAuth();
   const pad = useMiniPlayerPad(true);
   const [items, setItems] = useState<Item[]>([]);
+  const [loading, setLoading] = useState(false);
 
   const load = useCallback(async () => {
     if (!auth.session) {
       setItems([]);
       return;
     }
+    setLoading(true);
     try {
       const rows = await listHistory();
       setItems(rows);
     } catch (_e) {
       setItems([]);
+    } finally {
+      setLoading(false);
     }
   }, [auth.session]);
 
@@ -56,65 +65,70 @@ export function HistoryScreen() {
 
   if (!auth.session) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={['top']}>
-        <View style={styles.head}><Text style={[styles.title, { color: t.text }]}>Lịch sử</Text></View>
+      <Screen edges={['top']}>
+        <ScreenHeader title="Lịch sử" />
         <LoginCTA
           title="Đăng nhập để xem lịch sử"
           message="Lịch sử đọc truyện của bạn sẽ được đồng bộ trên nhiều thiết bị."
           onCta={() => nav.navigate('Login')}
         />
-      </SafeAreaView>
+      </Screen>
     );
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={['top']}>
-      <View style={styles.head}><Text style={[styles.title, { color: t.text }]}>Lịch sử</Text></View>
-      <FlatList
-        data={items}
-        keyExtractor={(item) => item.series_id}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: pad + 16, gap: 8 }}
-        renderItem={({ item }) => {
-          const s = item.series;
-          if (!s) return null;
-          return (
-            <Pressable
-              onPress={() => nav.navigate('Series', { seriesId: s.id })}
-              style={[styles.row, { backgroundColor: t.surface, borderColor: t.border }]}
-            >
-              {s.cover_url ? (
-                <Image source={{ uri: s.cover_url }} style={styles.cover} resizeMode="cover" />
-              ) : (
-                <View style={[styles.cover, { backgroundColor: t.bgSubtle, alignItems: 'center', justifyContent: 'center' }]}>
-                  <Text style={{ color: t.textMuted }}>🎧</Text>
+    <Screen edges={['top']}>
+      <ScreenHeader title="Lịch sử" subtitle={items.length > 0 ? `${items.length} truyện đã mở` : undefined} />
+      {loading ? (
+        <View style={{ paddingHorizontal: 16 }}>
+          <SkeletonList count={6} height={70} />
+        </View>
+      ) : items.length === 0 ? (
+        <EmptyState
+          icon="time-outline"
+          title="Chưa có lịch sử đọc"
+          message="Những truyện bạn từng mở sẽ xuất hiện ở đây."
+          ctaLabel="Khám phá truyện"
+          onCta={() => nav.navigate('Tabs' as any, { screen: 'Home' } as any)}
+        />
+      ) : (
+        <FlatList
+          data={items}
+          keyExtractor={(item) => item.series_id}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: pad + 16, gap: 8 }}
+          renderItem={({ item }) => {
+            const s = item.series;
+            if (!s) return null;
+            return (
+              <Pressable
+                onPress={() => nav.navigate('Series', { seriesId: s.id })}
+                style={({ pressed }) => [styles.row, { backgroundColor: t.surface, borderColor: t.border }, t.shadowSoft, pressed && { opacity: 0.85 }]}
+              >
+                <CoverImage title={s.title} coverUrl={s.cover_url} width={50} height={70} borderRadius={RADIUS.sm} />
+                <View style={styles.meta}>
+                  <Text style={[TYPO.body, { color: t.text, fontWeight: '600' }]} numberOfLines={2}>{s.title}</Text>
+                  <Text style={[TYPO.caption, { color: t.textMuted, marginTop: 2 }]}>
+                    Đã mở {item.opened_count} lần · {timeAgo(item.last_opened_at)}
+                  </Text>
                 </View>
-              )}
-              <View style={styles.meta}>
-                <Text style={[styles.rowTitle, { color: t.text }]} numberOfLines={2}>{s.title}</Text>
-                <Text style={[styles.rowMeta, { color: t.textMuted }]}>
-                  Đã mở {item.opened_count} lần · {timeAgo(item.last_opened_at)}
-                </Text>
-              </View>
-            </Pressable>
-          );
-        }}
-      />
-    </SafeAreaView>
+                <Icon name="chevron-forward" size={18} color={t.border} />
+              </Pressable>
+            );
+          }}
+        />
+      )}
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  head: { paddingHorizontal: 16, paddingVertical: 12 },
-  title: { fontSize: 22, fontWeight: '700' },
   row: {
     flexDirection: 'row',
-    gap: 10,
+    alignItems: 'center',
+    gap: 12,
     padding: 10,
-    borderRadius: 10,
+    borderRadius: RADIUS.lg,
     borderWidth: 1,
   },
-  cover: { width: 50, height: 70, borderRadius: 6 },
-  meta: { flex: 1, gap: 4, justifyContent: 'center' },
-  rowTitle: { fontSize: 14, fontWeight: '600', lineHeight: 18 },
-  rowMeta: { fontSize: 12 },
+  meta: { flex: 1, gap: 2, justifyContent: 'center' },
 });

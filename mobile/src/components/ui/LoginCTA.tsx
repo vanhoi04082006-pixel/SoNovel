@@ -1,6 +1,8 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useTheme } from '../../theme';
+import { StyleSheet, Text, View } from 'react-native';
+import { useTheme, TYPO, SPACING, RADIUS } from '../../theme';
+import { Icon } from './Icon';
+import { AppButton } from './AppButton';
 
 type Props = {
   title?: string;
@@ -20,31 +22,32 @@ export function LoginCTA({
 }: Props) {
   const t = useTheme();
   return (
-    <View style={[styles.wrap, { backgroundColor: t.bgElevated, borderColor: t.border }]}>
-      <Text style={[styles.title, { color: t.text }]}>{title}</Text>
-      <Text style={[styles.message, { color: t.textMuted }]}>{message}</Text>
-      <Pressable
-        style={[styles.btn, { backgroundColor: t.primary }]}
-        onPress={onCta}
-      >
-        <Text style={[styles.btnLabel, { color: t.primaryText }]}>{ctaLabel}</Text>
-      </Pressable>
+    <View style={[styles.wrap, { backgroundColor: t.surface, borderColor: t.border }]}>
+      <View style={[styles.iconWrap, { backgroundColor: t.primarySoft }]}>
+        <Icon name="cloud-upload-outline" size={28} color={t.primary} />
+      </View>
+      <Text style={[TYPO.title, { color: t.text, textAlign: 'center' }]}>{title}</Text>
+      <Text style={[TYPO.bodySm, { color: t.textMuted, textAlign: 'center', lineHeight: 20 }]}>{message}</Text>
+      <AppButton label={ctaLabel} onPress={onCta} icon="log-in-outline" compact style={{ marginTop: SPACING.sm }} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: {
-    margin: 16,
-    padding: 20,
-    borderRadius: 12,
+    margin: SPACING.lg,
+    padding: SPACING.xl,
+    borderRadius: RADIUS.xl,
     borderWidth: 1,
-    borderStyle: 'dashed',
     alignItems: 'center',
-    gap: 10,
+    gap: SPACING.md,
+    ...({ shadowColor: 'rgba(0,0,0,0.1)', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 12, elevation: 3 } as object),
   },
-  title: { fontSize: 16, fontWeight: '700', textAlign: 'center' },
-  message: { fontSize: 13, textAlign: 'center', lineHeight: 18 },
-  btn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
-  btnLabel: { fontSize: 14, fontWeight: '600' },
+  iconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: RADIUS.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

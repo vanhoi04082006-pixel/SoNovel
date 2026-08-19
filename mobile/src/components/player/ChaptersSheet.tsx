@@ -1,13 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { useTheme } from '../../theme';
+import { useTheme, TYPO, RADIUS, SPACING } from '../../theme';
 import { SheetModal } from '../ui/SheetModal';
+import { Icon } from '../ui/Icon';
 
-/**
- * Mỗi chương chỉ cần id + tiêu đề cho sheet danh sách — không cần
- * ràng buộc toàn bộ ChapterRow (vì Player có thể đã strip content khi
- * truyền vào).
- */
 export type ChapterListItem = {
   id: string;
   title: string;
@@ -39,16 +35,19 @@ export function ChaptersSheet({ visible, onClose, chapters, currentIndex, onSele
   return (
     <SheetModal visible={visible} onClose={onClose} heightPct={0.7}>
       <View style={styles.head}>
-        <Text style={[styles.title, { color: t.text }]}>Chương</Text>
-        <Text style={[styles.sub, { color: t.textMuted }]}>{chapters.length} chương</Text>
+        <Text style={[TYPO.h3, { color: t.text }]}>Chương</Text>
+        <Text style={[TYPO.label, { color: t.textMuted }]}>{chapters.length} chương</Text>
       </View>
-      <TextInput
-        style={[styles.input, { backgroundColor: t.bgSubtle, color: t.text, borderColor: t.border }]}
-        placeholder="Tìm chương theo tiêu đề hoặc số…"
-        placeholderTextColor={t.textMuted}
-        value={q}
-        onChangeText={setQ}
-      />
+      <View style={[styles.searchWrap, { backgroundColor: t.bgSubtle }]}>
+        <Icon name="search" size={16} color={t.textMuted} />
+        <TextInput
+          style={[styles.input, { color: t.text }]}
+          placeholder="Tìm chương theo tiêu đề hoặc số…"
+          placeholderTextColor={t.textMuted}
+          value={q}
+          onChangeText={setQ}
+        />
+      </View>
       <View style={styles.list}>
         {filtered.map(({ c, i }) => {
           const isCur = i === currentIndex;
@@ -56,13 +55,15 @@ export function ChaptersSheet({ visible, onClose, chapters, currentIndex, onSele
             <Pressable
               key={c.id}
               onPress={() => { onSelect(i); onClose(); }}
-              style={[styles.row, { backgroundColor: isCur ? t.bgSubtle : 'transparent', borderColor: t.border }]}
+              style={[styles.row, { backgroundColor: isCur ? t.primarySoft : 'transparent' }]}
             >
-              <Text style={[styles.idx, { color: t.textMuted }]}>{i + 1}</Text>
+              <View style={[styles.idxWrap, { backgroundColor: isCur ? t.primary : t.bgSubtle }]}>
+                <Text style={[styles.idx, { color: isCur ? t.primaryText : t.textMuted }]}>{i + 1}</Text>
+              </View>
               <Text style={[styles.rowTitle, { color: t.text }]} numberOfLines={2}>
                 {c.title}
               </Text>
-              {isCur ? <Text style={[styles.badge, { color: t.primary }]}>🔊</Text> : null}
+              {isCur ? <Icon name="volume-high" size={16} color={t.primary} /> : null}
             </Pressable>
           );
         })}
@@ -72,27 +73,33 @@ export function ChaptersSheet({ visible, onClose, chapters, currentIndex, onSele
 }
 
 const styles = StyleSheet.create({
-  head: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 },
-  title: { fontSize: 16, fontWeight: '700' },
-  sub: { fontSize: 12 },
-  input: {
+  head: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: SPACING.sm },
+  searchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     height: 40,
-    borderRadius: 8,
+    borderRadius: RADIUS.pill,
     paddingHorizontal: 12,
-    borderWidth: 1,
-    marginBottom: 8,
+    marginBottom: SPACING.sm,
   },
-  list: { flex: 1, gap: 2 },
+  input: { flex: 1, fontSize: 14, paddingVertical: 0 },
+  list: { flex: 1, gap: 4 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: RADIUS.md,
     gap: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  idx: { width: 28, fontSize: 12, fontWeight: '600' },
-  rowTitle: { flex: 1, fontSize: 14 },
-  badge: { fontSize: 14 },
+  idxWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  idx: { fontSize: 12, fontWeight: '700' },
+  rowTitle: { flex: 1, fontSize: 14, fontWeight: '500' },
 });

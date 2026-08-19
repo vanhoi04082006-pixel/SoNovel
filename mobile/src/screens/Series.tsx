@@ -1,20 +1,23 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   Pressable,
   ScrollView,
   Share,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { RouteProp, useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTheme } from '../theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useTheme, TYPO, SPACING, RADIUS } from '../theme';
 import { Chip } from '../components/ui/Chip';
 import { CoverImage } from '../components/ui/CoverImage';
+import { Icon } from '../components/ui/Icon';
+import { AppButton } from '../components/ui/AppButton';
 import {
   ChapterRow,
   SeriesRow,
@@ -60,17 +63,15 @@ export function SeriesScreen({ route }: { route: SeriesRouteProp }) {
       setSeries(s);
       setChapters(chs);
       recordHistory(seriesId).catch(() => {});
-      if (auth.session) {
-        const [f, p] = await Promise.all([
-          isFav(seriesId),
-          getProgress(seriesId),
-        ]);
-        setFav(f);
-        setProgress({
-          chapterId: p?.listen_chapter_id ?? null,
-          charIndex: p?.listen_char_index ?? 0,
-        });
-      }
+      const [f, p] = await Promise.all([
+        isFav(seriesId),
+        getProgress(seriesId),
+      ]);
+      setFav(f);
+      setProgress({
+        chapterId: p?.listen_chapter_id ?? null,
+        charIndex: p?.listen_char_index ?? 0,
+      });
     } catch (e: any) {
       setError(e?.message ?? 'Không tải được truyện');
     } finally {
@@ -159,83 +160,114 @@ export function SeriesScreen({ route }: { route: SeriesRouteProp }) {
   );
 
   const isCurSeries = np.seriesId === series.id;
+  const totalChars = chapters.reduce((sum, c) => sum + (c.content?.length ?? 0), 0);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={['top']}>
-      <ScrollView contentContainerStyle={{ paddingBottom: pad + 16 }}>
-        {/* Header */}
-        <View style={[styles.head, { borderBottomColor: t.border }]}>
-          <CoverImage
-            title={series.title}
-            coverUrl={series.cover_url}
-            width={100}
-            height={140}
-            borderRadius={10}
-          />
-          <View style={styles.meta}>
-            <Text style={[styles.title, { color: t.text }]} numberOfLines={3}>{series.title}</Text>
-            {series.author ? (
-              <Text style={[styles.author, { color: t.textMuted }]} numberOfLines={1}>{series.author}</Text>
-            ) : null}
-            <View style={styles.chips}>
-              {(series.genres ?? []).map((g) => (
-                <Chip key={g} label={g} onPress={() => nav.navigate('Tabs' as any, { screen: 'Search' } as any)} />
-              ))}
+      <ScrollView contentContainerStyle={{ paddingBottom: pad + 16 }} showsVerticalScrollIndicator={false}>
+        {/* Header with gradient backdrop */}
+        <View style={styles.headerWrap}>
+          <LinearGradient colors={[t.gradientPrimary[0], 'transparent']} style={styles.headerGlow} />
+          <View style={styles.headerRow}>
+            <CoverImage
+              title={series.title}
+              coverUrl={series.cover_url}
+              width={110}
+              height={150}
+              borderRadius={RADIUS.lg}
+              shadow
+            />
+            <View style={styles.meta}>
+              <Text style={[TYPO.h3, { color: t.text }]} numberOfLines={3}>{series.title}</Text>
+              {series.author ? (
+                <Text style={[TYPO.bodySm, { color: t.textMuted }]} numberOfLines={1}>{series.author}</Text>
+              ) : null}
+              <View style={styles.chips}>
+                {(series.genres ?? []).slice(0, 4).map((g) => (
+                  <Chip key={g} label={g} compact onPress={() => nav.navigate('Tabs' as any, { screen: 'Search' } as any)} />
+                ))}
+              </View>
             </View>
+          </View>
+          {/* Stats */}
+          <View style={[styles.statsRow, { backgroundColor: t.surface, borderColor: t.border }]}>
+            <Stat label="Chương" value={String(chapters.length)} />
+            <View style={[styles.statDivider, { backgroundColor: t.border }]} />
+            <Stat label="Chữ" value={totalChars > 0 ? totalChars.toLocaleString('vi-VN') : '—'} />
+            <View style={[styles.statDivider, { backgroundColor: t.border }]} />
+            <Stat label="Trạng thái" value={series.status === 'completed' ? 'Xong' : 'Đang ra'} />
           </View>
         </View>
 
         {/* Description */}
         {series.description ? (
           <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: t.text }]}>Giới thiệu</Text>
-            <Text style={[styles.desc, { color: t.textMuted }]}>{series.description}</Text>
+            <Text style={[TYPO.title, { color: t.text }]}>Giới thiệu</Text>
+            <Text style={[TYPO.bodySm, { color: t.textMuted, lineHeight: 20 }]}>{series.description}</Text>
           </View>
         ) : null}
 
         {/* Actions */}
         <View style={[styles.actionsRow, { borderColor: t.border }]}>
-          <Pressable
+          <AppButton
+            label={progress?.chapterId ? 'Tiếp tục nghe' : 'Nghe từ đầu'}
+            icon={progress?.chapterId ? 'play' : 'headset'}
             onPress={onContinueOrStart}
-            style={[styles.primaryBtn, { backgroundColor: t.primary }]}
-          >
-            <Text style={[styles.primaryBtnLabel, { color: t.primaryText }]}>
-              {progress?.chapterId ? '▶ Tiếp tục nghe' : '🎧 Nghe từ đầu'}
-            </Text>
-          </Pressable>
+            style={{ flex: 1 }}
+          />
           <Pressable
             onPress={onFavToggle}
-            style={[styles.secBtn, { borderColor: t.border, backgroundColor: t.surface }]}
+            style={[styles.iconBtn, { borderColor: t.border, backgroundColor: fav ? t.dangerSoft : t.surface }]}
           >
-            <Text style={{ color: t.text, fontSize: 14 }}>{fav ? '❤️' : '🤍'}</Text>
+            <Icon name={fav ? 'heart' : 'heart-outline'} size={22} color={fav ? t.danger : t.textMuted} />
           </Pressable>
           <Pressable
             onPress={onShare}
-            style={[styles.secBtn, { borderColor: t.border, backgroundColor: t.surface }]}
+            style={[styles.iconBtn, { borderColor: t.border, backgroundColor: t.surface }]}
           >
-            <Text style={{ color: t.text, fontSize: 14 }}>📤</Text>
+            <Icon name="share-social-outline" size={20} color={t.textMuted} />
           </Pressable>
         </View>
 
         {/* Chapters */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: t.text }]}>Danh sách chương ({chapters.length})</Text>
+          <View style={styles.chapterHead}>
+            <Text style={[TYPO.title, { color: t.text }]}>Danh sách chương ({chapters.length})</Text>
+            <View style={[styles.chapterSearch, { backgroundColor: t.bgSubtle }]}>
+              <Icon name="search" size={14} color={t.textMuted} />
+              <TextInput
+                style={[styles.chapterSearchInput, { color: t.text }]}
+                placeholder="Tìm…"
+                placeholderTextColor={t.textMuted}
+                value={search}
+                onChangeText={setSearch}
+              />
+            </View>
+          </View>
           {filtered.map((c, i) => {
             const isCurChapter = isCurSeries && np.currentIndex === i;
             return (
               <Pressable
                 key={c.id}
                 onPress={() => startListening(i, 0)}
-                style={[styles.chapterRow, { borderColor: t.border, backgroundColor: isCurChapter ? t.bgSubtle : 'transparent' }]}
+                style={({ pressed }) => [styles.chapterRow, { borderColor: t.border }, isCurChapter && { backgroundColor: t.primarySoft }, pressed && { opacity: 0.85 }]}
               >
-                <Text style={[styles.chapterIdx, { color: t.textMuted }]}>{c.order_no}</Text>
+                <View style={[styles.chapterIdxWrap, { backgroundColor: isCurChapter ? t.primary : t.bgSubtle }]}>
+                  <Text style={[styles.chapterIdx, { color: isCurChapter ? t.primaryText : t.textMuted }]}>{c.order_no}</Text>
+                </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.chapterTitle, { color: t.text }]} numberOfLines={2}>{c.title}</Text>
-                  <Text style={[styles.chapterMeta, { color: t.textMuted }]}>
-                    {c.content.length} ký tự · ~{Math.ceil(c.content.length / 270)} phút nghe
+                  <Text style={[TYPO.body, { color: t.text }]} numberOfLines={2}>{c.title}</Text>
+                  <Text style={[TYPO.caption, { color: t.textMuted, marginTop: 2 }]}>
+                    {c.content.length} ký tự · ~{Math.ceil(c.content.length / 270)} phút
                   </Text>
                 </View>
-                {isCurChapter ? <Text style={{ color: t.primary }}>🔊</Text> : null}
+                {isCurChapter ? (
+                  <View style={styles.playingBadge}>
+                    <Icon name="volume-high" size={14} color={t.primary} />
+                  </View>
+                ) : (
+                  <Icon name="chevron-forward" size={16} color={t.border} />
+                )}
               </Pressable>
             );
           })}
@@ -245,50 +277,104 @@ export function SeriesScreen({ route }: { route: SeriesRouteProp }) {
   );
 }
 
+function Stat({ label, value }: { label: string; value: string }) {
+  const t = useTheme();
+  return (
+    <View style={styles.stat}>
+      <Text style={[TYPO.title, { color: t.text }]}>{value}</Text>
+      <Text style={[TYPO.caption, { color: t.textMuted }]}>{label}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  head: {
-    flexDirection: 'row',
-    gap: 12,
-    padding: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+  headerWrap: {
+    paddingTop: SPACING.lg,
+    paddingHorizontal: SPACING.lg,
+    position: 'relative',
+    overflow: 'hidden',
   },
-  cover: { width: 100, height: 140, borderRadius: 8 },
-  meta: { flex: 1, gap: 4 },
-  title: { fontSize: 18, fontWeight: '700', lineHeight: 22 },
-  author: { fontSize: 13 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
-  section: { paddingHorizontal: 16, paddingVertical: 12 },
-  sectionTitle: { fontSize: 15, fontWeight: '700', marginBottom: 8 },
-  desc: { fontSize: 13, lineHeight: 20 },
+  headerGlow: {
+    position: 'absolute',
+    top: -60,
+    left: 0,
+    right: 0,
+    height: 220,
+    opacity: 0.5,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    gap: 14,
+  },
+  meta: { flex: 1, gap: 4, paddingTop: 4 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: SPACING.lg,
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+  },
+  stat: { flex: 1, alignItems: 'center', gap: 2 },
+  statDivider: { width: StyleSheet.hairlineWidth, height: 28 },
+  section: { paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, gap: 8 },
   actionsRow: {
     flexDirection: 'row',
     gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  primaryBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  primaryBtnLabel: { fontSize: 14, fontWeight: '600' },
-  secBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 8,
+  iconBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: RADIUS.lg,
     borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  chapterHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 4,
+  },
+  chapterSearch: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    height: 32,
+    borderRadius: RADIUS.pill,
+    width: 110,
+  },
+  chapterSearchInput: { flex: 1, fontSize: 12, paddingVertical: 0 },
   chapterRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: 8,
   },
-  chapterIdx: { width: 32, fontSize: 12, fontWeight: '600' },
-  chapterTitle: { fontSize: 14, lineHeight: 18 },
-  chapterMeta: { fontSize: 11, marginTop: 2 },
+  chapterIdxWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chapterIdx: { fontSize: 12, fontWeight: '700' },
+  playingBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
 });

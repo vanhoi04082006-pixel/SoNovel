@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { View } from 'react-native';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -14,7 +15,7 @@ import { ProfileScreen } from '../screens/Profile';
 import { SeriesScreen } from '../screens/Series';
 import { PlayerScreen } from '../screens/Player';
 import { LoginScreen } from '../screens/Login';
-import { FloatingMiniPlayer } from '../components/player/FloatingMiniPlayer';
+import { TabBar } from './TabBar';
 import { RootStackParamList, TabsParamList } from './types';
 
 const Tab = createBottomTabNavigator<TabsParamList>();
@@ -31,6 +32,7 @@ function Tabs() {
         tabBarStyle: { backgroundColor: t.surface, borderTopColor: t.border },
         tabBarLabelStyle: { fontSize: 11 },
       }}
+      tabBar={(props) => <TabBar {...props} />}
     >
       <Tab.Screen name="Home" component={HomeScreen} options={{ title: 'Trang chủ', tabBarLabel: 'Trang chủ' }} />
       <Tab.Screen name="Search" component={SearchScreen} options={{ title: 'Tìm kiếm', tabBarLabel: 'Tìm kiếm' }} />
@@ -84,7 +86,6 @@ export function RootNavigator() {
           options={{ presentation: 'modal', title: 'Đăng nhập' }}
         />
       </Stack.Navigator>
-      <FloatingMiniPlayer />
     </NavigationContainer>
   );
 }

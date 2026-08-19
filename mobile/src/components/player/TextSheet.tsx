@@ -7,8 +7,9 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useTheme } from '../../theme';
+import { useTheme, TYPO, RADIUS } from '../../theme';
 import { SheetModal } from '../ui/SheetModal';
+import { Icon } from '../ui/Icon';
 
 type ChapterText = {
   title?: string;
@@ -25,10 +26,6 @@ type Props = {
 
 const SCREEN_H = Dimensions.get('window').height;
 
-/**
- * Sheet "Xem chữ" — 88% chiều cao màn hình, tách đoạn theo \n,
- * highlight đoạn đang đọc (tính từ charIndex), toggle "Theo dõi" auto-scroll.
- */
 export function TextSheet({ visible, onClose, chapter, currentIndex, charIndex }: Props) {
   const t = useTheme();
   const [follow, setFollow] = useState(true);
@@ -42,18 +39,16 @@ export function TextSheet({ visible, onClose, chapter, currentIndex, charIndex }
       .map((p) => p.trim());
   }, [chapter]);
 
-  // Tính offset ký tự đầu mỗi đoạn
   const offsets = useMemo(() => {
     const out: number[] = [];
     let acc = 0;
     for (const p of paragraphs) {
       out.push(acc);
-      if (p != null) acc += p.length + 1; // +1 for \n
+      if (p != null) acc += p.length + 1;
     }
     return out;
   }, [paragraphs]);
 
-  // Tìm đoạn chứa charIndex hiện tại
   const activeIdx = useMemo(() => {
     let idx = 0;
     for (let i = 0; i < offsets.length; i++) {
@@ -72,22 +67,24 @@ export function TextSheet({ visible, onClose, chapter, currentIndex, charIndex }
         viewPosition: 0.4,
       });
     } catch (_e) {
-      // ignore — out of view momentarily
     }
   }, [activeIdx, visible, follow]);
 
   return (
     <SheetModal visible={visible} onClose={onClose} heightPct={0.88}>
       <View style={styles.head}>
-        <Text style={[styles.title, { color: t.text }]} numberOfLines={1}>
-          {chapter ? `Chương ${currentIndex + 1}. ${chapter.title}` : 'Xem chữ'}
-        </Text>
+        <View style={styles.titleWrap}>
+          <Text style={[TYPO.title, { color: t.text }]} numberOfLines={1}>
+            {chapter ? `Chương ${currentIndex + 1}. ${chapter.title}` : 'Xem chữ'}
+          </Text>
+        </View>
         <Pressable
           onPress={() => setFollow((v) => !v)}
-          style={[styles.followBtn, { backgroundColor: follow ? t.primary : t.bgSubtle, borderColor: t.border }]}
+          style={[styles.followBtn, { backgroundColor: follow ? t.primary : t.bgSubtle }]}
         >
-          <Text style={{ color: follow ? t.primaryText : t.textMuted, fontSize: 12 }}>
-            {follow ? '↓ Theo dõi' : 'Theo dõi'}
+          <Icon name={follow ? 'arrow-down' : 'arrow-down-outline'} size={13} color={follow ? t.primaryText : t.textMuted} />
+          <Text style={{ color: follow ? t.primaryText : t.textMuted, fontSize: 12, fontWeight: '600' }}>
+            {follow ? 'Theo dõi' : 'Tự cuộn'}
           </Text>
         </Pressable>
       </View>
@@ -99,15 +96,22 @@ export function TextSheet({ visible, onClose, chapter, currentIndex, charIndex }
           if (item == null || item === '') return <View style={{ height: 8 }} />;
           const isActive = index === activeIdx;
           return (
-            <Text
+            <View
               style={[
-                styles.para,
-                { color: isActive ? t.primary : t.text },
-                isActive && { backgroundColor: t.bgSubtle, borderRadius: 4 },
+                styles.paraWrap,
+                isActive && { backgroundColor: t.primarySoft, borderRadius: RADIUS.md },
               ]}
             >
-              {item}
-            </Text>
+              <View style={[styles.paraBar, { backgroundColor: isActive ? t.primary : 'transparent' }]} />
+              <Text
+                style={[
+                  styles.para,
+                  { color: isActive ? t.primarySoftText : t.text },
+                ]}
+              >
+                {item}
+              </Text>
+            </View>
           );
         }}
         onScrollToIndexFailed={() => {}}
@@ -125,18 +129,33 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     gap: 8,
   },
-  title: { fontSize: 15, fontWeight: '700', flex: 1 },
+  titleWrap: { flex: 1 },
   followBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: RADIUS.pill,
+  },
+  paraWrap: {
+    flexDirection: 'row',
+    marginVertical: 1,
+  },
+  paraBar: {
+    width: 3,
+    borderRadius: 2,
+    marginLeft: 6,
+    marginRight: 8,
+    marginTop: 5,
+    marginBottom: 5,
   },
   para: {
     fontSize: 15,
-    lineHeight: 22,
-    paddingHorizontal: 8,
+    lineHeight: 24,
     paddingVertical: 4,
+    paddingRight: 12,
+    flex: 1,
   },
 });
 

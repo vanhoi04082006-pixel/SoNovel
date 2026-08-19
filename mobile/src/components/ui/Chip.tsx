@@ -1,59 +1,76 @@
-import React from 'react';
-import { Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
-import { useTheme } from '../../theme';
+import React, { useRef } from 'react';
+import { Pressable, StyleSheet, Text, ViewStyle } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { useTheme, RADIUS } from '../../theme';
+import { Icon, IconName } from './Icon';
+
+type Variant = 'soft' | 'outline' | 'filled';
 
 type ChipProps = {
   label: string;
   selected?: boolean;
   onPress?: () => void;
   prefix?: string;
+  icon?: IconName;
+  iconSize?: number;
+  variant?: Variant;
   style?: ViewStyle;
+  compact?: boolean;
 };
 
-export function Chip({ label, selected, onPress, prefix, style }: ChipProps) {
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+export function Chip({ label, selected, onPress, prefix, icon, iconSize = 13, variant = 'soft', style, compact }: ChipProps) {
   const t = useTheme();
-  const bg = selected ? t.primary : t.bgSubtle;
-  const fg = selected ? t.primaryText : t.text;
+  const scale = useSharedValue(1);
+
+  let bg = t.bgSubtle;
+  let fg = t.text;
+  let border = 'transparent';
+
+  if (variant === 'filled') {
+    bg = t.primary;
+    fg = t.primaryText;
+  } else if (variant === 'outline') {
+    bg = 'transparent';
+    border = t.border;
+  }
+
+  if (selected && variant !== 'filled') {
+    bg = t.primarySoft;
+    fg = t.primarySoftText;
+    border = 'transparent';
+  }
+
+  const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+
   return (
-    <Pressable
+    <AnimatedPressable
       onPress={onPress}
-      style={[styles.chip, { backgroundColor: bg, borderColor: t.border }, style]}
+      onPressIn={() => { scale.value = withTiming(0.95, { duration: 80 }); }}
+      onPressOut={() => { scale.value = withTiming(1, { duration: 120 }); }}
+      style={[styles.chip, { backgroundColor: bg, borderColor: border }, compact && styles.compactChip, animatedStyle, style]}
     >
-      {prefix ? (
-        <Text style={[styles.prefix, { color: fg }]}>{prefix}</Text>
-      ) : null}
+      {icon ? <Icon name={icon} size={iconSize} color={fg} /> : null}
+      {prefix ? <Text style={[styles.prefix, { color: fg }]}>{prefix}</Text> : null}
       <Text style={[styles.label, { color: fg }]} numberOfLines={1}>
         {label}
       </Text>
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 
 const styles = StyleSheet.create({
   chip: {
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
+    paddingVertical: 7,
+    borderRadius: RADIUS.pill,
     borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
   },
+  compactChip: { paddingHorizontal: 10, paddingVertical: 5 },
   prefix: { fontSize: 12, fontWeight: '600' },
-  label: { fontSize: 13 },
-});
-
-export function ChipRow({ children }: { children: React.ReactNode }) {
-  return (
-    <View style={chipRowStyles.row}>
-      {React.Children.map(children, (c, i) => (
-        <View key={i} style={chipRowStyles.item}>{c}</View>
-      ))}
-    </View>
-  );
-}
-
-const chipRowStyles = StyleSheet.create({
-  row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  item: {},
+  label: { fontSize: 13, fontWeight: '500' },
 });

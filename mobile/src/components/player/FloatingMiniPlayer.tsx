@@ -1,15 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { useTheme } from '../../theme';
+import { useTheme, TYPO, RADIUS } from '../../theme';
 import { getNowPlaying, onTtsEvent, togglePlayPause } from '../../lib/tts';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
 import { CoverImage } from '../ui/CoverImage';
+import { Icon } from '../ui/Icon';
 
 /**
- * Floating mini player — nổi trên tab bar.
- * Hiện khi đang có seriesId trong tts state (đang phát / đang pause / đang busy).
+ * Floating mini player — compact, nằm phía trên tab bar (render trong tabBar của Tabs).
  */
 export function FloatingMiniPlayer() {
   const t = useTheme();
@@ -40,22 +40,22 @@ export function FloatingMiniPlayer() {
           });
         }
       }}
-      style={({ pressed }) => [styles.bar, { backgroundColor: t.surface, borderColor: t.border }, pressed && { opacity: 0.9 }]}
+      style={({ pressed }) => [styles.bar, { backgroundColor: t.surface, borderColor: t.border }, t.shadowCard, pressed && { opacity: 0.92 }]}
     >
       <CoverImage
         title={np.seriesTitle || 'SoNovel'}
         coverUrl={np.coverUrl}
-        width={40}
-        height={40}
-        borderRadius={6}
+        width={48}
+        height={48}
+        borderRadius={10}
       />
       <View style={styles.meta}>
-        <Text style={[styles.title, { color: t.text }]} numberOfLines={1}>{title}</Text>
+        <Text style={[TYPO.bodySm, { color: t.text, fontWeight: '600' }]} numberOfLines={1}>{title}</Text>
         <View style={styles.progressWrap}>
           <View style={[styles.progressTrack, { backgroundColor: t.bgSubtle }]}>
             <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%`, backgroundColor: t.primary }]} />
           </View>
-          <Text style={[styles.charCount, { color: t.textMuted }]}>
+          <Text style={[TYPO.caption, { color: t.textMuted }]}>
             {Math.round(progress * 100)}%
           </Text>
         </View>
@@ -67,9 +67,7 @@ export function FloatingMiniPlayer() {
         {np.busy ? (
           <ActivityIndicator color={t.primaryText} size="small" />
         ) : (
-          <Text style={{ color: t.primaryText, fontSize: 16, fontWeight: '700' }}>
-            {np.isPlaying ? '⏸' : '▶'}
-          </Text>
+          <Icon name={np.isPlaying ? 'pause' : 'play'} size={18} color={t.primaryText} />
         )}
       </Pressable>
     </Pressable>
@@ -78,29 +76,21 @@ export function FloatingMiniPlayer() {
 
 const styles = StyleSheet.create({
   bar: {
-    position: 'absolute',
-    bottom: 56,
-    left: 8,
-    right: 8,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 12,
+    marginHorizontal: 14,
+    marginBottom: 10,
+    marginTop: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: RADIUS.xl,
     borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
   },
-  meta: { flex: 1, gap: 4 },
-  title: { fontSize: 13, fontWeight: '600' },
+  meta: { flex: 1, gap: 5 },
   progressWrap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   progressTrack: { flex: 1, height: 3, borderRadius: 2, overflow: 'hidden' },
   progressFill: { height: '100%' },
-  charCount: { fontSize: 10 },
   playBtn: {
     width: 36,
     height: 36,

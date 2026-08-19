@@ -1,10 +1,14 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useTheme } from '../theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useTheme, TYPO, RADIUS, SPACING } from '../theme';
 import { LoginCTA } from '../components/ui/LoginCTA';
+import { Screen } from '../components/ui/Screen';
+import { ScreenHeader } from '../components/ui/ScreenHeader';
+import { Icon } from '../components/ui/Icon';
+import { AppButton } from '../components/ui/AppButton';
 import { useAuth } from '../lib/session';
 import { supabase } from '../lib/supabase';
 import { setTheme } from '../theme';
@@ -16,6 +20,7 @@ export function ProfileScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const email = auth.session?.user?.email ?? '';
+  const initial = email ? email.charAt(0).toUpperCase() : '?';
 
   const onLogout = async () => {
     try { await supabase.auth.signOut(); } catch (_e) {}
@@ -23,81 +28,105 @@ export function ProfileScreen() {
 
   if (!auth.session) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={['top']}>
-        <View style={styles.head}><Text style={[styles.title, { color: t.text }]}>Tài khoản</Text></View>
+      <Screen edges={['top']}>
+        <ScreenHeader title="Tài khoản" />
         <LoginCTA onCta={() => nav.navigate('Login')} />
-      </SafeAreaView>
+      </Screen>
     );
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={['top']}>
-      <View style={styles.head}><Text style={[styles.title, { color: t.text }]}>Tài khoản</Text></View>
+    <Screen edges={['top']}>
+      <ScreenHeader title="Tài khoản" />
+
+      {/* Account card */}
       <View style={[styles.card, { backgroundColor: t.surface, borderColor: t.border }]}>
-        <Text style={[styles.label, { color: t.textMuted }]}>Email</Text>
-        <Text style={[styles.value, { color: t.text }]}>{email}</Text>
-      </View>
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: t.text }]}>Giao diện</Text>
-        <View style={styles.rowBtns}>
-          <Pressable
-            onPress={() => setTheme('light')}
-            style={[styles.themeBtn, { borderColor: t.border, backgroundColor: t.name === 'light' ? t.primary : t.surface }]}
-          >
-            <Text style={{ color: t.name === 'light' ? t.primaryText : t.text }}>Sáng</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setTheme('dark')}
-            style={[styles.themeBtn, { borderColor: t.border, backgroundColor: t.name === 'dark' ? t.primary : t.surface }]}
-          >
-            <Text style={{ color: t.name === 'dark' ? t.primaryText : t.text }}>Tối</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setTheme(null)}
-            style={[styles.themeBtn, { borderColor: t.border, backgroundColor: t.surface }]}
-          >
-            <Text style={{ color: t.text }}>Hệ thống</Text>
-          </Pressable>
+        <LinearGradient
+          colors={t.gradientPrimary}
+          style={styles.avatar}
+        >
+          <Text style={styles.avatarText}>{initial}</Text>
+        </LinearGradient>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={[TYPO.title, { color: t.text }]} numberOfLines={1}>{email}</Text>
+          <Text style={[TYPO.caption, { color: t.textMuted }]}>Đã đăng nhập</Text>
         </View>
       </View>
+
+      {/* Theme */}
       <View style={styles.section}>
-        <Pressable
-          onPress={onLogout}
-          style={[styles.logoutBtn, { borderColor: t.danger, backgroundColor: t.surface }]}
-        >
-          <Text style={{ color: t.danger, fontSize: 14, fontWeight: '600' }}>Đăng xuất</Text>
-        </Pressable>
+        <Text style={[TYPO.title, { color: t.text }]}>Giao diện</Text>
+        <View style={[styles.segmented, { backgroundColor: t.bgSubtle }]}>
+          <ThemeSegment label="Sáng" icon="sunny-outline" active={t.name === 'light'} onPress={() => setTheme('light')} />
+          <ThemeSegment label="Tối" icon="moon-outline" active={t.name === 'dark'} onPress={() => setTheme('dark')} />
+          <ThemeSegment label="Hệ thống" icon="contrast-outline" active={t.name !== 'light' && t.name !== 'dark'} onPress={() => setTheme(null)} />
+        </View>
       </View>
-    </SafeAreaView>
+
+      {/* Logout */}
+      <View style={styles.section}>
+        <AppButton
+          label="Đăng xuất"
+          variant="danger"
+          icon="log-out-outline"
+          onPress={onLogout}
+        />
+      </View>
+    </Screen>
+  );
+}
+
+function ThemeSegment({ label, icon, active, onPress }: { label: string; icon: any; active: boolean; onPress: () => void }) {
+  const t = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.segBtn, { backgroundColor: active ? t.primary : 'transparent' }]}
+    >
+      <Icon name={icon} size={18} color={active ? t.primaryText : t.textMuted} />
+      <Text style={{ color: active ? t.primaryText : t.textMuted, fontSize: 12, fontWeight: active ? '700' : '500' }}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  head: { paddingHorizontal: 16, paddingVertical: 12 },
-  title: { fontSize: 22, fontWeight: '700' },
   card: {
     marginHorizontal: 16,
     padding: 16,
-    borderRadius: 10,
+    borderRadius: RADIUS.xl,
     borderWidth: 1,
-    gap: 4,
-  },
-  label: { fontSize: 12 },
-  value: { fontSize: 15, fontWeight: '600' },
-  section: { paddingHorizontal: 16, paddingTop: 20 },
-  sectionTitle: { fontSize: 14, fontWeight: '700', marginBottom: 10 },
-  rowBtns: { flexDirection: 'row', gap: 8 },
-  themeBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  logoutBtn: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
-    borderWidth: 1,
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 14,
+  },
+  avatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  section: { paddingHorizontal: 16, paddingTop: 24, gap: 12 },
+  segmented: {
+    flexDirection: 'row',
+    gap: 6,
+    borderRadius: RADIUS.lg,
+    padding: 4,
+  },
+  segBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: RADIUS.md,
   },
 });

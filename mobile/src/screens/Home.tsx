@@ -2,7 +2,6 @@ import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  Image,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -12,16 +11,19 @@ import {
   Dimensions,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useTheme } from '../theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useTheme, TYPO, SPACING, RADIUS } from '../theme';
 import { SeriesCard } from '../components/ui/SeriesCard';
 import { CoverImage } from '../components/ui/CoverImage';
 import { Chip } from '../components/ui/Chip';
-import { listSeries, listAllProgress, listChapters, SeriesRow, ProgressRow } from '../lib/progress';
+import { Screen } from '../components/ui/Screen';
+import { Skeleton } from '../components/ui/Skeleton';
+import { Icon } from '../components/ui/Icon';
+import { listSeries, listAllProgress, listChapters, getSeries, SeriesRow, ProgressRow } from '../lib/progress';
 import { useAuth } from '../lib/session';
 import { setSearchFilter } from '../lib/searchFilter';
-import { startTts, TtsChapter } from '../lib/tts';
+import { startTts, TtsChapter, listLocalProgress } from '../lib/tts';
 import { RootStackParamList } from '../navigation/types';
 import { useMiniPlayerPad } from '../lib/useMiniPlayerPad';
 
@@ -54,10 +56,32 @@ export function HomeScreen() {
         const prog = await listAllProgress();
         setProgressItems(prog.slice(0, 5));
       } else {
-        setProgressItems([]);
+        const locals = await listLocalProgress();
+        const items: (ProgressRow & { series?: SeriesRow })[] = [];
+        for (const lp of locals.slice(0, 5)) {
+          try {
+            const s = await getSeries(lp.seriesId);
+            if (s) {
+              items.push({
+                user_id: 'local',
+                series_id: lp.seriesId,
+                listen_chapter_id: lp.chapterId,
+                listen_char_index: lp.charIndex,
+                audio_sec: 0,
+                playback_speed: 1.0,
+                last_listened_at: lp.lastListenedAt,
+                read_chapter_id: null,
+                read_char_index: 0,
+                read_percent: 0,
+                last_read_at: null,
+                series: s,
+              });
+            }
+          } catch (_e) {}
+        }
+        setProgressItems(items);
       }
     } catch (_e) {
-      // ignore — UI sẽ hiện empty state
     } finally {
       setLoading(false);
     }
@@ -99,93 +123,118 @@ export function HomeScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={['top']}>
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ paddingTop: 12, paddingBottom: pad + 16 }}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} colors={[t.primary]} tintColor={t.primary} />}
+    <Screen scroll refreshControl={<RefreshControl refreshing={loading} onRefresh={load} colors={[t.primary]} tintColor={t.primary} />}
+      contentContainerStyle={{ paddingBottom: pad + 16 }}>
+      {/* Hero gradient */}
+      <LinearGradient
+        colors={t.gradientHero}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.hero}
       >
-        {/* Hero */}
-        <View style={[styles.hero, { backgroundColor: t.primary }]}>
-          <View style={styles.heroOverlay} />
-          <View style={styles.heroContent}>
-            <Text style={styles.heroTitle}>🎧 SoNovel</Text>
-            <Text style={styles.heroSub}>
-              Nghe truyện chữ bằng giọng đọc tổng hợp — miễn phí, không quảng cáo.
-            </Text>
-          </View>
+        <View style={styles.heroContent}>
+          <Text style={styles.heroTitle}>SoNovel</Text>
+          <Text style={styles.heroSub}>
+            Nghe truyện chữ bằng giọng đọc tổng hợp — miễn phí, không quảng cáo.
+          </Text>
+          <Pressable
+            onPress={() => nav.navigate('Tabs' as any, { screen: 'Search' } as any)}
+            style={styles.heroSearch}
+          >
+            <Icon name="search" size={16} color="rgba(255,255,255,0.9)" />
+            <Text style={styles.heroSearchText}>Tìm truyện, tác giả…</Text>
+          </Pressable>
         </View>
+      </LinearGradient>
 
-        {/* Continue listening */}
-        {progressItems.length > 0 ? (
-          <Section title="Tiếp tục nghe">
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingHorizontal: 16 }}>
-              {progressItems.map((item, i) => {
-                const s = item.series;
-                if (!s) return null;
-                const frac = s.word_count > 0 ? Math.min(1, (item.listen_char_index ?? 0) / Math.max(1, s.word_count * 5)) : 0;
-                return (
-                  <Pressable
-                    key={i}
-                    onPress={() => continueListen(item)}
-                    style={({ pressed }) => [styles.contCard, { backgroundColor: t.surface, borderColor: t.border }, pressed && { opacity: 0.85 }]}
-                  >
-                    <CoverImage
-                      title={s.title}
-                      coverUrl={s.cover_url}
-                      width={114}
-                      height={152}
-                      borderRadius={8}
-                    />
-                    <Text style={[styles.contTitle, { color: t.text }]} numberOfLines={1}>{s.title}</Text>
-                    <Text style={[styles.contMeta, { color: t.textMuted }]} numberOfLines={1}>
-                      Còn {Math.round((1 - frac) * 100)}% · {Math.ceil((1 - frac) * (s.word_count / 270))} phút
-                    </Text>
-                    <View style={[styles.contBar, { backgroundColor: t.bgSubtle }]}>
-                      <View style={[styles.contBarFill, { width: `${Math.round(frac * 100)}%`, backgroundColor: t.primary }]} />
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-          </Section>
-        ) : null}
-
-        {/* Genres */}
-        <Section title="Thể loại">
-          <View style={styles.chipsRow}>
-            {GENRES.map((g) => (
-              <Chip
-                key={g}
-                label={g}
-                onPress={() => {
-                  setSearchFilter({ genre: g });
-                  nav.navigate('Tabs' as any, { screen: 'Search' } as any);
-                }}
-              />
-            ))}
-          </View>
+      {/* Continue listening */}
+      {loading ? (
+        <View style={styles.section}>
+          <Skeleton width={150} height={20} />
+          <Skeleton width="100%" height={170} radius={RADIUS.xl} />
+        </View>
+      ) : progressItems.length > 0 ? (
+        <Section title="Tiếp tục nghe">
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingHorizontal: 16 }}>
+            {progressItems.map((item, i) => {
+              const s = item.series;
+              if (!s) return null;
+              const frac = s.word_count > 0 ? Math.min(1, (item.listen_char_index ?? 0) / Math.max(1, s.word_count * 5)) : 0;
+              return (
+                <Pressable
+                  key={i}
+                  onPress={() => continueListen(item)}
+                  style={({ pressed }) => [styles.contCard, { backgroundColor: t.surface, borderColor: t.border }, t.shadowSoft, pressed && { opacity: 0.85 }]}
+                >
+                  <CoverImage
+                    title={s.title}
+                    coverUrl={s.cover_url}
+                    width={116}
+                    height={154}
+                    borderRadius={RADIUS.md}
+                    shadow
+                  />
+                  <View style={styles.contPlay}>
+                    <Icon name="play" size={14} color={t.primaryText} />
+                  </View>
+                  <Text style={[TYPO.bodySm, { color: t.text, fontWeight: '600' }]} numberOfLines={1}>{s.title}</Text>
+                  <View style={[styles.contBar, { backgroundColor: t.bgSubtle }]}>
+                    <View style={[styles.contBarFill, { width: `${Math.round(frac * 100)}%`, backgroundColor: t.primary }]} />
+                  </View>
+                  <Text style={[TYPO.caption, { color: t.textMuted }]} numberOfLines={1}>
+                    {Math.round((1 - frac) * 100)}% còn lại
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
         </Section>
+      ) : null}
 
-        {/* Recent */}
-        <Section title="Truyện mới cập nhật">
+      {/* Genres */}
+      <Section title="Thể loại">
+        <View style={styles.chipsRow}>
+          {GENRES.map((g) => (
+            <Chip
+              key={g}
+              label={g}
+              icon="pricetag-outline"
+              iconSize={12}
+              onPress={() => {
+                setSearchFilter({ genre: g });
+                nav.navigate('Tabs' as any, { screen: 'Search' } as any);
+              }}
+            />
+          ))}
+        </View>
+      </Section>
+
+      {/* Recent */}
+      <Section title="Truyện mới cập nhật">
+        {loading ? (
+          <SkeletonListRow />
+        ) : (
           <FlatList
             data={recent}
             keyExtractor={(item) => item.id}
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}
+            contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}
             renderItem={({ item }) => (
-              <View style={{ width: 110 }}>
-                <SeriesCard series={item} onPress={openSeries} />
+              <View style={{ width: 112 }}>
+                <SeriesCard series={item} onPress={openSeries} showChapterCount />
               </View>
             )}
             ListEmptyComponent={!loading ? <EmptyLabel t={t} text="Chưa có truyện nào" /> : null}
           />
-        </Section>
+        )}
+      </Section>
 
-        {/* Popular */}
-        <Section title="Phổ biến">
+      {/* Popular */}
+      <Section title="Phổ biến">
+        {loading ? (
+          <SkeletonGrid />
+        ) : (
           <View style={styles.grid}>
             {popular.map((s) => (
               <View key={s.id} style={{ width: CARD_W }}>
@@ -194,9 +243,9 @@ export function HomeScreen() {
             ))}
             {popular.length === 0 && !loading ? <EmptyLabel t={t} text="Chưa có truyện nào" /> : null}
           </View>
-        </Section>
-      </ScrollView>
-    </SafeAreaView>
+        )}
+      </Section>
+    </Screen>
   );
 }
 
@@ -204,53 +253,73 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   const t = useTheme();
   return (
     <View style={styles.section}>
-      <Text style={[styles.sectionTitle, { color: t.text }]}>{title}</Text>
+      <Text style={[TYPO.h3, { color: t.text }]}>{title}</Text>
       {children}
     </View>
   );
 }
 
+function SkeletonListRow() {
+  return (
+    <View style={{ flexDirection: 'row', gap: 12, paddingHorizontal: 16 }}>
+      {Array.from({ length: 3 }).map((_, i) => (
+        <Skeleton key={i} width={112} height={170} radius={RADIUS.md} />
+      ))}
+    </View>
+  );
+}
+
+function SkeletonGrid() {
+  return (
+    <View style={styles.grid}>
+      {Array.from({ length: 6 }).map((_, i) => (
+        <Skeleton key={i} width={CARD_W} height={CARD_W * 1.5 + 40} radius={RADIUS.md} />
+      ))}
+    </View>
+  );
+}
+
 function EmptyLabel({ t, text }: { t: ReturnType<typeof useTheme>; text: string }) {
-  return <Text style={{ color: t.textMuted, fontSize: 13, paddingHorizontal: 16, paddingVertical: 12 }}>{text}</Text>;
+  return <Text style={[TYPO.bodySm, { color: t.textMuted, paddingHorizontal: 16, paddingVertical: 12 }]}>{text}</Text>;
 }
 
 const styles = StyleSheet.create({
   hero: {
     marginHorizontal: 16,
-    borderRadius: 16,
+    borderRadius: RADIUS.xl,
     overflow: 'hidden',
-    position: 'relative',
-  },
-  heroOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.15)',
   },
   heroContent: {
     padding: 20,
-    gap: 6,
+    gap: 8,
   },
   heroTitle: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '800',
     color: '#fff',
     letterSpacing: 0.5,
+    fontFamily: 'BeVietnamPro_800ExtraBold',
   },
   heroSub: {
     fontSize: 13,
     lineHeight: 18,
     color: 'rgba(255,255,255,0.92)',
   },
-  section: { marginTop: 20 },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 10,
-    paddingHorizontal: 16,
+  heroSearch: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    borderRadius: RADIUS.pill,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
+  heroSearchText: {
+    color: 'rgba(255,255,255,0.95)',
+    fontSize: 13,
+  },
+  section: { marginTop: 24, gap: 12 },
   chipsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -264,14 +333,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   contCard: {
-    width: 130,
+    width: 132,
     padding: 8,
-    borderRadius: 12,
+    borderRadius: RADIUS.lg,
     borderWidth: 1,
     gap: 4,
+    position: 'relative',
   },
-  contTitle: { fontSize: 13, fontWeight: '600' },
-  contMeta: { fontSize: 11 },
+  contPlay: {
+    position: 'absolute',
+    right: 12,
+    top: 122,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: 'rgba(124,58,237,0.95)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   contBar: { height: 3, borderRadius: 2, overflow: 'hidden' },
   contBarFill: { height: '100%' },
 });

@@ -1,17 +1,18 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useTheme } from '../../theme';
+import { useTheme, TYPO, RADIUS } from '../../theme';
 import { SheetModal } from '../ui/SheetModal';
+import { Icon } from '../ui/Icon';
 
 export type SleepOption = 'off' | '10m' | '15m' | '30m' | '60m' | 'chapter';
 
-const OPTIONS: { value: SleepOption; label: string }[] = [
-  { value: 'off', label: 'Tắt' },
-  { value: '10m', label: '10 phút' },
-  { value: '15m', label: '15 phút' },
-  { value: '30m', label: '30 phút' },
-  { value: '60m', label: '60 phút' },
-  { value: 'chapter', label: 'Hết chương' },
+const OPTIONS: { value: SleepOption; label: string; icon: any }[] = [
+  { value: 'off', label: 'Tắt', icon: 'close' },
+  { value: '10m', label: '10 phút', icon: 'time-outline' },
+  { value: '15m', label: '15 phút', icon: 'time-outline' },
+  { value: '30m', label: '30 phút', icon: 'time-outline' },
+  { value: '60m', label: '60 phút', icon: 'time-outline' },
+  { value: 'chapter', label: 'Hết chương', icon: 'book-outline' },
 ];
 
 type Props = {
@@ -24,8 +25,8 @@ type Props = {
 export function SleepSheet({ visible, onClose, value, onChange }: Props) {
   const t = useTheme();
   return (
-    <SheetModal visible={visible} onClose={onClose} heightPct={0.45}>
-      <Text style={[styles.title, { color: t.text }]}>Hẹn giờ tắt</Text>
+    <SheetModal visible={visible} onClose={onClose} heightPct={0.5}>
+      <Text style={[TYPO.h3, { color: t.text, marginBottom: 12 }]}>Hẹn giờ tắt</Text>
       <View style={styles.list}>
         {OPTIONS.map((o) => {
           const sel = o.value === value;
@@ -33,10 +34,13 @@ export function SleepSheet({ visible, onClose, value, onChange }: Props) {
             <Pressable
               key={o.value}
               onPress={() => { onChange(o.value); onClose(); }}
-              style={[styles.row, { borderColor: t.border, backgroundColor: sel ? t.bgSubtle : 'transparent' }]}
+              style={[styles.row, { backgroundColor: sel ? t.primarySoft : 'transparent' }]}
             >
-              <Text style={{ color: sel ? t.primary : t.text, fontSize: 14 }}>{o.label}</Text>
-              {sel ? <Text style={{ color: t.primary }}>✓</Text> : null}
+              <Icon name={o.icon} size={18} color={sel ? t.primary : t.textMuted} />
+              <Text style={{ color: sel ? t.primary : t.text, fontSize: 14, fontWeight: sel ? '600' : '400', flex: 1 }}>
+                {o.label}
+              </Text>
+              {sel ? <Icon name="checkmark" size={18} color={t.primary} /> : null}
             </Pressable>
           );
         })}
@@ -46,15 +50,13 @@ export function SleepSheet({ visible, onClose, value, onChange }: Props) {
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: 16, fontWeight: '700', marginBottom: 12 },
-  list: { gap: 4 },
+  list: { gap: 6 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    borderRadius: 8,
-    borderWidth: 1,
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    borderRadius: RADIUS.md,
   },
 });

@@ -85,6 +85,61 @@ export function onTtsEvent(type: string, cb: (payload?: any) => void): () => voi
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 const SAVE_THROTTLE_MS = 4000;
 
+// Local progress — lưu AsyncStorage song song với server để khách vẫn resume được.
+const LOCAL_PROGRESS_PREFIX = 'sonovel.localProgress.';
+
+export function getLocalProgressKey(seriesId: string): string {
+  return `${LOCAL_PROGRESS_PREFIX}${seriesId}`;
+}
+
+export type LocalProgress = {
+  chapterId: string | null;
+  charIndex: number;
+  lastListenedAt: string;
+};
+
+export async function getLocalProgress(seriesId: string): Promise<LocalProgress | null> {
+  try {
+    const raw = await AsyncStorage.getItem(getLocalProgressKey(seriesId));
+    return raw ? (JSON.parse(raw) as LocalProgress) : null;
+  } catch (_e) {
+    return null;
+  }
+}
+
+export type LocalProgressEntry = LocalProgress & { seriesId: string };
+
+/** Liệt kê toàn bộ progress local (theo prefix) — dùng cho "Tiếp tục nghe" khi chưa đăng nhập. */
+export async function listLocalProgress(): Promise<LocalProgressEntry[]> {
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const list: LocalProgressEntry[] = [];
+    for (const key of keys) {
+      if (!key.startsWith(LOCAL_PROGRESS_PREFIX)) continue;
+      const seriesId = key.slice(LOCAL_PROGRESS_PREFIX.length);
+      const raw = await AsyncStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw) as LocalProgress;
+      if (!parsed || !parsed.chapterId) continue;
+      list.push({ ...parsed, seriesId });
+    }
+    return list.sort((a, b) => (b.lastListenedAt > a.lastListenedAt ? 1 : -1));
+  } catch (_e) {
+    return [];
+  }
+}
+
+async function saveLocalProgress(seriesId: string, chapterId: string | null, charIndex: number) {
+  try {
+    await AsyncStorage.setItem(
+      getLocalProgressKey(seriesId),
+      JSON.stringify({ chapterId, charIndex, lastListenedAt: new Date().toISOString() } satisfies LocalProgress)
+    );
+  } catch (_e) {
+    // ignore — local save không nghiêm trọng
+  }
+}
+
 function scheduleSave() {
   if (saveTimer) return;
   saveTimer = setTimeout(() => {
@@ -95,10 +150,12 @@ function scheduleSave() {
 
 export async function flushTtsSave(): Promise<void> {
   if (!seriesId) return;
-  const userId = getUserId();
-  if (!userId) return;
   const chapter = chapters[currentIndex];
   if (!chapter) return;
+  // Luôn lưu local (chạy cả khi chưa đăng nhập)
+  await saveLocalProgress(seriesId, chapter.id, currentChar);
+  const userId = getUserId();
+  if (!userId) return;
   try {
     await supabase.from('progress').upsert({
       user_id: userId,
@@ -209,7 +266,8 @@ function clearBusy() {
     clearTimeout(busyTimer);
     busyTimer = null;
   }
-  stopPolling();
+  // KHÔNG stopPolling() ở đây — polling phải chạy liên tục khi đang phát
+  // để UI đồng bộ chương + progress (tránh kẹt UI khi audio sang chương sau).
   if (busy) {
     busy = false;
     emitLocal('nowPlaying');
@@ -276,6 +334,7 @@ function wireNative() {
       isPlaying = false;
       seriesEnded = true;
       clearBusy();
+      stopPolling();
       flushTtsSave().catch(() => {});
       emitLocal('seriesEnd');
     })

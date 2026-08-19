@@ -1,61 +1,74 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { Pressable, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
-import { useTheme } from '../../theme';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { useTheme, TYPO } from '../../theme';
 import { SeriesRow } from '../../lib/progress';
 import { CoverImage } from './CoverImage';
+import { Icon } from './Icon';
 
 type Props = {
   series: SeriesRow;
   onPress?: (s: SeriesRow) => void;
   width?: number;
   favorited?: boolean;
+  showChapterCount?: boolean;
 };
 
-export function SeriesCard({ series, onPress, width, favorited }: Props) {
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+export function SeriesCard({ series, onPress, width, favorited, showChapterCount }: Props) {
   const t = useTheme();
+  const scale = useSharedValue(1);
   const completed = series.status === 'completed';
+
+  const anim = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
   return (
     <View style={[styles.wrap, { width }]}>
-      <Pressable
+      <AnimatedPressable
         onPress={() => onPress?.(series)}
-        style={({ pressed }) => [styles.inner, pressed && { opacity: 0.85 }]}
+        onPressIn={() => { scale.value = withTiming(0.96, { duration: 90 }); }}
+        onPressOut={() => { scale.value = withTiming(1, { duration: 140 }); }}
+        style={[styles.inner, anim]}
       >
         <View style={styles.coverWrap}>
           <CoverImage
             title={series.title}
             coverUrl={series.cover_url}
             style={styles.cover as ViewStyle}
-            borderRadius={10}
+            borderRadius={12}
+            shadow
           />
-          {/* Status badge top-right */}
           {completed ? (
-            <View style={[styles.badge, { backgroundColor: t.primary }]}>
-              <Text style={styles.badgeText}>Hoàn thành</Text>
+            <View style={[styles.badge, { backgroundColor: t.success }]}>
+              <Text style={styles.badgeText}>Xong</Text>
             </View>
           ) : null}
-          {/* Favorite heart */}
           {favorited ? (
-            <View style={[styles.favBadge, { backgroundColor: t.surface }]}>
-              <Text style={{ fontSize: 10 }}>❤️</Text>
+            <View style={[styles.favBadge, { backgroundColor: 'rgba(0,0,0,0.45)' }]}>
+              <Icon name="heart" size={10} color="#fff" />
             </View>
           ) : null}
         </View>
         <Text style={[styles.title as TextStyle, { color: t.text }]} numberOfLines={2}>
           {series.title}
         </Text>
-        {series.author ? (
+        {showChapterCount ? (
+          <Text style={[styles.author as TextStyle, { color: t.textMuted }]} numberOfLines={1}>
+            {series.word_count > 0 ? `${series.word_count.toLocaleString('vi-VN')} chữ` : ''}
+          </Text>
+        ) : series.author ? (
           <Text style={[styles.author as TextStyle, { color: t.textMuted }]} numberOfLines={1}>
             {series.author}
           </Text>
         ) : null}
-      </Pressable>
+      </AnimatedPressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { marginBottom: 12 },
+  wrap: { marginBottom: 14 },
   inner: { gap: 6 },
   coverWrap: {
     position: 'relative',
@@ -70,7 +83,7 @@ const styles = StyleSheet.create({
     right: 6,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: 6,
   },
   badgeText: {
     color: '#fff',
@@ -91,6 +104,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     lineHeight: 18,
+    fontFamily: TYPO.body.fontFamily,
   },
   author: {
     fontSize: 12,

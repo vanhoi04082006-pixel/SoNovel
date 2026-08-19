@@ -1,11 +1,14 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, Text, View, Dimensions } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, View, Dimensions } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useTheme } from '../theme';
+import { useTheme, TYPO, RADIUS, SPACING } from '../theme';
 import { SeriesCard } from '../components/ui/SeriesCard';
 import { LoginCTA } from '../components/ui/LoginCTA';
+import { Screen } from '../components/ui/Screen';
+import { ScreenHeader } from '../components/ui/ScreenHeader';
+import { EmptyState } from '../components/ui/EmptyState';
+import { SkeletonList } from '../components/ui/Skeleton';
 import { listFavorites, SeriesRow } from '../lib/progress';
 import { useAuth } from '../lib/session';
 import { RootStackParamList } from '../navigation/types';
@@ -43,26 +46,32 @@ export function FavoritesScreen() {
 
   if (!auth.session) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={['top']}>
-        <View style={styles.head}><Text style={[styles.title, { color: t.text }]}>Yêu thích</Text></View>
+      <Screen edges={['top']}>
+        <ScreenHeader title="Yêu thích" />
         <LoginCTA
           title="Đăng nhập để xem yêu thích"
           message="Lưu và đồng bộ danh sách truyện yêu thích của bạn trên nhiều thiết bị."
           onCta={() => nav.navigate('Login')}
         />
-      </SafeAreaView>
+      </Screen>
     );
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={['top']}>
-      <View style={styles.head}><Text style={[styles.title, { color: t.text }]}>Yêu thích</Text></View>
+    <Screen edges={['top']}>
+      <ScreenHeader title="Yêu thích" subtitle={items.length > 0 ? `${items.length} truyện` : undefined} />
       {loading ? (
-        <ActivityIndicator color={t.primary} style={{ padding: 20 }} />
+        <View style={{ paddingHorizontal: 16 }}>
+          <SkeletonList count={6} height={200} />
+        </View>
       ) : items.length === 0 ? (
-        <Text style={{ color: t.textMuted, fontSize: 13, padding: 16 }}>
-          Bạn chưa có truyện yêu thích nào.
-        </Text>
+        <EmptyState
+          icon="heart-outline"
+          title="Bạn chưa có truyện yêu thích"
+          message="Nhấn trái tim trên trang truyện để lưu vào danh sách này."
+          ctaLabel="Khám phá truyện"
+          onCta={() => nav.navigate('Tabs' as any, { screen: 'Home' } as any)}
+        />
       ) : (
         <FlatList
           data={items}
@@ -72,16 +81,11 @@ export function FavoritesScreen() {
           contentContainerStyle={{ paddingBottom: pad + 16 }}
           renderItem={({ item }) => (
             <View style={{ width: CARD_W }}>
-              <SeriesCard series={item} onPress={(s) => nav.navigate('Series', { seriesId: s.id })} />
+              <SeriesCard series={item} onPress={(s) => nav.navigate('Series', { seriesId: s.id })} favorited />
             </View>
           )}
         />
       )}
-    </SafeAreaView>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  head: { paddingHorizontal: 16, paddingVertical: 12 },
-  title: { fontSize: 22, fontWeight: '700' },
-});

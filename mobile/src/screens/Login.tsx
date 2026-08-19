@@ -2,7 +2,10 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { useTheme } from '../theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useTheme, TYPO, RADIUS, SPACING } from '../theme';
+import { Icon } from '../components/ui/Icon';
+import { AppButton } from '../components/ui/AppButton';
 import { supabase } from '../lib/supabase';
 
 export function LoginScreen() {
@@ -48,64 +51,72 @@ export function LoginScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={['top']}>
-      <View style={styles.wrap}>
-        <Text style={[styles.title, { color: t.text }]}>SoNovel</Text>
-        <Text style={[styles.sub, { color: t.textMuted }]}>
+      <LinearGradient colors={t.gradientHero} style={styles.brand}>
+        <View style={styles.brandIcon}>
+          <Icon name="headset" size={40} color="#fff" />
+        </View>
+        <Text style={styles.brandTitle}>SoNovel</Text>
+        <Text style={styles.brandSub}>
           {mode === 'login' ? 'Đăng nhập để đồng bộ tiến độ' : 'Tạo tài khoản mới'}
         </Text>
+      </LinearGradient>
 
-        <View style={styles.inputWrap}>
-          <Text style={[styles.label, { color: t.textMuted }]}>Email</Text>
+      <View style={styles.form}>
+        <View style={[styles.inputWrap, { backgroundColor: t.bgSubtle }]}>
+          <Icon name="mail-outline" size={18} color={t.textMuted} />
           <TextInput
-            style={[styles.input, { backgroundColor: t.bgSubtle, color: t.text, borderColor: t.border }]}
+            style={[styles.input, { color: t.text }]}
             placeholder="email@example.com"
             placeholderTextColor={t.textMuted}
             keyboardType="email-address"
             autoCapitalize="none"
+            autoCorrect={false}
             value={email}
             onChangeText={setEmail}
           />
         </View>
 
-        <View style={styles.inputWrap}>
-          <Text style={[styles.label, { color: t.textMuted }]}>Mật khẩu</Text>
-          <View style={[styles.pwRow, { backgroundColor: t.bgSubtle, borderColor: t.border }]}>
-            <TextInput
-              style={[styles.inputInline, { color: t.text }]}
-              placeholder="••••••••"
-              placeholderTextColor={t.textMuted}
-              secureTextEntry={!show}
-              value={password}
-              onChangeText={setPassword}
-            />
-            <Pressable onPress={() => setShow((v) => !v)} style={styles.pwToggle}>
-              <Text style={{ color: t.primary, fontSize: 12 }}>{show ? 'Ẩn' : 'Hiện'}</Text>
-            </Pressable>
-          </View>
+        <View style={[styles.inputWrap, { backgroundColor: t.bgSubtle }]}>
+          <Icon name="lock-closed-outline" size={18} color={t.textMuted} />
+          <TextInput
+            style={[styles.input, { color: t.text }]}
+            placeholder="Mật khẩu"
+            placeholderTextColor={t.textMuted}
+            secureTextEntry={!show}
+            value={password}
+            onChangeText={setPassword}
+          />
+          <Pressable onPress={() => setShow((v) => !v)} hitSlop={8}>
+            <Icon name={show ? 'eye-off-outline' : 'eye-outline'} size={18} color={t.textMuted} />
+          </Pressable>
         </View>
 
-        {error ? <Text style={[styles.error, { color: t.danger }]}>{error}</Text> : null}
-        {info ? <Text style={[styles.info, { color: t.success }]}>{info}</Text> : null}
+        {error ? (
+          <View style={[styles.msg, { backgroundColor: t.dangerSoft }]}>
+            <Icon name="alert-circle" size={14} color={t.danger} />
+            <Text style={{ color: t.danger, fontSize: 12, flex: 1 }}>{error}</Text>
+          </View>
+        ) : null}
+        {info ? (
+          <View style={[styles.msg, { backgroundColor: t.successSoft }]}>
+            <Icon name="checkmark-circle" size={14} color={t.success} />
+            <Text style={{ color: t.success, fontSize: 12, flex: 1 }}>{info}</Text>
+          </View>
+        ) : null}
 
-        <Pressable
+        <AppButton
+          label={mode === 'login' ? 'Đăng nhập' : 'Đăng ký'}
           onPress={submit}
-          disabled={loading}
-          style={[styles.btn, { backgroundColor: t.primary, opacity: loading ? 0.6 : 1 }]}
-        >
-          {loading ? (
-            <ActivityIndicator color={t.primaryText} />
-          ) : (
-            <Text style={[styles.btnLabel, { color: t.primaryText }]}>
-              {mode === 'login' ? 'Đăng nhập' : 'Đăng ký'}
-            </Text>
-          )}
-        </Pressable>
+          loading={loading}
+          icon={mode === 'login' ? 'log-in-outline' : 'person-add-outline'}
+          style={{ marginTop: SPACING.sm }}
+        />
 
         <Pressable
           onPress={() => { setMode(mode === 'login' ? 'signup' : 'login'); setError(null); setInfo(null); }}
           style={styles.switchBtn}
         >
-          <Text style={{ color: t.primary, fontSize: 13 }}>
+          <Text style={{ color: t.primary, fontSize: 13, fontWeight: '600' }}>
             {mode === 'login' ? 'Chưa có tài khoản? Đăng ký' : 'Đã có tài khoản? Đăng nhập'}
           </Text>
         </Pressable>
@@ -115,36 +126,50 @@ export function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  wrap: { padding: 20, gap: 12 },
-  title: { fontSize: 24, fontWeight: '700', marginTop: 12 },
-  sub: { fontSize: 13, marginBottom: 12 },
-  inputWrap: { gap: 6 },
-  label: { fontSize: 12 },
-  input: {
-    height: 44,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    fontSize: 14,
-  },
-  pwRow: {
-    flexDirection: 'row',
+  brand: {
+    paddingVertical: 36,
     alignItems: 'center',
-    borderRadius: 8,
-    borderWidth: 1,
-    paddingRight: 8,
+    gap: 6,
+    borderBottomLeftRadius: RADIUS.xxl,
+    borderBottomRightRadius: RADIUS.xxl,
+    paddingHorizontal: 20,
   },
-  inputInline: { flex: 1, height: 44, paddingHorizontal: 12, fontSize: 14 },
-  pwToggle: { paddingHorizontal: 8 },
-  error: { fontSize: 12 },
-  info: { fontSize: 12 },
-  btn: {
-    height: 44,
-    borderRadius: 8,
+  brandIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 26,
+    backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 4,
+    marginBottom: 4,
   },
-  btnLabel: { fontSize: 15, fontWeight: '600' },
-  switchBtn: { alignItems: 'center', paddingVertical: 8 },
+  brandTitle: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#fff',
+    fontFamily: 'BeVietnamPro_800ExtraBold',
+  },
+  brandSub: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.9)',
+  },
+  form: { padding: 20, gap: 12, paddingTop: 28 },
+  inputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    height: 48,
+    borderRadius: RADIUS.lg,
+    paddingHorizontal: 14,
+  },
+  input: { flex: 1, fontSize: 14, paddingVertical: 0 },
+  msg: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: RADIUS.md,
+  },
+  switchBtn: { alignItems: 'center', paddingVertical: 10 },
 });

@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Modal, Pressable, StyleSheet, View, ViewStyle } from 'react-native';
-import { useTheme } from '../../theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { useTheme, RADIUS } from '../../theme';
 
 type Props = {
   visible: boolean;
@@ -10,24 +12,37 @@ type Props = {
 };
 
 /**
- * Bottom sheet modal — trượt lên từ đáy, chiều cao % màn hình.
+ * Bottom sheet modal — spring trượt lên, drag handle, rounded top, safe-area bottom.
  */
 export function SheetModal({ visible, onClose, children, heightPct = 0.6 }: Props) {
   const t = useTheme();
+  const insets = useSafeAreaInsets();
+  const progress = useSharedValue(0);
+
+  useEffect(() => {
+    progress.value = withSpring(visible ? 1 : 0, { damping: 20, stiffness: 200 });
+  }, [visible, progress]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: (1 - progress.value) * 420 }],
+  }));
+
   const sheetStyle: ViewStyle = {
     ...styles.sheet,
     backgroundColor: t.surface,
     height: `${Math.round(heightPct * 100)}%`,
+    paddingBottom: Math.max(insets.bottom, 16),
   };
+
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={[styles.backdrop, { backgroundColor: t.overlay }]} onPress={onClose}>
-        <View style={sheetStyle}>
-          <Pressable onPress={(e) => e.stopPropagation()}>
-            <View style={styles.handle} />
+        <Animated.View style={[sheetStyle, animatedStyle]}>
+          <Pressable onPress={(e) => e.stopPropagation()} style={styles.content}>
+            <View style={[styles.handle, { backgroundColor: t.border }]} />
             {children}
           </Pressable>
-        </View>
+        </Animated.View>
       </Pressable>
     </Modal>
   );
@@ -36,17 +51,21 @@ export function SheetModal({ visible, onClose, children, heightPct = 0.6 }: Prop
 const styles = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: 'flex-end' },
   sheet: {
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    borderTopLeftRadius: RADIUS.xl,
+    borderTopRightRadius: RADIUS.xl,
     paddingHorizontal: 16,
     paddingTop: 8,
-    paddingBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 12,
   },
+  content: { flex: 1 },
   handle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(120,120,120,0.4)',
+    width: 44,
+    height: 5,
+    borderRadius: 3,
     alignSelf: 'center',
     marginBottom: 12,
   },

@@ -1,7 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -10,8 +9,10 @@ import {
 import { RouteProp, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTheme } from '../theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useTheme, TYPO, SPACING, RADIUS } from '../theme';
 import { CoverImage } from '../components/ui/CoverImage';
+import { Icon } from '../components/ui/Icon';
 import { PlayerControls } from '../components/player/PlayerControls';
 import { TextSheet } from '../components/player/TextSheet';
 import { ChaptersSheet } from '../components/player/ChaptersSheet';
@@ -25,7 +26,6 @@ import {
   prevChapterTts,
   nextChapterTts,
   resumePlayback,
-  seekToTts,
   setRateTts,
   startTts,
   stopTts,
@@ -68,7 +68,6 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
   const [initializing, setInitializing] = useState(false);
   const sleepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Subscribe to tts events
   useEffect(() => {
     const unsubs = [
       onTtsEvent('nowPlaying', () => setNp(getNowPlaying())),
@@ -87,7 +86,6 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
     return () => unsubs.forEach((u) => u());
   }, [sleep]);
 
-  // Sleep timer
   useEffect(() => {
     if (sleepTimerRef.current) {
       clearTimeout(sleepTimerRef.current);
@@ -108,23 +106,17 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
     };
   }, [sleep]);
 
-  // Init logic per §8.4:
-  // - Nếu native đang THỰC SỰ phát cùng series → chỉ sync UI
-  // - Còn lại (paused/stopped/service chết/series khác) → luôn startTts() (full restart từ saved position)
   const maybeStartTts = useCallback(async () => {
     const cur = getNowPlaying();
     if (cur.seriesId === params.seriesId && (cur.isPlaying || cur.busy)) {
-      // Đang phát cùng series — sync UI
       setNp(cur);
       return;
     }
     if (cur.seriesId === params.seriesId && cur.chapters.length > 0) {
-      // Cùng series nhưng đang paused/stopped → resumePlayback (startTts từ saved pos)
       setNp(cur);
       await resumePlayback();
       return;
     }
-    // Series khác hoặc chưa load → fetch chapters + startTts
     setInitializing(true);
     try {
       const chs: ChapterRow[] = await listChapters(params.seriesId);
@@ -156,18 +148,6 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
   }, [params.seriesId]);
 
   const chapter = np.chapters[np.currentIndex] ?? null;
-  const contentLen = chapter?.content.length ?? 0;
-  const progress = contentLen > 0 ? Math.min(1, np.currentChar / contentLen) : 0;
-  const positionLabel = formatChar(np.currentChar);
-  const durationLabel = formatChar(contentLen);
-
-  // Seek ±15s worth of chars (~270 chars/min → 15s ~ 68 chars)
-  const seekBy = (deltaSec: number) => {
-    if (!chapter) return;
-    const delta = Math.round((deltaSec / 60) * 270);
-    const next = Math.max(0, Math.min(contentLen, np.currentChar + delta));
-    seekToTts(next);
-  };
 
   const onPlayPause = () => {
     setError(null);
@@ -178,39 +158,52 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={['top']}>
+      {/* Ambient gradient background */}
+      <LinearGradient
+        colors={[t.gradientPrimary[0], t.bg, t.bg]}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={styles.ambient}
+        pointerEvents="none"
+      />
       <View style={styles.wrap}>
         {/* Cover */}
         <View style={styles.coverWrap}>
+          <View style={[styles.coverGlow, { backgroundColor: t.primary }]} />
           <CoverImage
             title={params.seriesTitle || np.seriesTitle || 'SoNovel'}
             coverUrl={params.coverUrl || np.coverUrl}
-            width={180}
-            height={240}
-            borderRadius={16}
+            width={200}
+            height={266}
+            borderRadius={RADIUS.xl}
+            shadow
           />
         </View>
 
         {/* Title */}
         <View style={styles.titleWrap}>
-          <Text style={[styles.seriesTitle, { color: t.text }]} numberOfLines={1}>
+          <Text style={[TYPO.h3, { color: t.text }]} numberOfLines={1}>
             {params.seriesTitle || np.seriesTitle}
           </Text>
-          <Text style={[styles.chapterTitle, { color: t.textMuted }]} numberOfLines={2}>
+          <Text style={[TYPO.bodySm, { color: t.textMuted }]} numberOfLines={2}>
             {chapter ? `Chương ${np.currentIndex + 1}. ${chapter.title}` : 'Đang tải…'}
           </Text>
         </View>
 
         {error ? (
-          <View style={[styles.errorBar, { backgroundColor: t.bgSubtle, borderColor: t.danger }]}>
-            <Text style={{ color: t.danger, fontSize: 12 }}>⚠ {error}</Text>
-            <Pressable onPress={() => setError(null)}><Text style={{ color: t.textMuted }}>✕</Text></Pressable>
+          <View style={[styles.errorBar, { backgroundColor: t.dangerSoft, borderColor: t.danger }]}>
+            <Icon name="warning" size={14} color={t.danger} />
+            <Text style={{ color: t.danger, fontSize: 12, flex: 1 }} numberOfLines={2}>{error}</Text>
+            <Pressable onPress={() => setError(null)} hitSlop={8}>
+              <Icon name="close" size={14} color={t.textMuted} />
+            </Pressable>
           </View>
         ) : null}
 
         {initializing ? (
           <View style={styles.loadingWrap}>
-            <ActivityIndicator color={t.primary} />
-            <Text style={{ color: t.textMuted, fontSize: 12, marginTop: 8 }}>Đang chuẩn bị…</Text>
+            <ActivityIndicator color={t.primary} size="large" />
+            <Text style={[TYPO.label, { color: t.textMuted, marginTop: 8 }]}>Đang chuẩn bị…</Text>
           </View>
         ) : (
           <PlayerControls
@@ -221,23 +214,17 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
             onPlayPause={onPlayPause}
             onPrev={() => prevChapterTts()}
             onNext={() => nextChapterTts()}
-            onSeekBack={() => seekBy(-15)}
-            onSeekForward={() => seekBy(15)}
             onTextSheet={() => setShowText(true)}
             onChaptersSheet={() => setShowChapters(true)}
             onSleepSheet={() => setShowSleep(true)}
             onStop={() => { stopTts(); nav.goBack(); }}
             onSetRate={onSetRate}
-            progress={progress}
-            positionLabel={positionLabel}
-            durationLabel={durationLabel}
           />
         )}
 
         {np.seriesEnded ? (
           <SeriesEndOverlay
             onRestart={() => {
-              // §8.4 — Nghe lại: startTts từ chương 0, char 0.
               playChapterTts(0, 0);
             }}
           />
@@ -272,34 +259,33 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
   );
 }
 
-function formatChar(n: number): string {
-  if (n <= 0) return '0:00';
-  // ~270 chars/min
-  const totalSec = Math.round((n / 270) * 60);
-  const m = Math.floor(totalSec / 60);
-  const s = totalSec % 60;
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
-
 const styles = StyleSheet.create({
-  wrap: { flex: 1, padding: 16, gap: 16 },
-  coverWrap: { alignItems: 'center' },
-  cover: {
-    width: 180,
+  ambient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 340,
+  },
+  wrap: { flex: 1, padding: 16, gap: 16, paddingTop: SPACING.xl },
+  coverWrap: { alignItems: 'center', position: 'relative' },
+  coverGlow: {
+    position: 'absolute',
+    top: 20,
+    width: 240,
     height: 240,
-    borderRadius: 12,
+    borderRadius: 120,
+    opacity: 0.18,
   },
   titleWrap: { alignItems: 'center', gap: 4 },
-  seriesTitle: { fontSize: 16, fontWeight: '700' },
-  chapterTitle: { fontSize: 13, textAlign: 'center' },
   errorBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 8,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingVertical: 10,
+    borderRadius: RADIUS.md,
     borderWidth: 1,
   },
-  loadingWrap: { alignItems: 'center', paddingVertical: 24, gap: 4 },
+  loadingWrap: { alignItems: 'center', paddingVertical: 32, gap: 4 },
 });

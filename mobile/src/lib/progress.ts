@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { getUserId } from './session';
+import { getLocalProgress } from './tts';
 
 // ---------- Types ----------
 export type SeriesRow = {
@@ -114,7 +115,24 @@ export async function listChapters(seriesId: string): Promise<ChapterRow[]> {
 // ---------- Progress ----------
 export async function getProgress(seriesId: string): Promise<ProgressRow | null> {
   const userId = getUserId();
-  if (!userId) return null;
+  if (!userId) {
+    // Chưa đăng nhập → fallback progress local (AsyncStorage)
+    const local = await getLocalProgress(seriesId);
+    if (!local) return null;
+    return {
+      user_id: 'local',
+      series_id: seriesId,
+      listen_chapter_id: local.chapterId,
+      listen_char_index: local.charIndex,
+      audio_sec: 0,
+      playback_speed: 1.0,
+      last_listened_at: local.lastListenedAt,
+      read_chapter_id: null,
+      read_char_index: 0,
+      read_percent: 0,
+      last_read_at: null,
+    } as ProgressRow;
+  }
   const { data, error } = await supabase
     .from('progress')
     .select('*')
@@ -127,7 +145,10 @@ export async function getProgress(seriesId: string): Promise<ProgressRow | null>
 
 export async function listAllProgress(): Promise<(ProgressRow & { series?: SeriesRow })[]> {
   const userId = getUserId();
-  if (!userId) return [];
+  if (!userId) {
+    // Chưa đăng nhập → chỉ có progress local; gọi qua tts.ts expose riêng
+    return [];
+  }
   const { data, error } = await supabase
     .from('progress')
     .select('*, series:series(*)')

@@ -1,6 +1,8 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useTheme } from '../../theme';
+import { StyleSheet, Text, View } from 'react-native';
+import { useTheme, TYPO, RADIUS, SPACING } from '../../theme';
+import { Icon } from '../ui/Icon';
+import { AppButton } from '../ui/AppButton';
 
 type Props = {
   message?: string;
@@ -9,22 +11,18 @@ type Props = {
 
 /**
  * Overlay hiển thị khi kết thúc bộ truyện — có nút "🔁 Nghe lại".
- * §8.4: SeriesEndOverlay → "🔁 Nghe lại".
  */
 export function SeriesEndOverlay({ message = 'Đã nghe hết bộ truyện!', onRestart }: Props) {
   const t = useTheme();
   return (
     <View style={[styles.overlay, { backgroundColor: t.overlay }]}>
       <View style={[styles.card, { backgroundColor: t.surface, borderColor: t.border }]}>
-        <Text style={styles.emoji}>🎧</Text>
-        <Text style={[styles.title, { color: t.text }]}>{message}</Text>
+        <View style={[styles.iconWrap, { backgroundColor: t.primarySoft }]}>
+          <Icon name="checkmark-circle" size={34} color={t.primary} />
+        </View>
+        <Text style={[TYPO.title, { color: t.text, textAlign: 'center' }]}>{message}</Text>
         {onRestart ? (
-          <Pressable
-            onPress={onRestart}
-            style={[styles.btn, { backgroundColor: t.primary }]}
-          >
-            <Text style={[styles.btnLabel, { color: t.primaryText }]}>🔁 Nghe lại</Text>
-          </Pressable>
+          <AppButton label="Nghe lại" icon="refresh" onPress={onRestart} compact style={{ marginTop: SPACING.sm }} />
         ) : null}
       </View>
     </View>
@@ -40,20 +38,18 @@ const styles = StyleSheet.create({
   },
   card: {
     paddingHorizontal: 28,
-    paddingVertical: 22,
-    borderRadius: 14,
+    paddingVertical: 24,
+    borderRadius: RADIUS.xl,
     borderWidth: 1,
     alignItems: 'center',
     gap: 10,
     marginHorizontal: 32,
   },
-  emoji: { fontSize: 36 },
-  title: { fontSize: 16, fontWeight: '700', textAlign: 'center' },
-  btn: {
-    paddingHorizontal: 22,
-    paddingVertical: 10,
-    borderRadius: 10,
-    marginTop: 4,
+  iconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  btnLabel: { fontSize: 14, fontWeight: '600' },
 });
