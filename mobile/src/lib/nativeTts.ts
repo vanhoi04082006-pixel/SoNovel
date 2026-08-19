@@ -40,11 +40,6 @@ export interface SonovelTtsEvents {
   onError: { code: number; message: string };
 }
 
-/**
- * API methods (AsyncFunction trong Kotlin module). EventEmitter methods
- * (addListener/removeListener/emit) được expo-modules-core thêm sẵn vào
- * object trả về từ `requireNativeModule` nên ta không cần khai báo lại.
- */
 export interface SonovelTtsApi {
   play(
     seriesTitle: string,
@@ -78,4 +73,33 @@ export type SonovelTtsModule = SonovelTtsApi & {
   emit<K extends keyof SonovelTtsEvents>(eventName: K, params: SonovelTtsEvents[K]): void;
 };
 
-export const nativeTts: SonovelTtsModule = requireNativeModule<SonovelTtsModule>('SonovelTts');
+// Safe require — không throw nếu module native chưa được link (tránh crash app khi mở)
+function safeRequireNativeModule(): SonovelTtsModule | null {
+  try {
+    return requireNativeModule<SonovelTtsModule>('SonovelTts');
+  } catch (e) {
+    console.warn('[SoNovel] Native module SonovelTts không khả dụng:', (e as Error).message);
+    return null;
+  }
+}
+
+const _nativeModule = safeRequireNativeModule();
+
+// Proxy: nếu module không có, gọi method nào cũng reject với error rõ ràng
+const noopAsync = () => Promise.reject(new Error('Native module SonovelTts không khả dụng. Cần build dev client (không chạy được trong Expo Go).'));
+
+export const nativeTts: SonovelTtsModule = new Proxy({} as SonovelTtsModule, {
+  get(_target, prop) {
+    if (_nativeModule) {
+      return (prop in _nativeModule) ? (_nativeModule as any)[prop] : undefined;
+    }
+    // Fallback khi module không có
+    if (typeof prop === 'string') {
+      return noopAsync;
+    }
+    return undefined;
+  },
+});
+
+// Export flag để UI check
+export const isNativeTtsAvailable = () => _nativeModule !== null;

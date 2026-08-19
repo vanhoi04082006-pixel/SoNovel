@@ -10,6 +10,8 @@ module.exports = function (api) {
           '@': './src',
         },
       }],
+      // Reanimated plugin PHẢI ở cuối mảng plugins
+      'react-native-reanimated/plugin',
     ],
   };
 };
