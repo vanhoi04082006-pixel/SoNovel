@@ -125,7 +125,7 @@ export function HomeScreen() {
         <SectionHeader
           icon={<TrendingUp className="h-5 w-5" />}
           title="Truyện mới cập nhật"
-          onMore={() => navigate({ view: 'search', sort: 'new' } as any)}
+          onMore={() => navigate({ view: 'search', sort: 'new' })}
         />
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-10 gap-3">
           {loading
@@ -139,7 +139,7 @@ export function HomeScreen() {
         <SectionHeader
           icon={<Sparkles className="h-5 w-5" />}
           title="Phổ biến"
-          onMore={() => navigate({ view: 'search', sort: 'chapters' } as any)}
+          onMore={() => navigate({ view: 'search', sort: 'chapters' })}
         />
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-10 gap-3">
           {loading

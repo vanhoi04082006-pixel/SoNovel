@@ -50,6 +50,7 @@ interface PlayerState {
   replay: () => void
   setRate: (r: number) => void
   setSleep: (m: SleepMode) => void
+  setAutoplayNext: (v: boolean) => void
   clearError: () => void
   on: (type: string, cb: (payload?: any) => void) => () => void
   emit: (type: string, payload?: any) => void
@@ -597,6 +598,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
         startSleepTimer()
       }
     },
+
+    setAutoplayNext: (v) => set({ autoplayNext: v }),
 
     clearError: () => set({ error: null }),
 

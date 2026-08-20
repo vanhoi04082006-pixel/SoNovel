@@ -24,7 +24,7 @@ export function SearchScreen() {
   const initialQ = view.view === 'search' ? view.q || '' : ''
   const initialGenre = view.view === 'search' ? view.genre || '' : ''
   const initialTag = view.view === 'search' ? view.tag || '' : ''
-  const initialSort = view.view === 'search' ? (view as any).sort || 'new' : 'new'
+  const initialSort = view.view === 'search' ? view.sort || 'new' : 'new'
 
   const [q, setQ] = useState(initialQ)
   const [genre, setGenre] = useState(initialGenre)

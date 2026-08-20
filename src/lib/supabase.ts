@@ -5,7 +5,7 @@ import { cookies } from 'next/headers'
 import type { ReadonlyRequestCookies } from 'next/dist/server/web/spec-extension/adapters/request-cookies'
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/supabase-config'
 
-export { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY } from '@/lib/supabase-config'
+export { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/supabase-config'
 
 // Used by route handlers & server components (reads current request cookies).
 export async function createServerSupabase() {

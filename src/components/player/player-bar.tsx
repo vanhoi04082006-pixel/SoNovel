@@ -491,7 +491,6 @@ function TextTab() {
 
 function SettingsTab() {
   const player = usePlayerStore()
-  const [autoplay, setAutoplay] = useState(player.autoplayNext)
 
   return (
     <div className="h-full overflow-y-auto p-4 space-y-6">
@@ -540,8 +539,8 @@ function SettingsTab() {
       <section>
         <h3 className="text-sm font-semibold mb-2">Tự động chuyển chương</h3>
         <div className="flex gap-2">
-          <Button variant={autoplay ? 'default' : 'outline'} size="sm" onClick={() => { setAutoplay(true); }}>Bật</Button>
-          <Button variant={!autoplay ? 'default' : 'outline'} size="sm" onClick={() => { setAutoplay(false); }}>Tắt</Button>
+          <Button variant={player.autoplayNext ? 'default' : 'outline'} size="sm" onClick={() => player.setAutoplayNext(true)}>Bật</Button>
+          <Button variant={!player.autoplayNext ? 'default' : 'outline'} size="sm" onClick={() => player.setAutoplayNext(false)}>Tắt</Button>
         </div>
       </section>
 

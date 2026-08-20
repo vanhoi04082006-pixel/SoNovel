@@ -8,7 +8,7 @@ type ThemeName = 'light' | 'dark' | 'sepia' | 'amoled'
 
 type ViewState =
   | { view: 'home' }
-  | { view: 'search'; q?: string; genre?: string; tag?: string }
+  | { view: 'search'; q?: string; genre?: string; tag?: string; sort?: string }
   | { view: 'story'; seriesId: string }
   | { view: 'reader'; seriesId: string; chapterId: string }
   | { view: 'favorites' }

@@ -211,6 +211,9 @@ begin
     perform public.recalc_series_word_count(old.series_id);
     return old;
   else
+    if (tg_op = 'UPDATE' and old.series_id is distinct from new.series_id) then
+      perform public.recalc_series_word_count(old.series_id);
+    end if;
     perform public.recalc_series_word_count(new.series_id);
     return new;
   end if;
