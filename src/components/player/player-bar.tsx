@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import {
   Play, Pause, SkipBack, SkipForward, Square, ChevronUp, ChevronDown,
   List, FileText, Settings, X, Repeat, Moon, Gauge, BookOpen, Bookmark, Keyboard,
+  Rewind, FastForward, AudioLines,
 } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import { usePlayerStore, RATE_PRESETS, type SleepMode } from '@/store/use-player-store'
@@ -168,7 +169,7 @@ export function PlayerBar() {
 function PlayerOverlay() {
   const setOverlayOpen = useAppStore((s) => s.setPlayerOverlayOpen)
   const player = usePlayerStore()
-  const [tab, setTab] = useState<'chapters' | 'text' | 'settings'>('text')
+  const [tab, setTab] = useState<'now' | 'chapters' | 'text' | 'settings'>('now')
 
   const onBookmark = async () => {
     if (!player.seriesId) return
@@ -209,6 +210,10 @@ function PlayerOverlay() {
           <p className="text-xs text-muted-foreground">Đang phát</p>
           <p className="text-sm font-semibold line-clamp-1">{player.seriesTitle}</p>
         </div>
+        <Button variant="ghost" size="icon" onClick={() => player.togglePlayPause()} disabled={player.busy} aria-label={player.isPlaying ? 'Tạm dừng' : 'Phát'}>
+          {player.busy ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" /> :
+           player.isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5 fill-current" />}
+        </Button>
         <Button variant="ghost" size="icon" onClick={onBookmark} aria-label="Đánh dấu vị trí hiện tại" title="Đánh dấu vị trí hiện tại">
           <Bookmark className="h-5 w-5" />
         </Button>
@@ -220,7 +225,8 @@ function PlayerOverlay() {
       {/* tabs */}
       <div className="flex border-b border-border">
         {[
-          { key: 'chapters' as const, label: 'Danh sách chương', icon: List },
+          { key: 'now' as const, label: 'Đang phát', icon: AudioLines },
+          { key: 'chapters' as const, label: 'Chương', icon: List },
           { key: 'text' as const, label: 'Xem chữ', icon: FileText },
           { key: 'settings' as const, label: 'Cài đặt', icon: Settings },
         ].map((t) => {
@@ -230,13 +236,13 @@ function PlayerOverlay() {
               key={t.key}
               onClick={() => setTab(t.key)}
               className={cn(
-                'flex flex-1 flex-col items-center gap-0.5 py-2 text-xs font-medium transition-colors',
-                tab === t.key ? 'text-primary border-b-2 border-primary' : 'text-muted-foreground hover:text-foreground'
+                'relative flex flex-1 flex-col items-center gap-0.5 py-2 text-xs font-medium transition-colors',
+                tab === t.key ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
               )}
             >
               <Icon className="h-4 w-4" />
-              <span className="hidden sm:inline">{t.label}</span>
-              <span className="sm:hidden">{t.label.split(' ')[0]}</span>
+              <span>{t.label}</span>
+              {tab === t.key && <span className="absolute bottom-0 left-1/2 h-0.5 w-8 -translate-x-1/2 rounded-full bg-primary" />}
             </button>
           )
         })}
@@ -244,50 +250,116 @@ function PlayerOverlay() {
 
       {/* content */}
       <div className="flex-1 overflow-hidden">
+        {tab === 'now' && <NowPlayingTab />}
         {tab === 'chapters' && <ChaptersTab />}
         {tab === 'text' && <TextTab />}
         {tab === 'settings' && <SettingsTab />}
       </div>
+    </div>
+  )
+}
 
-      {/* footer controls */}
-      <div className="border-t border-border bg-background">
-        <div className="mx-auto max-w-3xl px-3 py-2">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] tabular-nums text-muted-foreground w-10">{Math.floor((player.currentChar / Math.max(1, (player.chapters[player.currentIndex]?.content?.length || 1))) * 100)}%</span>
-            <Slider
-              value={[Math.min(100, (player.currentChar / Math.max(1, (player.chapters[player.currentIndex]?.content?.length || 1))) * 100)]}
-              max={100}
-              step={0.1}
-              onValueChange={(v) => player.seekTo(v[0] / 100)}
-              className="flex-1"
-            />
-            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => {
-              const idx = RATE_PRESETS.indexOf(player.rate as any)
-              player.setRate(RATE_PRESETS[(idx + 1) % RATE_PRESETS.length])
-            }}>
-              {player.rate}x
-            </Button>
-          </div>
-          <div className="flex items-center justify-center gap-2 py-1.5">
-            <Button variant="ghost" size="icon" onClick={() => player.prev()} aria-label="Chương trước">
-              <SkipBack className="h-5 w-5" />
-            </Button>
-            <Button variant="ghost" size="icon" onClick={() => player.seekBy(-0.05)} aria-label="Lùi 5%">
-              <SkipBack className="h-4 w-4" />
-            </Button>
-            <Button variant="default" size="lg" className="rounded-full h-12 w-12 p-0" onClick={() => player.togglePlayPause()} disabled={player.busy}>
-              {player.busy ? <span className="h-5 w-5 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" /> :
-               player.seriesEnded ? <Repeat className="h-6 w-6" /> :
-               player.isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6 fill-current" />}
-            </Button>
-            <Button variant="ghost" size="icon" onClick={() => player.seekBy(0.05)} aria-label="Tiến 5%">
-              <SkipForward className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="icon" onClick={() => player.next()} aria-label="Chương sau">
-              <SkipForward className="h-5 w-5" />
-            </Button>
+function NowPlayingTab() {
+  const player = usePlayerStore()
+  const ch = player.chapters[player.currentIndex]
+  const contentLen = ch?.content?.length || 1
+  const frac = Math.min(1, player.currentChar / contentLen)
+  const sessionMin = Math.floor(player.sessionSeconds / 60)
+  const sessionSec = player.sessionSeconds % 60
+  const sessionTime = `${String(sessionMin).padStart(2, '0')}:${String(sessionSec).padStart(2, '0')}`
+  const totalMin = Math.max(1, Math.round(contentLen / 270))
+
+  return (
+    <div className="h-full overflow-y-auto bg-ambient">
+      <div className="mx-auto flex max-w-3xl flex-col items-center px-4 py-6 sm:py-8">
+        {/* cover */}
+        <div className="aspect-[3/4] w-44 sm:w-56 overflow-hidden rounded-2xl border border-border/40 shadow-glow">
+          <CoverImage title={player.seriesTitle} coverUrl={player.coverUrl} className="h-full w-full" rounded="" />
+        </div>
+
+        {/* title */}
+        <div className="mt-5 px-2 text-center">
+          <p className="line-clamp-1 text-xs text-muted-foreground">{player.seriesTitle}</p>
+          <h2 className="mt-1 line-clamp-2 text-lg font-bold">Chương {ch?.orderNo}. {ch?.title}</h2>
+        </div>
+
+        {/* progress */}
+        <div className="mt-5 w-full max-w-md">
+          <Slider
+            value={[frac * 100]}
+            max={100}
+            step={0.1}
+            onValueChange={(v) => player.seekTo(v[0] / 100)}
+            aria-label="Thanh tiến trình"
+          />
+          <div className="mt-1.5 flex items-center justify-between text-xs text-muted-foreground tabular-nums">
+            <span>{sessionTime}</span>
+            <span className="font-medium text-primary">{Math.floor(frac * 100)}%</span>
+            <span>~{totalMin} phút</span>
           </div>
         </div>
+
+        {/* controls */}
+        <div className="mt-6 flex items-center justify-center gap-2 sm:gap-3">
+          <Button variant="ghost" size="icon" className="h-10 w-10" onClick={() => player.prev()} aria-label="Chương trước">
+            <SkipBack className="h-5 w-5" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-10 w-10" onClick={() => player.seekBy(-0.05)} aria-label="Lùi 5%">
+            <Rewind className="h-5 w-5" />
+          </Button>
+          <Button variant="default" className="h-16 w-16 rounded-full p-0 shadow-glow" onClick={() => player.togglePlayPause()} disabled={player.busy} aria-label={player.isPlaying ? 'Tạm dừng' : 'Phát'}>
+            {player.busy ? <span className="h-6 w-6 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" /> :
+             player.seriesEnded ? <Repeat className="h-7 w-7" /> :
+             player.isPlaying ? <Pause className="h-7 w-7" /> : <Play className="h-7 w-7 fill-current" />}
+          </Button>
+          <Button variant="ghost" size="icon" className="h-10 w-10" onClick={() => player.seekBy(0.05)} aria-label="Tiến 5%">
+            <FastForward className="h-5 w-5" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-10 w-10" onClick={() => player.next()} aria-label="Chương sau">
+            <SkipForward className="h-5 w-5" />
+          </Button>
+        </div>
+
+        {/* rate */}
+        <div className="mt-6 flex items-center gap-1.5">
+          <Gauge className="h-4 w-4 text-muted-foreground" />
+          {RATE_PRESETS.map((r) => (
+            <button
+              key={r}
+              onClick={() => player.setRate(r)}
+              className={cn(
+                'rounded-full border px-3 py-1 text-xs transition-colors',
+                player.rate === r ? 'border-primary bg-primary text-primary-foreground' : 'border-border hover:border-primary'
+              )}
+            >
+              {r}x
+            </button>
+          ))}
+        </div>
+
+        {/* sleep */}
+        <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
+          <Moon className="h-4 w-4 text-muted-foreground" />
+          {SLEEP_OPTIONS.map((s) => (
+            <button
+              key={String(s.key)}
+              onClick={() => player.setSleep(s.key)}
+              className={cn(
+                'rounded-full border px-3 py-1 text-xs transition-colors',
+                player.sleepMode === s.key ? 'border-primary bg-primary text-primary-foreground' : 'border-border hover:border-primary'
+              )}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+
+        {(player.seriesEnded || player.error) && (
+          <div className="mt-4 flex flex-wrap justify-center gap-2 text-xs">
+            {player.seriesEnded && <span className="rounded-full bg-muted px-3 py-1 text-muted-foreground">Đã nghe hết bộ truyện!</span>}
+            {player.error && <span className="rounded-full bg-destructive/15 px-3 py-1 text-destructive">{player.error}</span>}
+          </div>
+        )}
       </div>
     </div>
   )

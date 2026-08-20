@@ -259,3 +259,32 @@
   transform: rotate(-90deg);
   transform-origin: 50% 50%;
 }
+
+/* ============ Design utilities ============ */
+/* Soft shadows (primary-tinted, coherent across light/dark/sepia/amoled) */
+.shadow-soft {
+  box-shadow:
+    0 1px 2px color-mix(in oklch, var(--foreground) 6%, transparent),
+    0 4px 12px -4px color-mix(in oklch, var(--foreground) 8%, transparent);
+}
+.shadow-card {
+  box-shadow:
+    0 2px 8px -2px color-mix(in oklch, var(--primary) 12%, transparent),
+    0 8px 24px -8px color-mix(in oklch, var(--foreground) 10%, transparent);
+}
+.shadow-glow {
+  box-shadow: 0 8px 32px -8px color-mix(in oklch, var(--primary) 40%, transparent);
+}
+
+/* Ambient gradient backdrop (hero / now-playing) — tông amber theo theme */
+.bg-ambient {
+  background:
+    radial-gradient(60% 80% at 15% 10%, color-mix(in oklch, var(--primary) 18%, transparent) 0%, transparent 60%),
+    radial-gradient(50% 70% at 90% 20%, color-mix(in oklch, var(--primary) 12%, transparent) 0%, transparent 55%),
+    var(--background);
+}
+.bg-ambient-card {
+  background:
+    linear-gradient(135deg, color-mix(in oklch, var(--primary) 14%, transparent) 0%, transparent 60%),
+    var(--card);
+}

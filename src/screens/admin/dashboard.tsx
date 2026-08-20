@@ -1,19 +1,22 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { BookOpen, FileText, Users, Headphones, Search, Trash2, Settings2, Plus, CheckSquare, Square, X } from 'lucide-react'
+import { BookOpen, FileText, Users, Headphones, Search, Trash2, Settings2, Plus, CheckSquare, Square, X, ChevronsUpDown, Check } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import { api, type SeriesItem } from '@/lib/api-client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
 import { CoverImage } from '@/components/sonovel/cover-image'
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { StatusChart } from './status-chart'
 
 const STATUS_TABS = [
   { key: 'all', label: 'Tất cả' },
@@ -39,6 +42,7 @@ export function AdminDashboard() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [allTags, setAllTags] = useState<{ id: string; name: string }[]>([])
   const [tagFilter, setTagFilter] = useState<string>('')
+  const [tagOpen, setTagOpen] = useState(false)
   const limit = 12
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -174,6 +178,17 @@ export function AdminDashboard() {
         <StatCard icon={<Headphones className="h-5 w-5" />} label="Người nghe" value={stats?.listeners ?? '—'} color="text-violet-600" />
       </div>
 
+      {/* Status chart */}
+      <Card className="card-lift">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Phân bố trạng thái</CardTitle>
+          <CardDescription>Số bộ truyện theo trạng thái</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <StatusChart data={counts} />
+        </CardContent>
+      </Card>
+
       {/* Search */}
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -198,17 +213,44 @@ export function AdminDashboard() {
           </button>
         ))}
         {allTags.length > 0 && (
-          <select
-            value={tagFilter}
-            onChange={(e) => setTagFilter(e.target.value)}
-            className="ml-auto rounded-full border border-border bg-background px-3 py-1 text-sm hover:border-primary cursor-pointer"
-            aria-label="Lọc theo tag"
-          >
-            <option value="">Tất cả tag</option>
-            {allTags.map((t) => (
-              <option key={t.id} value={t.name}>#{t.name}</option>
-            ))}
-          </select>
+          <Popover open={tagOpen} onOpenChange={setTagOpen}>
+            <PopoverTrigger asChild>
+              <button
+                className="ml-auto flex items-center gap-1 rounded-full border border-border bg-background px-3 py-1 text-sm hover:border-primary transition-colors"
+                aria-label="Lọc theo tag"
+              >
+                {tagFilter ? <span className="text-primary font-medium">#{tagFilter}</span> : 'Tất cả tag'}
+                <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-52 p-0" align="end">
+              <Command>
+                <CommandInput placeholder="Tìm tag…" />
+                <CommandList>
+                  <CommandEmpty>Không có tag.</CommandEmpty>
+                  <CommandGroup>
+                    <CommandItem
+                      onSelect={() => { setTagFilter(''); setTagOpen(false) }}
+                      className="cursor-pointer"
+                    >
+                      <Check className={cn('h-4 w-4', !tagFilter ? 'opacity-100' : 'opacity-0')} />
+                      Tất cả tag
+                    </CommandItem>
+                    {allTags.map((t) => (
+                      <CommandItem
+                        key={t.id}
+                        onSelect={() => { setTagFilter(t.name); setTagOpen(false) }}
+                        className="cursor-pointer"
+                      >
+                        <Check className={cn('h-4 w-4', tagFilter === t.name ? 'opacity-100' : 'opacity-0')} />
+                        #{t.name}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
         )}
       </div>
 

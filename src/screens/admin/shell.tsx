@@ -1,6 +1,6 @@
 'use client'
 
-import { ChevronLeft, LayoutDashboard, PlusCircle, Tag, BookOpen, Users } from 'lucide-react'
+import { ChevronLeft, LayoutDashboard, PlusCircle, Tag, Users, Shield } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -25,7 +25,11 @@ export function AdminShell() {
 
       <div className="flex flex-col md:flex-row gap-4">
         {/* Sidebar */}
-        <aside className="md:w-56 shrink-0">
+        <aside className="md:w-60 shrink-0">
+          <div className="mb-3 hidden md:block rounded-xl border border-border bg-card p-3">
+            <p className="flex items-center gap-1.5 text-sm font-semibold"><Shield className="h-4 w-4 text-primary" /> Quản trị</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">Quản lý truyện, chương, tag và người dùng.</p>
+          </div>
           <nav className="flex md:flex-col gap-1 overflow-x-auto md:overflow-visible pb-2 md:pb-0">
             <NavItem icon={<LayoutDashboard className="h-4 w-4" />} label="Bảng điều khiển" active={tab === 'dashboard'} onClick={() => navigate({ view: 'admin', tab: 'dashboard' })} />
             <NavItem icon={<PlusCircle className="h-4 w-4" />} label="Thêm truyện" active={tab === 'seriesForm'} onClick={() => navigate({ view: 'admin', tab: 'seriesForm' })} />
@@ -52,11 +56,14 @@ function NavItem({ icon, label, active, onClick }: { icon: React.ReactNode; labe
     <button
       onClick={onClick}
       className={cn(
-        'flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition-colors',
-        active ? 'bg-primary text-primary-foreground' : 'hover:bg-accent text-foreground'
+        'relative flex items-center gap-2.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+        active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
       )}
     >
-      {icon}
+      {active && <span className="absolute left-0 top-1/2 h-6 w-0.5 -translate-y-1/2 rounded-full bg-primary" />}
+      <span className={cn('grid h-7 w-7 shrink-0 place-items-center rounded-md', active ? 'bg-primary text-primary-foreground' : 'bg-muted')}>
+        {icon}
+      </span>
       {label}
     </button>
   )
