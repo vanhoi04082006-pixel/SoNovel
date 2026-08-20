@@ -5,6 +5,7 @@ import { Heart } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import { api, type SeriesItem } from '@/lib/api-client'
 import { StoryCard } from '@/components/sonovel/story-card'
+import { EmptyState } from '@/components/sonovel/empty-state'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 
@@ -47,10 +48,7 @@ export function FavoritesScreen() {
           {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="aspect-[3/4] w-full rounded-lg" />)}
         </div>
       ) : items.length === 0 ? (
-        <div className="py-16 text-center text-muted-foreground">
-          <Heart className="mx-auto h-10 w-10 mb-2 opacity-50" />
-          Bạn chưa có truyện yêu thích nào.
-        </div>
+        <EmptyState icon={Heart} title="Chưa có truyện yêu thích" description="Lưu truyện bạn thích để dễ dàng tìm lại sau này." actionLabel="Khám phá truyện" onAction={() => navigate({ view: 'search' })} />
       ) : (
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-3">
           {items.map((s) => <StoryCard key={s.id} series={s} />)}

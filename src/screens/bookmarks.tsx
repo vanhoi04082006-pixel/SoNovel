@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { CoverImage } from '@/components/sonovel/cover-image'
+import { EmptyState } from '@/components/sonovel/empty-state'
 import { usePlayerStore, type PlayerChapter } from '@/store/use-player-store'
 import { toast } from 'sonner'
 import { formatTimeAgo, formatCharCount } from '@/lib/format'
@@ -87,13 +88,7 @@ export function BookmarksScreen() {
           {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}
         </div>
       ) : items.length === 0 ? (
-        <div className="py-16 text-center text-muted-foreground">
-          <BookmarkX className="mx-auto h-10 w-10 mb-2 opacity-50" />
-          Bạn chưa đánh dấu vị trí nào.
-          <div className="mt-3">
-            <Button variant="outline" size="sm" onClick={() => navigate({ view: 'home' })}>Khám phá truyện</Button>
-          </div>
-        </div>
+        <EmptyState icon={BookmarkX} title="Chưa có đánh dấu" description="Đánh dấu vị trí đang nghe để quay lại chính xác đoạn đó." actionLabel="Khám phá truyện" onAction={() => navigate({ view: 'home' })} />
       ) : (
         <div className="space-y-2">
           {items.map((bm) => (

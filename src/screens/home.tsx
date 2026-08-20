@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Headphones, ChevronRight, Sparkles, TrendingUp, Play, Star, BookOpen, BarChart3 } from 'lucide-react'
+import { Headphones, ChevronRight, ChevronLeft, Sparkles, TrendingUp, Play, Star, BookOpen, BarChart3 } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import { api, type SeriesItem } from '@/lib/api-client'
 import { StoryCard } from '@/components/sonovel/story-card'
@@ -9,6 +9,7 @@ import { CoverImage } from '@/components/sonovel/cover-image'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Progress } from '@/components/ui/progress'
+import { Carousel, CarouselContent, CarouselItem } from '@/components/ui/carousel'
 import { toast } from 'sonner'
 import { usePlayerStore, type PlayerChapter } from '@/store/use-player-store'
 
@@ -25,6 +26,7 @@ export function HomeScreen() {
   const [continueItems, setContinueItems] = useState<any[]>([])
   const [progressMap, setProgressMap] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
+  const [carouselApi, setCarouselApi] = useState<any>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -73,28 +75,36 @@ export function HomeScreen() {
             </button>
           ))}
         </div>
-        <div className="relative">
-          <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-balance">
-            Nghe truyện chữ bằng <span className="text-primary">giọng đọc tổng hợp</span>
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm sm:text-base text-muted-foreground text-balance">
-            Khám phá hàng ngàn truyện chữ, bật lên và nghe bằng giọng đọc tiếng Việt. Tiếp tục từ đúng vị trí bạn dừng — ngay cả khi vừa khóa màn hình.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button onClick={() => navigate({ view: 'search' })} size="sm">
-              <Sparkles className="h-4 w-4 mr-1" /> Khám phá truyện
-            </Button>
-            {user && (
-              <Button variant="outline" size="sm" onClick={() => navigate({ view: 'stats' })}>
-                <BarChart3 className="h-4 w-4 mr-1" /> Thống kê nghe
+        <div className="relative flex flex-col lg:flex-row lg:items-center gap-6">
+          <div className="flex-1">
+            <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-balance">
+              Nghe truyện chữ bằng <span className="text-primary">giọng đọc tổng hợp</span>
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm sm:text-base text-muted-foreground text-balance">
+              Khám phá hàng ngàn truyện chữ, bật lên và nghe bằng giọng đọc tiếng Việt. Tiếp tục từ đúng vị trí bạn dừng — ngay cả khi vừa khóa màn hình.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button onClick={() => navigate({ view: 'search' })} size="sm">
+                <Sparkles className="h-4 w-4 mr-1" /> Khám phá truyện
               </Button>
-            )}
-            {!user && (
-              <Button variant="outline" size="sm" onClick={() => navigate({ view: 'login' })}>
-                Đăng nhập để lưu tiến độ
-              </Button>
-            )}
+              {user && (
+                <Button variant="outline" size="sm" onClick={() => navigate({ view: 'stats' })}>
+                  <BarChart3 className="h-4 w-4 mr-1" /> Thống kê nghe
+                </Button>
+              )}
+              {!user && (
+                <Button variant="outline" size="sm" onClick={() => navigate({ view: 'login' })}>
+                  Đăng nhập để lưu tiến độ
+                </Button>
+              )}
+            </div>
           </div>
+
+          {popular[0] && (
+            <div className="lg:w-72 shrink-0">
+              <FeaturedHero series={popular[0]} />
+            </div>
+          )}
         </div>
       </section>
 
@@ -138,15 +148,32 @@ export function HomeScreen() {
         </div>
       </section>
 
-      {/* Đề xuất (featured — pick from popular by max chapters) */}
+      {/* Đề xuất (carousel) */}
       {!loading && popular.length > 0 && (
         <section>
-          <SectionHeader icon={<Star className="h-5 w-5" />} title="Đề xuất cho bạn" />
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {popular.slice(0, 3).map((s, i) => (
-              <FeaturedCard key={s.id} series={s} rank={i + 1} />
-            ))}
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="flex items-center gap-2 text-lg font-semibold">
+              <span className="text-primary"><Star className="h-5 w-5" /></span>
+              Đề xuất cho bạn
+            </h2>
+            <div className="flex items-center gap-1">
+              <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => carouselApi?.scrollPrev()} aria-label="Trước">
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => carouselApi?.scrollNext()} aria-label="Sau">
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
+          <Carousel setApi={setCarouselApi} className="w-full">
+            <CarouselContent className="-ml-3">
+              {popular.slice(0, 6).map((s, i) => (
+                <CarouselItem key={s.id} className="pl-3 basis-full sm:basis-1/2 lg:basis-1/3">
+                  <FeaturedCard series={s} rank={i + 1} />
+                </CarouselItem>
+              ))}
+            </CarouselContent>
+          </Carousel>
         </section>
       )}
 
@@ -240,6 +267,23 @@ function ContinueCard({ item }: { item: any }) {
       >
         <Play className="h-5 w-5 fill-current" />
       </button>
+    </div>
+  )
+}
+
+function FeaturedHero({ series }: { series: SeriesItem }) {
+  const navigate = useAppStore((s) => s.navigate)
+  return (
+    <div className="flex gap-3 rounded-xl border border-border bg-background/80 p-3 shadow-card backdrop-blur">
+      <CoverImage title={series.title} coverUrl={series.coverUrl} className="h-28 w-20 shrink-0" rounded="rounded-lg" />
+      <div className="flex min-w-0 flex-col">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-primary">Nổi bật</p>
+        <h3 className="mt-0.5 line-clamp-1 text-sm font-semibold">{series.title}</h3>
+        <p className="mt-0.5 line-clamp-2 flex-1 text-xs text-muted-foreground">{series.description}</p>
+        <Button size="sm" className="mt-2 w-fit" onClick={() => navigate({ view: 'story', seriesId: series.id })}>
+          <Play className="h-3.5 w-3.5 mr-1 fill-current" /> Nghe ngay
+        </Button>
+      </div>
     </div>
   )
 }

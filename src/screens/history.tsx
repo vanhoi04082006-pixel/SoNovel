@@ -7,6 +7,7 @@ import { api, type SeriesItem } from '@/lib/api-client'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { CoverImage } from '@/components/sonovel/cover-image'
+import { EmptyState } from '@/components/sonovel/empty-state'
 import { formatTimeAgo } from '@/lib/format'
 
 export function HistoryScreen() {
@@ -48,10 +49,7 @@ export function HistoryScreen() {
           {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}
         </div>
       ) : items.length === 0 ? (
-        <div className="py-16 text-center text-muted-foreground">
-          <Clock className="mx-auto h-10 w-10 mb-2 opacity-50" />
-          Bạn chưa mở truyện nào.
-        </div>
+        <EmptyState icon={Clock} title="Chưa có lịch sử" description="Mở truyện để lưu lại lịch sử nghe của bạn." actionLabel="Khám phá truyện" onAction={() => navigate({ view: 'search' })} />
       ) : (
         <div className="space-y-2">
           {items.map((s) => (
