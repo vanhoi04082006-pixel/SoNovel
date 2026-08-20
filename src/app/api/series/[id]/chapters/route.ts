@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { serverDb, mapChapter } from '@/lib/server-data'
 import { chapterWordCount } from '@/lib/sonovel'
+import { cachedFetch, invalidateAll } from '@/lib/server-cache'
 import { requireAdmin } from '@/lib/session'
 
 // GET /api/series/[id]/chapters — all chapters (admin: includes draft)
@@ -11,16 +12,32 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const q = (searchParams.get('q') || '').trim().toLowerCase()
 
   try {
+    // Chỉ cache khi public (không bao gồm draft) — tránh cache nháp cho admin.
+    if (!includeDraft) {
+      const result = await cachedFetch(`chapters:${id}:${q}`, 20_000, async () => {
+        const supabase = serverDb()
+        const { data, error } = await supabase
+          .from('chapters')
+          .select('*')
+          .eq('series_id', id)
+          .eq('status', 'published')
+          .order('order_no', { ascending: true })
+        if (error) throw error
+        let chapters = (data ?? []).map(mapChapter)
+        if (q) {
+          chapters = chapters.filter((c) => c.title.toLowerCase().includes(q) || String(c.orderNo) === q)
+        }
+        return { items: chapters }
+      })
+      return NextResponse.json(result)
+    }
+
     const supabase = serverDb()
-    let query = supabase
+    const { data, error } = await supabase
       .from('chapters')
       .select('*')
       .eq('series_id', id)
       .order('order_no', { ascending: true })
-
-    if (!includeDraft) query = query.eq('status', 'published')
-
-    const { data, error } = await query
     if (error) throw error
 
     let chapters = (data ?? []).map(mapChapter)
@@ -67,6 +84,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
       throw error
     }
+    invalidateAll()
     return NextResponse.json({ ok: true, id: data.id })
   } catch (e) {
     const msg = (e as Error).message

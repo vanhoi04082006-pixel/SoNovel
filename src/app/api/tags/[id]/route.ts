@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { serverDb } from '@/lib/server-data'
+import { invalidateAll } from '@/lib/server-cache'
 import { requireAdmin } from '@/lib/session'
 
 // PATCH /api/tags/[id] — admin rename
@@ -16,6 +17,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if ((error as any).code === '23505') return NextResponse.json({ error: 'Tag đã tồn tại.' }, { status: 400 })
       throw error
     }
+    invalidateAll()
     return NextResponse.json({ ok: true })
   } catch (e) {
     const msg = (e as Error).message
@@ -33,6 +35,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     const { id } = await params
     const { error } = await serverDb().from('tags').delete().eq('id', id)
     if (error) throw error
+    invalidateAll()
     return NextResponse.json({ ok: true })
   } catch (e) {
     const msg = (e as Error).message

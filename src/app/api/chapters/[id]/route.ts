@@ -1,19 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { serverDb, mapChapter } from '@/lib/server-data'
 import { chapterWordCount } from '@/lib/sonovel'
+import { cachedFetch, invalidateAll } from '@/lib/server-cache'
 import { requireAdmin } from '@/lib/session'
 
 // GET /api/chapters/[id]
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   try {
-    const supabase = serverDb()
-    const { data: c, error } = await supabase.from('chapters').select('*, series(*)').eq('id', id).maybeSingle()
-    if (error) throw error
-    if (!c) return NextResponse.json({ error: 'Không tìm thấy chương.' }, { status: 404 })
-    const s = c.series
-    const series = s ? { id: s.id, title: s.title, coverUrl: s.cover_url } : null
-    return NextResponse.json({ ...mapChapter(c), series })
+    const result = await cachedFetch(`chapter:${id}`, 60_000, async () => {
+      const supabase = serverDb()
+      const { data: c, error } = await supabase.from('chapters').select('*, series(*)').eq('id', id).maybeSingle()
+      if (error) throw error
+      if (!c) return null
+      const s = c.series
+      const series = s ? { id: s.id, title: s.title, coverUrl: s.cover_url } : null
+      return { ...mapChapter(c), series }
+    })
+
+    if (result === null) {
+      return NextResponse.json({ error: 'Không tìm thấy chương.' }, { status: 404 })
+    }
+    return NextResponse.json(result)
   } catch (e) {
     return NextResponse.json({ error: 'Tải chương thất bại: ' + (e as Error).message }, { status: 500 })
   }
@@ -53,6 +61,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }
       throw error
     }
+    invalidateAll()
     return NextResponse.json({ ok: true })
   } catch (e) {
     const msg = (e as Error).message
@@ -72,6 +81,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     if (!c) return NextResponse.json({ error: 'Không tìm thấy chương.' }, { status: 404 })
     const { error } = await serverDb().from('chapters').delete().eq('id', id)
     if (error) throw error
+    invalidateAll()
     return NextResponse.json({ ok: true })
   } catch (e) {
     const msg = (e as Error).message

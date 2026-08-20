@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { serverDb } from '@/lib/server-data'
+import { invalidateAll } from '@/lib/server-cache'
 import { requireAdmin } from '@/lib/session'
 
 // POST /api/series/create — admin create new series
@@ -40,6 +41,7 @@ export async function POST(req: NextRequest) {
 
     if (error) throw error
 
+    invalidateAll()
     return NextResponse.json({ ok: true, series: { id: data.id } })
   } catch (e) {
     const msg = (e as Error).message

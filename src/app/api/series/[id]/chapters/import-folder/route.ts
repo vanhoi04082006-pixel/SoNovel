@@ -4,6 +4,7 @@ import { readdir, readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { serverDb } from '@/lib/server-data'
 import { chapterWordCount, recalcSeriesWordCount } from '@/lib/sonovel'
+import { invalidateAll } from '@/lib/server-cache'
 import { requireAdmin } from '@/lib/session'
 import { parseChapterFilename, naturalCompare } from '@/lib/chapter-filename'
 
@@ -91,6 +92,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (error) throw error
 
     await recalcSeriesWordCount(id)
+    invalidateAll()
 
     return NextResponse.json({ ok: true, count: rows.length, skipped: skipped.length })
   } catch (e) {

@@ -35,7 +35,42 @@ export type SeriesDetail = SeriesItem & {
 
 export type SessionUser = { id: string; email: string; role: 'user' | 'admin' }
 
+// ---- client cache cho dữ liệu public catalogue ----
+// Giảm round-trip khi chuyển tab back/forth. Chỉ cache GET của series/chapters/tags.
+type CacheEntry = { exp: number; value: unknown }
+const clientCache = new Map<string, CacheEntry>()
+
+function isCatalogUrl(url: string): boolean {
+  return url.startsWith('/api/series') || url.startsWith('/api/chapters') || url.startsWith('/api/tags')
+}
+
+function catalogTtlMs(url: string): number {
+  if (url.includes('/chapters')) return 15_000
+  if (url.includes('/chapters/')) return 30_000
+  if (url.startsWith('/api/tags')) return 30_000
+  return 15_000
+}
+
+export function clearCatalogCache() {
+  clientCache.clear()
+}
+
 async function json<T = any>(url: string, init?: RequestInit): Promise<T> {
+  const method = (init?.method || 'GET').toUpperCase()
+
+  // Write → xóa cache catalog để lần đọc sau lấy dữ liệu mới
+  if (method !== 'GET' && isCatalogUrl(url)) {
+    clearCatalogCache()
+  }
+
+  // GET catalog → đọc cache nếu còn TTL
+  if (method === 'GET' && isCatalogUrl(url)) {
+    const hit = clientCache.get(url)
+    if (hit && hit.exp > Date.now()) {
+      return hit.value as T
+    }
+  }
+
   const res = await fetch(url, {
     ...init,
     headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
@@ -49,6 +84,11 @@ async function json<T = any>(url: string, init?: RequestInit): Promise<T> {
     err.status = res.status
     err.body = data
     throw err
+  }
+
+  // GET catalog thành công → lưu cache
+  if (method === 'GET' && isCatalogUrl(url)) {
+    clientCache.set(url, { exp: Date.now() + catalogTtlMs(url), value: data })
   }
   return data as T
 }

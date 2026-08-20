@@ -2,7 +2,7 @@
 
 import { create } from 'zustand'
 import type { SessionUser } from '@/lib/api-client'
-import { api } from '@/lib/api-client'
+import { api, clearCatalogCache } from '@/lib/api-client'
 
 type ThemeName = 'light' | 'dark' | 'sepia' | 'amoled'
 
@@ -95,7 +95,10 @@ export const useAppStore = globalForApp.__appStore ?? create<AppState>((set, _ge
   setPlayerOverlayOpen: (v) => set({ playerOverlayOpen: v }),
 
   syncVersion: 0,
-  bumpSync: () => set((s) => ({ syncVersion: s.syncVersion + 1 })),
+  bumpSync: () => {
+    clearCatalogCache()
+    set((s) => ({ syncVersion: s.syncVersion + 1 }))
+  },
 }))
 
 if (process.env.NODE_ENV !== 'production' && !globalForApp.__appStore) {

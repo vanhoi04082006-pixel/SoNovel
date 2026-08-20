@@ -1,28 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { serverDb, mapSeries, mapChapter } from '@/lib/server-data'
+import { cachedFetch, invalidateAll } from '@/lib/server-cache'
 import { requireAdmin } from '@/lib/session'
 
 // GET /api/series/[id] — public detail with published chapters
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   try {
-    const supabase = serverDb()
-    const { data: s, error } = await supabase.from('series').select('*').eq('id', id).maybeSingle()
-    if (error) throw error
-    if (!s) return NextResponse.json({ error: 'Không tìm thấy truyện.' }, { status: 404 })
+    const result = await cachedFetch(`series-detail:${id}`, 30_000, async () => {
+      const supabase = serverDb()
+      const { data: s, error } = await supabase.from('series').select('*').eq('id', id).maybeSingle()
+      if (error) throw error
+      if (!s) return null
 
-    const { data: chapters, error: cErr } = await supabase
-      .from('chapters')
-      .select('id, order_no, title, word_count, status, published_at')
-      .eq('series_id', id)
-      .eq('status', 'published')
-      .order('order_no', { ascending: true })
-    if (cErr) throw cErr
+      const { data: chapters, error: cErr } = await supabase
+        .from('chapters')
+        .select('id, order_no, title, word_count, status, published_at')
+        .eq('series_id', id)
+        .eq('status', 'published')
+        .order('order_no', { ascending: true })
+      if (cErr) throw cErr
 
-    return NextResponse.json({
-      ...mapSeries(s, (chapters ?? []).length),
-      chapters: (chapters ?? []).map(mapChapter),
+      return {
+        ...mapSeries(s, (chapters ?? []).length),
+        chapters: (chapters ?? []).map(mapChapter),
+      }
     })
+
+    if (result === null) {
+      return NextResponse.json({ error: 'Không tìm thấy truyện.' }, { status: 404 })
+    }
+    return NextResponse.json(result)
   } catch (e) {
     return NextResponse.json({ error: 'Tải truyện thất bại: ' + (e as Error).message }, { status: 500 })
   }
@@ -51,6 +59,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
     const { error } = await serverDb().from('series').update(data).eq('id', id)
     if (error) throw error
+    invalidateAll()
     return NextResponse.json({ ok: true, id })
   } catch (e) {
     const msg = (e as Error).message
@@ -68,6 +77,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     const { id } = await params
     const { error } = await serverDb().from('series').delete().eq('id', id)
     if (error) throw error
+    invalidateAll()
     return NextResponse.json({ ok: true })
   } catch (e) {
     const msg = (e as Error).message
