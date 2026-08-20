@@ -1,10 +1,11 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { Search as SearchIcon, X, ChevronRight, Clock, Star } from 'lucide-react'
+import { Search as SearchIcon, X, ChevronRight, Clock, Star, SearchX } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import { api, type SeriesItem } from '@/lib/api-client'
 import { StoryCard } from '@/components/sonovel/story-card'
+import { EmptyState } from '@/components/sonovel/empty-state'
 import { CoverImage } from '@/components/sonovel/cover-image'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -242,9 +243,7 @@ export function SearchScreen() {
             {Array.from({ length: 12 }).map((_, i) => <div key={i} className="aspect-[3/4] w-full rounded-lg skeleton-shimmer" />)}
           </div>
         ) : items.length === 0 ? (
-          <div className="py-16 text-center">
-            <p className="text-muted-foreground">Không tìm thấy truyện phù hợp.</p>
-          </div>
+          <EmptyState icon={SearchX} title="Không tìm thấy truyện" description="Thử thay đổi từ khóa hoặc bộ lọc." />
         ) : (
           <>
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-3">

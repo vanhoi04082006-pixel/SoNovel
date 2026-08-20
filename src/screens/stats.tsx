@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { CoverImage } from '@/components/sonovel/cover-image'
+import { EmptyState } from '@/components/sonovel/empty-state'
 import { ProgressRing } from '@/components/sonovel/progress-ring'
 import { usePlayerStore, type PlayerChapter } from '@/store/use-player-store'
 import { toast } from 'sonner'
@@ -527,7 +528,7 @@ export function StatsScreen() {
           </Card>
         </>
       ) : (
-        <div className="py-12 text-center text-muted-foreground">Không có dữ liệu.</div>
+        <EmptyState icon={BarChart3} title="Chưa có dữ liệu" description="Bắt đầu nghe truyện để thấy thống kê tại đây." actionLabel="Bắt đầu nghe" onAction={() => navigate({ view: 'home' })} />
       )}
     </div>
   )
