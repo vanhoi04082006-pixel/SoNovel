@@ -17,7 +17,7 @@ export function AboutScreen() {
 
       {/* Hero */}
       <Card className="overflow-hidden">
-        <div className="relative bg-gradient-to-br from-primary/15 via-primary/5 to-transparent p-6 text-center">
+        <div className="relative bg-hero-soft p-6 text-center">
           <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 50% 0%, var(--primary) 0%, transparent 50%)' }} />
           <div className="relative">
             <span className="inline-grid h-16 w-16 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-lg">

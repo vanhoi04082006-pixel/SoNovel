@@ -76,6 +76,10 @@ export const api = {
   createChapter: (seriesId: string, data: any) => json(`/api/series/${seriesId}/chapters`, { method: 'POST', body: JSON.stringify(data) }),
   bulkCreateChapters: (seriesId: string, chapters: { orderNo: number; title: string; content: string; status: string }[]) =>
     json<{ ok: boolean; count: number; skipped: number }>(`/api/series/${seriesId}/chapters/bulk`, { method: 'POST', body: JSON.stringify({ chapters }) }),
+  importChaptersFromFolder: (seriesId: string, folderPath: string) =>
+    json<{ ok: boolean; count: number; skipped: number }>(`/api/series/${seriesId}/chapters/import-folder`, { method: 'POST', body: JSON.stringify({ folderPath }) }),
+  previewImportFromFolder: (seriesId: string, folderPath: string) =>
+    json<{ ok: boolean; total: number; preview: Array<{ fileName: string; orderNo: number; title: string; exists: boolean }> }>(`/api/series/${seriesId}/chapters/import-folder`, { method: 'POST', body: JSON.stringify({ folderPath, preview: true }) }),
   updateChapter: (id: string, data: any) => json(`/api/chapters/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteChapter: (id: string) => json(`/api/chapters/${id}`, { method: 'DELETE' }),
 

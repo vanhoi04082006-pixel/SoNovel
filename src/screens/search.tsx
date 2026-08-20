@@ -239,14 +239,14 @@ export function SearchScreen() {
       <div>
         <p className="text-sm text-muted-foreground mb-3">{total} kết quả</p>
         {loading && items.length === 0 ? (
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
-            {Array.from({ length: 12 }).map((_, i) => <div key={i} className="aspect-[3/4] w-full rounded-lg skeleton-shimmer" />)}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fit,minmax(170px,1fr))] sm:gap-4">
+            {Array.from({ length: 12 }).map((_, i) => <div key={i} className="aspect-[2/3] w-full rounded-lg skeleton-shimmer" />)}
           </div>
         ) : items.length === 0 ? (
           <EmptyState icon={SearchX} title="Không tìm thấy truyện" description="Thử thay đổi từ khóa hoặc bộ lọc." />
         ) : (
           <>
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fit,minmax(170px,1fr))] sm:gap-4">
               {items.map((s) => <StoryCard key={s.id} series={s} />)}
             </div>
             {offset + limit < total && (

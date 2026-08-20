@@ -50,7 +50,8 @@ export function LoginScreen() {
   }
 
   return (
-    <div className="mx-auto max-w-md px-4 py-8 sm:py-12">
+    <div className="bg-hero-soft min-h-screen">
+      <div className="mx-auto max-w-md px-4 py-8 sm:py-12">
       <div className="flex flex-col items-center mb-6">
         <span className="grid h-12 w-12 place-items-center rounded-xl bg-primary text-primary-foreground">
           <Headphones className="h-7 w-7" />
@@ -135,6 +136,7 @@ export function LoginScreen() {
             Người dùng: user@sonovel.app / user123
           </button>
         </div>
+      </div>
       </div>
     </div>
   )

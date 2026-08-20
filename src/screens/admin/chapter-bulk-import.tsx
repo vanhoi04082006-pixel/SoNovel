@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { Upload, FileText, X, AlertTriangle, Loader2 } from 'lucide-react'
+import { Upload, FileText, X, AlertTriangle, Loader2, FolderOpen, ScanSearch } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -23,17 +23,28 @@ type ImportRow = {
   autoRenumbered: boolean
 }
 
+type FolderRow = {
+  fileName: string
+  orderNo: number
+  title: string
+  exists: boolean
+}
+
 export function ChapterBulkImport({ seriesId, existingOrders, onDone }: {
   seriesId: string
   existingOrders: number[]
   onDone: () => void
 }) {
   const [open, setOpen] = useState(false)
+  const [mode, setMode] = useState<'files' | 'folder'>('files')
   const [rows, setRows] = useState<ImportRow[]>([])
   const [status, setStatus] = useState<'draft' | 'published'>('published')
   const [submitting, setSubmitting] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const [folderPath, setFolderPath] = useState('')
+  const [folderRows, setFolderRows] = useState<FolderRow[] | null>(null)
+  const [scanning, setScanning] = useState(false)
 
   function assignOrderNos(parsed: { fileName: string; orderNo: number | null; title: string; content: string; charCount: number }[]): ImportRow[] {
     const used = new Set<number>(existingOrders)
@@ -119,9 +130,53 @@ export function ChapterBulkImport({ seriesId, existingOrders, onDone }: {
     }
   }
 
+  async function scanFolder() {
+    const path = folderPath.trim()
+    if (!path) {
+      toast.error('Nhập đường dẫn thư mục.')
+      return
+    }
+    setScanning(true)
+    try {
+      const res = await api.previewImportFromFolder(seriesId, path)
+      setFolderRows(res.preview)
+      if (res.total === 0) toast.info('Thư mục không có chương hợp lệ nào.')
+    } catch (e) {
+      setFolderRows(null)
+      toast.error('Quét thất bại: ' + (e as Error).message)
+    } finally {
+      setScanning(false)
+    }
+  }
+
+  async function submitFolder() {
+    if (!folderRows) return
+    const newRows = folderRows.filter((r) => !r.exists)
+    if (newRows.length === 0) {
+      toast.info('Tất cả chương trong thư mục đã tồn tại.')
+      return
+    }
+    setSubmitting(true)
+    try {
+      const res = await api.importChaptersFromFolder(seriesId, folderPath.trim())
+      toast.success(`Đã nhập ${res.count} chương` + (res.skipped ? ` (bỏ qua ${res.skipped} trùng)` : ''))
+      setFolderRows(null)
+      setFolderPath('')
+      setOpen(false)
+      onDone()
+    } catch (e) {
+      toast.error('Nhập thất bại: ' + (e as Error).message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   function reset() {
     setRows([])
     setStatus('published')
+    setFolderRows(null)
+    setFolderPath('')
+    setMode('files')
   }
 
   return (
@@ -133,15 +188,28 @@ export function ChapterBulkImport({ seriesId, existingOrders, onDone }: {
       <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset() }}>
         <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle>Nhập chương hàng loạt từ file .txt</DialogTitle>
+            <DialogTitle>Nhập chương hàng loạt</DialogTitle>
             <DialogDescription>
-              Chọn nhiều file <code className="text-xs">.txt</code>. Tên file dạng
-              <span className="font-medium"> Chương N_ Tiêu đề.txt</span> → số thứ tự từ
-              <span className="font-medium"> N</span>, tiêu đề từ phần sau (thay <code>_</code> bằng <code>:</code>).
+              Tải lên từ file <code className="text-xs">.txt</code> hoặc nhập từ thư mục trên máy chủ (admin local).
             </DialogDescription>
           </DialogHeader>
 
-          {rows.length === 0 ? (
+          <div className="flex items-center gap-1 rounded-lg bg-muted p-1">
+            <button
+              onClick={() => { setMode('files'); setFolderRows(null) }}
+              className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${mode === 'files' ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              <FileText className="mr-1 inline h-4 w-4" /> File .txt
+            </button>
+            <button
+              onClick={() => { setMode('folder'); setRows([]) }}
+              className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${mode === 'folder' ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              <FolderOpen className="mr-1 inline h-4 w-4" /> Thư mục máy chủ
+            </button>
+          </div>
+
+          {mode === 'files' && (rows.length === 0 ? (
             <div
               className={`flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed py-12 px-4 text-center transition-colors ${dragOver ? 'border-primary bg-primary/5' : 'border-border'}`}
               onClick={() => inputRef.current?.click()}
@@ -222,14 +290,73 @@ export function ChapterBulkImport({ seriesId, existingOrders, onDone }: {
                 })}
               </div>
             </>
+          ))}
+
+          {mode === 'folder' && (
+            <div className="flex flex-col gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="folder-path">Đường dẫn thư mục trên máy chủ</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="folder-path"
+                    value={folderPath}
+                    onChange={(e) => setFolderPath(e.target.value)}
+                    placeholder="VD: E:\Truyện\Tên Truyện\chapters"
+                    className="flex-1 font-mono text-xs"
+                    onKeyDown={(e) => { if (e.key === 'Enter') scanFolder() }}
+                  />
+                  <Button variant="outline" size="sm" onClick={scanFolder} disabled={scanning || submitting}>
+                    {scanning ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <ScanSearch className="h-4 w-4 mr-1" />}
+                    Quét
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Tên file: <span className="font-medium">Chương 1_ Khởi Đầu Mới.txt</span> → chương số 1, tiêu đề
+                  <span className="font-medium"> Chương 1: Khởi Đầu Mới</span>. Trạng thái: <span className="font-medium">Đã đăng</span>.
+                </p>
+              </div>
+
+              {folderRows && (
+                <>
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary">{folderRows.length} chương</Badge>
+                      {folderRows.some((r) => r.exists) && (
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <AlertTriangle className="h-3.5 w-3.5" /> {folderRows.filter((r) => r.exists).length} chương đã tồn tại (bỏ qua)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex-1 overflow-y-auto rounded-lg border border-border divide-y divide-border">
+                    {folderRows.map((r) => (
+                      <div key={r.fileName} className={`flex items-center gap-2 px-3 py-2 ${r.exists ? 'opacity-50' : ''}`}>
+                        <span className="grid h-8 w-10 shrink-0 place-items-center rounded-md bg-muted text-xs font-semibold">{r.orderNo}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium line-clamp-1">{r.title}</p>
+                          <p className="text-xs text-muted-foreground truncate">{r.fileName}{r.exists && <span className="text-muted-foreground"> · đã có</span>}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           )}
 
           <DialogFooter className="gap-2">
             <Button variant="ghost" onClick={() => { setOpen(false); reset() }} disabled={submitting}>Hủy</Button>
-            <Button onClick={submit} disabled={rows.length === 0 || submitting || hasConflict}>
-              {submitting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
-              Nhập {rows.length > 0 ? `${rows.length} chương` : ''}
-            </Button>
+            {mode === 'files' ? (
+              <Button onClick={submit} disabled={rows.length === 0 || submitting || hasConflict}>
+                {submitting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
+                Nhập {rows.length > 0 ? `${rows.length} chương` : ''}
+              </Button>
+            ) : (
+              <Button onClick={submitFolder} disabled={!folderRows || folderRows.length === 0 || submitting || !folderRows.some((r) => !r.exists)}>
+                {submitting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <FolderOpen className="h-4 w-4 mr-1" />}
+                Nhập từ thư mục
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

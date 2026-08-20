@@ -44,13 +44,13 @@ export function FavoritesScreen() {
     <div className="mx-auto max-w-6xl px-3 sm:px-4 py-4 sm:py-6 space-y-4">
       <h1 className="text-2xl font-bold">Truyện yêu thích</h1>
       {loading ? (
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
-          {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="aspect-[3/4] w-full rounded-lg" />)}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fit,minmax(170px,1fr))] sm:gap-4">
+          {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="aspect-[2/3] w-full rounded-lg" />)}
         </div>
       ) : items.length === 0 ? (
         <EmptyState icon={Heart} title="Chưa có truyện yêu thích" description="Lưu truyện bạn thích để dễ dàng tìm lại sau này." actionLabel="Khám phá truyện" onAction={() => navigate({ view: 'search' })} />
       ) : (
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fit,minmax(170px,1fr))] sm:gap-4">
           {items.map((s) => <StoryCard key={s.id} series={s} />)}
         </div>
       )}

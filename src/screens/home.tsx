@@ -66,7 +66,7 @@ export function HomeScreen() {
   return (
     <div className="mx-auto max-w-6xl px-3 sm:px-4 py-4 sm:py-6 space-y-8">
       {/* Hero */}
-      <section className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-primary/15 via-primary/5 to-transparent p-6 sm:p-8 animate-fade-in-up">
+      <section className="relative overflow-hidden rounded-2xl border border-border bg-hero-soft p-6 sm:p-8 animate-fade-in-up">
         <div className="absolute inset-0 opacity-30 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 20% 20%, var(--primary) 0%, transparent 40%)' }} />
         <div className="absolute top-4 right-4 hidden sm:flex gap-1.5 opacity-60">
           {['Tiên Hiệp', 'Đô Thị', 'Ngôn Tình'].map((g) => (
@@ -127,9 +127,9 @@ export function HomeScreen() {
           title="Truyện mới cập nhật"
           onMore={() => navigate({ view: 'search', sort: 'new' })}
         />
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-10 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fit,minmax(170px,1fr))] sm:gap-4">
           {loading
-            ? Array.from({ length: 10 }).map((_, i) => <div key={i} className="aspect-[3/4] w-full rounded-lg skeleton-shimmer" />)
+            ? Array.from({ length: 10 }).map((_, i) => <div key={i} className="aspect-[2/3] w-full rounded-lg skeleton-shimmer" />)
             : recent.map((s) => <StoryCard key={s.id} series={s} listenPercent={progressMap[s.id]} />)}
         </div>
       </section>
@@ -141,9 +141,9 @@ export function HomeScreen() {
           title="Phổ biến"
           onMore={() => navigate({ view: 'search', sort: 'chapters' })}
         />
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-10 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fit,minmax(170px,1fr))] sm:gap-4">
           {loading
-            ? Array.from({ length: 10 }).map((_, i) => <div key={i} className="aspect-[3/4] w-full rounded-lg skeleton-shimmer" />)
+            ? Array.from({ length: 10 }).map((_, i) => <div key={i} className="aspect-[2/3] w-full rounded-lg skeleton-shimmer" />)
             : popular.map((s) => <StoryCard key={s.id} series={s} listenPercent={progressMap[s.id]} />)}
         </div>
       </section>
