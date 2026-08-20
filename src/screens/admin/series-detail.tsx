@@ -130,6 +130,7 @@ export function AdminSeriesDetail({ seriesId }: { seriesId: string }) {
             <p className="text-sm text-muted-foreground">{detail.author} · {chapters.length} chương · {formatCharCount(detail.wordCount)}</p>
             <div className="mt-2 flex gap-2">
               <Button size="sm" variant="outline" onClick={() => navigate({ view: 'admin', tab: 'seriesForm', seriesId })}>Sửa thông tin</Button>
+              <ChapterBulkImport seriesId={seriesId} existingOrders={chapters.map((c) => c.orderNo)} onDone={load} />
             </div>
           </CardContent>
         </Card>
@@ -194,7 +195,6 @@ export function AdminSeriesDetail({ seriesId }: { seriesId: string }) {
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Tìm chương…" className="pl-8 h-8 text-sm" />
           </div>
-          <ChapterBulkImport seriesId={seriesId} existingOrders={chapters.map((c) => c.orderNo)} onDone={load} />
         </div>
         <div className="rounded-xl border border-border divide-y divide-border overflow-hidden">
           {filteredChapters.map((c) => (
