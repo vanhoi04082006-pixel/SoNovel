@@ -42,6 +42,13 @@ export function StoryDetailScreen() {
       if (user) {
         api.recordHistory(seriesId).catch(() => {})
       }
+      // Prefetch chapter content into the client cache so playback starts instantly:
+      // the first few chapters + the chapter right after the current listening position.
+      const startIdx = Math.max(0, d.chapters.findIndex((c) => c.id === p.progress?.listenChapterId))
+      const ids = new Set<string>()
+      for (let i = 0; i < Math.min(5, d.chapters.length); i++) ids.add(d.chapters[i].id)
+      if (d.chapters[startIdx + 1]) ids.add(d.chapters[startIdx + 1].id)
+      ids.forEach((cid) => api.getChapter(cid).catch(() => {}))
     } catch {
       toast.error('Không tải được truyện.')
     } finally {
@@ -63,13 +70,23 @@ export function StoryDetailScreen() {
 
   const startPlay = async (index: number, startChar = 0) => {
     if (!detail) return
-    // need full content — chapters from getSeries already includes content? No, list endpoint omits content. getSeries includes only published chapters without content.
-    // We need to fetch chapter content. Let's fetch all chapters with content.
-    const chaptersWithContent: PlayerChapter[] = []
-    for (const c of detail.chapters) {
-      const full = await api.getChapter(c.id)
-      chaptersWithContent.push({ id: full.id, orderNo: full.orderNo, title: full.title, content: full.content || '', wordCount: full.wordCount })
+    // Fetch only the target chapter's content so playback starts immediately;
+    // the rest are lazy-loaded by the player store on demand.
+    const target = detail.chapters[index]
+    let targetContent = ''
+    if (target) {
+      try {
+        const full = await api.getChapter(target.id)
+        targetContent = full.content || ''
+      } catch {}
     }
+    const chaptersWithContent: PlayerChapter[] = detail.chapters.map((c) => ({
+      id: c.id,
+      orderNo: c.orderNo,
+      title: c.title,
+      content: c.id === target?.id ? targetContent : '',
+      wordCount: c.wordCount,
+    }))
     playChapter({
       seriesId: detail.id,
       seriesTitle: detail.title,

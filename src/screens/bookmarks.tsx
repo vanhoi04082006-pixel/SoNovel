@@ -34,13 +34,16 @@ export function BookmarksScreen() {
   const onPlay = async (bm: any) => {
     try {
       const detail = await api.getSeries(bm.seriesId)
-      const chapters: PlayerChapter[] = []
-      for (const c of detail.chapters) {
-        const full = await api.getChapter(c.id)
-        chapters.push({ id: full.id, orderNo: full.orderNo, title: full.title, content: full.content || '', wordCount: full.wordCount })
-      }
+      const chapters: PlayerChapter[] = detail.chapters.map((c) => ({
+        id: c.id, orderNo: c.orderNo, title: c.title, content: '', wordCount: c.wordCount,
+      }))
       const idx = chapters.findIndex((c) => c.id === bm.chapterId)
       if (idx < 0) { toast.error('Chương không còn tồn tại.'); return }
+      // load target chapter content so playback starts immediately
+      try {
+        const full = await api.getChapter(chapters[idx].id)
+        chapters[idx] = { ...chapters[idx], content: full.content || '' }
+      } catch {}
       playChapter({
         seriesId: bm.seriesId,
         seriesTitle: bm.series.title,

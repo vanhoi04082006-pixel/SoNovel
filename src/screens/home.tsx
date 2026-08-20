@@ -220,14 +220,16 @@ function ContinueCard({ item }: { item: any }) {
   const onPlay = async () => {
     try {
       const detail = await api.getSeries(item.seriesId)
-      // fetch full chapter content
-      const chapters: PlayerChapter[] = []
-      for (const c of detail.chapters) {
-        const full = await api.getChapter(c.id)
-        chapters.push({ id: full.id, orderNo: full.orderNo, title: full.title, content: full.content || '', wordCount: full.wordCount })
-      }
+      const chapters: PlayerChapter[] = detail.chapters.map((c) => ({
+        id: c.id, orderNo: c.orderNo, title: c.title, content: '', wordCount: c.wordCount,
+      }))
       let idx = chapters.findIndex((c) => c.id === item.chapterId)
       if (idx < 0) idx = 0
+      // load target chapter content so playback starts immediately
+      try {
+        const full = await api.getChapter(chapters[idx].id)
+        chapters[idx] = { ...chapters[idx], content: full.content || '' }
+      } catch {}
       playChapter({
         seriesId: item.seriesId,
         seriesTitle: item.title,

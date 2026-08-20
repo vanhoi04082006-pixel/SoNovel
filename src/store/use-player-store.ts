@@ -57,10 +57,12 @@ interface PlayerState {
 }
 
 const RATE_PRESETS = [0.75, 1, 1.25, 1.5, 2]
-const CHUNK_SIZE = 3000
+// Smaller chunks → speech starts almost instantly & avoids Chrome TTS repeat bug.
+const CHUNK_SIZE = 800
+const CHUNK_TRANSITION_DELAY_MS = 50
 const SAVE_INTERVAL_MS = 4000
 
-// ---- chunking: split at ~3000 chars, prefer sentence boundary ----
+// ---- chunking: split at ~800 chars, prefer sentence boundary ----
 function chunkText(text: string): { text: string; offset: number }[] {
   const chunks: { text: string; offset: number }[] = []
   if (!text) return chunks
@@ -101,6 +103,7 @@ let synth: SpeechSynthesis | null = null
 let currentUtterance: SpeechSynthesisUtterance | null = null
 let currentChunks: { text: string; offset: number }[] = []
 let currentChunkIdx = 0
+let generation = 0
 let saveTimer: ReturnType<typeof setInterval> | null = null
 let sleepTimer: ReturnType<typeof setInterval> | null = null
 let sessionTimer: ReturnType<typeof setInterval> | null = null
@@ -121,15 +124,13 @@ function pickVoice(): SpeechSynthesisVoice | null {
   return vi || voices[0] || null
 }
 
-// ensure voices loaded
-function ensureVoices(): Promise<void> {
-  return new Promise((resolve) => {
-    const s = getSynth()
-    if (!s) return resolve()
-    if (s.getVoices().length > 0) return resolve()
-    s.onvoiceschanged = () => resolve()
-    setTimeout(() => resolve(), 800)
-  })
+// kick-start voice loading (non-blocking) — playback proceeds with available voice
+function ensureVoices() {
+  const s = getSynth()
+  if (!s) return
+  if (s.getVoices().length === 0) {
+    s.onvoiceschanged = () => {}
+  }
 }
 
 export const usePlayerStore = create<PlayerState>((set, get) => {
@@ -140,6 +141,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
       set({ error: 'Trình duyệt không hỗ trợ đọc tiếng (Web Speech API).' })
       return
     }
+    const gen = generation
     const state = get()
     if (currentChunkIdx >= currentChunks.length) {
       // chapter done → next
@@ -166,11 +168,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     const v = pickVoice()
     if (v) u.voice = v
     u.onstart = () => {
+      if (gen !== generation) return
       set({ isPlaying: true, isPaused: false, busy: false, error: null })
       get().emit('stateChange', { isPlaying: true })
       updateMediaSession()
     }
     u.onboundary = (e) => {
+      if (gen !== generation) return
       if (e.name && e.name !== 'word') return
       const abs = chunk.offset + (e.charIndex || 0)
       // subtract title prefix length if title was prepended
@@ -184,12 +188,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
       get().emit('progress', { charIndex: get().currentChar })
     }
     u.onend = () => {
-      // chunk finished → next chunk
+      if (gen !== generation) return
+      // chunk finished → next chunk (small delay avoids Chrome repeat bug)
       const st = get()
       if (!st.isPlaying && !st.isPaused) return // was stopped
       currentChunkIdx++
       if (currentChunkIdx < currentChunks.length) {
-        speakCurrentChunk()
+        setTimeout(() => {
+          if (gen === generation) speakCurrentChunk()
+        }, CHUNK_TRANSITION_DELAY_MS)
       } else {
         onChapterEnd()
       }
@@ -230,24 +237,63 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     }
   }
 
-  const playChapterInternal = (index: number, startChar: number) => {
+  // Ensure the chapter at `index` has content loaded; fetch on demand if missing.
+  const ensureChapterContent = async (index: number): Promise<string> => {
     const st = get()
     const ch = st.chapters[index]
+    if (!ch) return ''
+    if (ch.content) return ch.content
+    try {
+      const full = await api.getChapter(ch.id)
+      const content = full.content || ''
+      set((s) => ({
+        chapters: s.chapters.map((c) => (c.id === ch.id ? { ...c, content } : c)),
+      }))
+      return content
+    } catch {
+      set({ error: 'Không tải được nội dung chương.' })
+      return ''
+    }
+  }
+
+  // Prefetch the given chapter content in the background (fire-and-forget).
+  const prefetchChapter = (index: number) => {
+    const st = get()
+    const ch = st.chapters[index]
+    if (!ch || ch.content) return
+    api.getChapter(ch.id).then((full) => {
+      const content = full.content || ''
+      set((s) => ({
+        chapters: s.chapters.map((c) => (c.id === ch.id ? { ...c, content } : c)),
+      }))
+    }).catch(() => {})
+  }
+
+  const playChapterInternal = async (index: number, startChar: number) => {
+    const st = get()
+    if (st.busy) return
+    const ch = st.chapters[index]
     if (!ch) return
+    generation++
+    const gen = generation
+    set({ busy: true })
+    const content = await ensureChapterContent(index)
+    if (gen !== generation) return
+    const st2 = get()
     // Reset session timer khi bắt đầu series mới (index 0 + startChar 0)
-    const isNewSeries = index === 0 && startChar === 0 && st.currentIndex !== 0
+    const isNewSeries = index === 0 && startChar === 0 && st2.currentIndex !== 0
     set({
       currentIndex: index,
       currentChar: startChar,
       isPlaying: false,
       isPaused: false,
-      busy: true,
+      busy: false,
       seriesEnded: false,
       error: null,
-      sessionSeconds: isNewSeries ? 0 : st.sessionSeconds,
+      sessionSeconds: isNewSeries ? 0 : st2.sessionSeconds,
     })
     get().emit('chapterChange', { index })
-    currentChunks = chunkText(ch.content || '')
+    currentChunks = chunkText(content)
     currentChunkIdx = findChunkIndex(currentChunks, startChar)
     // adjust startChar to chunk offset boundary (speak whole chunk, but we won't skip mid-chunk for simplicity)
     titleAnnouncedForChapter = startChar === 0 ? -1 : index // only announce if starting from 0
@@ -256,6 +302,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     startSleepTimer()
     startSessionTimer()
     flushSave()
+    // Prefetch the following chapter so next is near-instant.
+    prefetchChapter(index + 1)
   }
 
   const startSaveTimer = () => {
@@ -400,6 +448,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
   }
 
   const stopInternal = () => {
+    generation++ // invalidate any pending chunk-transition timers
     const s = getSynth()
     if (s) s.cancel()
     currentUtterance = null
@@ -445,7 +494,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     _listeners: new Map(),
 
     playChapter: async (opts) => {
-      await ensureVoices()
+      ensureVoices() // non-blocking: start with available voice, better voice applies later
       stopInternal()
       set({
         seriesId: opts.seriesId,
@@ -454,6 +503,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
         chapters: opts.chapters,
         autoplayNext: opts.autoplayNext ?? true,
         rate: opts.rate ?? get().rate,
+        busy: false,
       })
       playChapterInternal(opts.index, opts.startChar ?? 0)
     },
@@ -521,6 +571,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
       set({ currentChar: target })
       // restart from target
       if (st.isPlaying || st.isPaused) {
+        generation++
         currentChunks = chunkText(ch.content)
         currentChunkIdx = findChunkIndex(currentChunks, target)
         titleAnnouncedForChapter = target === 0 ? -1 : st.currentIndex
@@ -579,6 +630,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
       if (st.isPlaying || st.isPaused) {
         const ch = st.chapters[st.currentIndex]
         if (ch) {
+          generation++
           currentChunks = chunkText(ch.content)
           currentChunkIdx = findChunkIndex(currentChunks, st.currentChar)
           speakCurrentChunk()
