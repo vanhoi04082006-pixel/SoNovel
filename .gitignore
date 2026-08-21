@@ -37,6 +37,11 @@ yarn-error.log*
 # vercel
 .vercel
 
+# workers
+workers/.wrangler/
+workers/dev.log
+workers/.dev.vars
+
 # supabase cli
 supabase/.temp/
 

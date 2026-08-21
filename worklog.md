@@ -9,17 +9,24 @@
   3. Thư mục `supabase/` (source artifact theo §5): schema.sql + migrations 002/003/004.
 - UI 100% tiếng Việt; chapters chỉ `draft`/`published`; `series.word_count` tự cập nhật qua trigger (Prisma không có trigger → dùng app-layer + DB logic).
 
-## Tiến độ
-- [ ] Phase 1: Prisma schema + seed
-- [ ] Phase 2: Backend API
-- [ ] Phase 3: App shell + theme + auth + routing
-- [ ] Phase 4: User screens
-- [ ] Phase 5: Player + PlayerBar (Web Speech API)
-- [ ] Phase 6: Admin screens
-- [ ] Phase 7: mobile/ artifact (subagent)
-- [ ] Phase 8: supabase/ artifact (subagent)
-- [ ] Phase 9: Lint + agent-browser verification
-- [ ] Phase 10: Cron webDevReview
+## Tiến độ (gốc SPEC)
+- [x] Phase 1: Prisma schema + seed
+- [x] Phase 2: Backend API
+- [x] Phase 3: App shell + theme + auth + routing
+- [x] Phase 4: User screens
+- [x] Phase 5: Player + PlayerBar (Web Speech API)
+- [x] Phase 6: Admin screens
+- [x] Phase 7: mobile/ artifact (subagent)
+- [x] Phase 8: supabase/ artifact (subagent)
+- [x] Phase 9: Lint + agent-browser verification
+- [x] Phase 10: Cron webDevReview
+
+## Tiến độ — Migration Workers + D1 (thêm 2026-08-21)
+- [x] Phase 1 (Worker infra): `workers/` build pass, D1 `sonovel` (00fd3513-...) APAC 13 bảng, `workers/src/index.ts:1` 25+ endpoints, secrets + subdomain `vanhoi04082006`, deploy `https://sonovel-api.vanhoi04082006.workers.dev` (3401fe58…), `npx tsc --noEmit` pass, `eslint src` pass — D1 trống chờ Phase 3 migrate (verify workers.dev bị chặn SSL local, đã xác minh qua `wrangler d1 execute`/`deployments list` + `dev.log` Ready)
+- [ ] Phase 2: R2 covers (cần enable Dashboard) + Worker upload
+- [ ] Phase 3: Migrate Supabase → D1 (series/chapters/tags)
+- [ ] Phase 4: Web proxy (src/app/api/** → Worker)
+- [ ] Phase 5: Mobile → Worker
 
 ---
 Task ID: 0
