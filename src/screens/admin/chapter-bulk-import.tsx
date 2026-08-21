@@ -330,7 +330,7 @@ export function ChapterBulkImport({ seriesId, existingOrders, onDone }: {
                   <div className="flex-1 overflow-y-auto max-h-[38vh] min-h-0 rounded-lg border border-border divide-y divide-border">
                     {folderRows.map((r) => (
                       <div key={r.fileName} className={`flex items-center gap-2 px-3 py-2 ${r.exists ? 'opacity-50' : ''}`}>
-                        <span className="grid h-8 w-10 shrink-0 place-items-center rounded-md bg-muted text-xs font-semibold">{r.orderNo}</span>
+                        <span className={`grid h-8 w-10 shrink-0 place-items-center rounded-md text-xs font-semibold ${r.orderNo === 0 ? 'bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-100' : 'bg-muted'}`}>{r.orderNo}</span>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium line-clamp-1">{r.title || `Chương ${r.orderNo}`}</p>
                           <p className="text-xs text-muted-foreground truncate">{r.fileName}{r.exists && <span className="text-muted-foreground"> · đã có</span>}</p>
