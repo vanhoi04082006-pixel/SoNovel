@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Clock } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import { api, type SeriesItem } from '@/lib/api-client'
@@ -14,21 +14,25 @@ export function HistoryScreen() {
   const { user, navigate, syncVersion } = useAppStore()
   const [items, setItems] = useState<SeriesItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+
+  const load = useCallback(async () => {
+    if (!user) { setLoading(false); return }
+    setLoading(true)
+    setError(false)
+    try {
+      const r = await api.listHistory()
+      setItems(r.items)
+    } catch {
+      setError(true)
+    } finally {
+      setLoading(false)
+    }
+  }, [user])
 
   useEffect(() => {
-    if (!user) { setLoading(false); return }
-    let cancelled = false
-    ;(async () => {
-      setLoading(true)
-      try {
-        const r = await api.listHistory()
-        if (!cancelled) setItems(r.items)
-      } catch {} finally {
-        if (!cancelled) setLoading(false)
-      }
-    })()
-    return () => { cancelled = true }
-  }, [user, syncVersion])
+    load()
+  }, [load, syncVersion])
 
   if (!user) {
     return (
@@ -47,6 +51,11 @@ export function HistoryScreen() {
       {loading ? (
         <div className="space-y-2">
           {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}
+        </div>
+      ) : error ? (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 text-center space-y-2">
+          <p className="text-sm text-destructive">Không tải được lịch sử.</p>
+          <Button variant="outline" size="sm" onClick={load}>Thử lại</Button>
         </div>
       ) : items.length === 0 ? (
         <EmptyState icon={Clock} title="Chưa có lịch sử" description="Mở truyện để lưu lại lịch sử nghe của bạn." actionLabel="Khám phá truyện" onAction={() => navigate({ view: 'search' })} />

@@ -269,9 +269,10 @@ function FeaturedSearchCard({ series, rank }: { series: SeriesItem; rank: number
   const rankColors = ['text-amber-500', 'text-zinc-400', 'text-orange-700']
 
   return (
-    <div
+    <button
+      type="button"
       onClick={() => navigate({ view: 'story', seriesId: series.id })}
-      className="group relative flex gap-3 rounded-xl border border-border bg-card p-3 cursor-pointer card-lift overflow-hidden"
+      className="group relative flex gap-3 rounded-xl border border-border bg-card p-3 text-left cursor-pointer card-lift overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <div className={`absolute -top-1 -left-1 grid h-8 w-8 place-items-center rounded-full bg-background border-2 border-border font-bold text-lg ${rankColors[rank - 1] || 'text-muted-foreground'}`}>
         {rank}
@@ -289,6 +290,6 @@ function FeaturedSearchCard({ series, rank }: { series: SeriesItem; rank: number
           <span>· ~{listenMin} phút</span>
         </div>
       </div>
-    </div>
+    </button>
   )
 }

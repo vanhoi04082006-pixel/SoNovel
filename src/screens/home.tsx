@@ -6,6 +6,7 @@ import { useAppStore } from '@/store/use-app-store'
 import { api, type SeriesItem } from '@/lib/api-client'
 import { StoryCard } from '@/components/sonovel/story-card'
 import { CoverImage } from '@/components/sonovel/cover-image'
+import { EmptyState } from '@/components/sonovel/empty-state'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Progress } from '@/components/ui/progress'
@@ -100,11 +101,15 @@ export function HomeScreen() {
             </div>
           </div>
 
-          {popular[0] && (
+          {loading && !popular[0] ? (
+            <div className="lg:w-72 shrink-0">
+              <div className="h-52 w-full rounded-xl skeleton-shimmer" />
+            </div>
+          ) : popular[0] ? (
             <div className="lg:w-72 shrink-0">
               <FeaturedHero series={popular[0]} />
             </div>
-          )}
+          ) : null}
         </div>
       </section>
 
@@ -130,7 +135,9 @@ export function HomeScreen() {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fit,minmax(170px,1fr))] sm:gap-4">
           {loading
             ? Array.from({ length: 10 }).map((_, i) => <div key={i} className="aspect-[2/3] w-full rounded-lg skeleton-shimmer" />)
-            : recent.map((s) => <StoryCard key={s.id} series={s} listenPercent={progressMap[s.id]} />)}
+            : recent.length === 0
+              ? <EmptyState icon={TrendingUp} title="Chưa có truyện mới" description="Dữ liệu đang được cập nhật." />
+              : recent.map((s) => <StoryCard key={s.id} series={s} listenPercent={progressMap[s.id]} />)}
         </div>
       </section>
 
@@ -144,7 +151,9 @@ export function HomeScreen() {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fit,minmax(170px,1fr))] sm:gap-4">
           {loading
             ? Array.from({ length: 10 }).map((_, i) => <div key={i} className="aspect-[2/3] w-full rounded-lg skeleton-shimmer" />)
-            : popular.map((s) => <StoryCard key={s.id} series={s} listenPercent={progressMap[s.id]} />)}
+            : popular.length === 0
+              ? <EmptyState icon={Sparkles} title="Chưa có truyện phổ biến" description="Dữ liệu đang được cập nhật." />
+              : popular.map((s) => <StoryCard key={s.id} series={s} listenPercent={progressMap[s.id]} />)}
         </div>
       </section>
 
@@ -296,9 +305,10 @@ function FeaturedCard({ series, rank }: { series: SeriesItem; rank: number }) {
   const rankColors = ['text-amber-500', 'text-zinc-400', 'text-orange-700']
 
   return (
-    <div
+    <button
+      type="button"
       onClick={() => navigate({ view: 'story', seriesId: series.id })}
-      className="group relative flex gap-3 rounded-xl border border-border bg-card p-3 cursor-pointer card-lift overflow-hidden"
+      className="group relative flex gap-3 rounded-xl border border-border bg-card p-3 text-left cursor-pointer card-lift overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       {/* Rank badge */}
       <div className={`absolute -top-1 -left-1 grid h-8 w-8 place-items-center rounded-full bg-background border-2 border-border font-bold text-lg ${rankColors[rank - 1] || 'text-muted-foreground'}`}>
@@ -317,6 +327,6 @@ function FeaturedCard({ series, rank }: { series: SeriesItem; rank: number }) {
           <span className="flex items-center gap-0.5"><Headphones className="h-3 w-3" /> ~{listenMin} phút</span>
         </div>
       </div>
-    </div>
+    </button>
   )
 }

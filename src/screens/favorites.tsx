@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Heart } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import { api, type SeriesItem } from '@/lib/api-client'
@@ -13,21 +13,25 @@ export function FavoritesScreen() {
   const { user, navigate, syncVersion } = useAppStore()
   const [items, setItems] = useState<SeriesItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+
+  const load = useCallback(async () => {
+    if (!user) { setLoading(false); return }
+    setLoading(true)
+    setError(false)
+    try {
+      const r = await api.listFavorites()
+      setItems(r.items)
+    } catch {
+      setError(true)
+    } finally {
+      setLoading(false)
+    }
+  }, [user])
 
   useEffect(() => {
-    if (!user) { setLoading(false); return }
-    let cancelled = false
-    ;(async () => {
-      setLoading(true)
-      try {
-        const r = await api.listFavorites()
-        if (!cancelled) setItems(r.items)
-      } catch {} finally {
-        if (!cancelled) setLoading(false)
-      }
-    })()
-    return () => { cancelled = true }
-  }, [user, syncVersion])
+    load()
+  }, [load, syncVersion])
 
   if (!user) {
     return (
@@ -46,6 +50,11 @@ export function FavoritesScreen() {
       {loading ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fit,minmax(170px,1fr))] sm:gap-4">
           {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="aspect-[2/3] w-full rounded-lg" />)}
+        </div>
+      ) : error ? (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 text-center space-y-2">
+          <p className="text-sm text-destructive">Không tải được danh sách yêu thích.</p>
+          <Button variant="outline" size="sm" onClick={load}>Thử lại</Button>
         </div>
       ) : items.length === 0 ? (
         <EmptyState icon={Heart} title="Chưa có truyện yêu thích" description="Lưu truyện bạn thích để dễ dàng tìm lại sau này." actionLabel="Khám phá truyện" onAction={() => navigate({ view: 'search' })} />

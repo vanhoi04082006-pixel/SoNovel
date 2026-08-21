@@ -5,6 +5,7 @@ import { Heart, Share2, Play, Headphones, ChevronLeft, BookOpen, Search as Searc
 import { useAppStore } from '@/store/use-app-store'
 import { api, type SeriesDetail, type ChapterItem } from '@/lib/api-client'
 import { CoverImage } from '@/components/sonovel/cover-image'
+import { EmptyState } from '@/components/sonovel/empty-state'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -161,7 +162,17 @@ export function StoryDetailScreen() {
   }
 
   if (!detail) {
-    return <div className="py-16 text-center text-muted-foreground">Không tìm thấy truyện.</div>
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-16">
+        <EmptyState
+          icon={BookOpen}
+          title="Không tìm thấy truyện"
+          description="Truyện có thể đã bị xóa hoặc đường dẫn không đúng."
+          actionLabel="Về trang chủ"
+          onAction={() => navigate({ view: 'home' })}
+        />
+      </div>
+    )
   }
 
   const totalListenMin = estMinutes(detail.wordCount)

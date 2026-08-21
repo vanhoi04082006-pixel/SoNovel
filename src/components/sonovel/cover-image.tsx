@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 
 // Deterministic gradient cover when no coverUrl
 const PALETTES: [string, string, string][] = [
@@ -39,17 +39,18 @@ export function CoverImage({
     if (!t) return '?'
     return t.slice(0, 1).toUpperCase()
   }, [title])
+  const [errored, setErrored] = useState(false)
 
-  if (coverUrl) {
+  if (coverUrl && !errored) {
     return (
       <img
         src={coverUrl}
         alt={title}
         className={`${rounded} object-cover ${className || ''}`}
         loading="lazy"
-        onError={(e) => {
-          (e.currentTarget as HTMLImageElement).style.display = 'none'
-        }}
+        decoding="async"
+        referrerPolicy="no-referrer"
+        onError={() => setErrored(true)}
       />
     )
   }

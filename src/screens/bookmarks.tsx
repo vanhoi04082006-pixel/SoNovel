@@ -17,16 +17,20 @@ export function BookmarksScreen() {
   const { user, navigate, syncVersion } = useAppStore()
   const [items, setItems] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
   const playChapter = usePlayerStore((s) => s.playChapter)
   const setPlayerActive = useAppStore((s) => s.setPlayerActive)
 
   const load = async () => {
     if (!user) { setLoading(false); return }
     setLoading(true)
+    setError(false)
     try {
       const r = await api.listBookmarks()
       setItems(r.items)
-    } catch {} finally { setLoading(false) }
+    } catch {
+      setError(true)
+    } finally { setLoading(false) }
   }
 
   useEffect(() => { load() }, [user, syncVersion])
@@ -91,6 +95,11 @@ export function BookmarksScreen() {
       {loading ? (
         <div className="space-y-2">
           {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}
+        </div>
+      ) : error ? (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 text-center space-y-2">
+          <p className="text-sm text-destructive">Không tải được danh sách đánh dấu.</p>
+          <Button variant="outline" size="sm" onClick={load}>Thử lại</Button>
         </div>
       ) : items.length === 0 ? (
         <EmptyState icon={BookmarkX} title="Chưa có đánh dấu" description="Đánh dấu vị trí đang nghe để quay lại chính xác đoạn đó." actionLabel="Khám phá truyện" onAction={() => navigate({ view: 'home' })} />

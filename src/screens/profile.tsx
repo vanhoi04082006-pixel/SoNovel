@@ -9,6 +9,7 @@ import { useAppStore } from '@/store/use-app-store'
 import { api } from '@/lib/api-client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
@@ -26,6 +27,7 @@ const RATE_PRESETS = [0.75, 1, 1.25, 1.5, 2]
 export function ProfileScreen() {
   const { user, navigate, theme, setTheme, refreshUser } = useAppStore()
   const [settings, setSettings] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (!user) return
@@ -34,6 +36,9 @@ export function ProfileScreen() {
         const s = await api.getSettings()
         setSettings(s.settings)
       } catch {}
+      finally {
+        setLoading(false)
+      }
     })()
   }, [user])
 
@@ -100,51 +105,60 @@ export function ProfileScreen() {
       </div>
 
       {/* Theme settings */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base"><Moon className="h-4 w-4" /> Giao diện</CardTitle>
-          <CardDescription>Chọn theme hiển thị cho ứng dụng</CardDescription>
-        </CardHeader>
-        <CardContent className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {THEMES.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTheme(t.key)}
-              className={`rounded-lg border p-3 text-left transition-all ${
-                theme === t.key
-                  ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                  : 'border-border hover:border-primary/50'
-              }`}
-            >
-              <p className="text-sm font-medium">{t.label}</p>
-              <p className="text-xs text-muted-foreground">{t.desc}</p>
-            </button>
-          ))}
-        </CardContent>
-      </Card>
+      {loading ? (
+        <div className="space-y-4">
+          <div className="h-36 rounded-xl border border-border skeleton-shimmer" />
+          <div className="h-28 rounded-xl border border-border skeleton-shimmer" />
+        </div>
+      ) : (
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base"><Moon className="h-4 w-4" /> Giao diện</CardTitle>
+              <CardDescription>Chọn theme hiển thị cho ứng dụng</CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {THEMES.map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => setTheme(t.key)}
+                  className={`rounded-lg border p-3 text-left transition-all ${
+                    theme === t.key
+                      ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                      : 'border-border hover:border-primary/50'
+                  }`}
+                >
+                  <p className="text-sm font-medium">{t.label}</p>
+                  <p className="text-xs text-muted-foreground">{t.desc}</p>
+                </button>
+              ))}
+            </CardContent>
+          </Card>
 
-      {/* Default playback speed */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base"><Gauge className="h-4 w-4" /> Tốc độ đọc mặc định</CardTitle>
-          <CardDescription>Áp dụng cho lần nghe tiếp theo</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-2">
-            {RATE_PRESETS.map((r) => (
-              <button
-                key={r}
-                onClick={() => setRate(r)}
-                className={`rounded-lg border px-4 py-2 text-sm transition-colors ${
-                  defaultRate === r ? 'border-primary bg-primary text-primary-foreground' : 'border-border hover:border-primary'
-                }`}
-              >
-                {r}x
-              </button>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+          {/* Default playback speed */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base"><Gauge className="h-4 w-4" /> Tốc độ đọc mặc định</CardTitle>
+              <CardDescription>Áp dụng cho lần nghe tiếp theo</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2">
+                {RATE_PRESETS.map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => setRate(r)}
+                    className={`rounded-lg border px-4 py-2 text-sm transition-colors ${
+                      defaultRate === r ? 'border-primary bg-primary text-primary-foreground' : 'border-border hover:border-primary'
+                    }`}
+                  >
+                    {r}x
+                  </button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
 
       {user.role === 'admin' && (
         <Card>

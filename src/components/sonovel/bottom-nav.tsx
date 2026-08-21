@@ -1,6 +1,6 @@
 'use client'
 
-import { BookHeadphones, Clock, Heart, Home as HomeIcon, Search, User } from 'lucide-react'
+import { Bookmark, Clock, Heart, Home as HomeIcon, Search, User } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import { cn } from '@/lib/utils'
 
@@ -8,6 +8,7 @@ const TABS = [
   { key: 'home', label: 'Trang chủ', icon: HomeIcon },
   { key: 'search', label: 'Tìm kiếm', icon: Search },
   { key: 'favorites', label: 'Yêu thích', icon: Heart },
+  { key: 'bookmarks', label: 'Đánh dấu', icon: Bookmark },
   { key: 'history', label: 'Lịch sử', icon: Clock },
   { key: 'login', label: 'Tài khoản', icon: User },
 ] as const
@@ -21,7 +22,7 @@ export function BottomNav() {
       className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80"
       aria-label="Điều hướng chính"
     >
-      <div className="grid grid-cols-5">
+      <div className="grid grid-cols-6">
         {TABS.map((t) => {
           const isActive = active === t.key
           const Icon = t.icon

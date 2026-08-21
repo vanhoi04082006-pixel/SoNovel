@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import dynamic from 'next/dynamic'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useAppStore } from '@/store/use-app-store'
 import { useRealtimeSync } from '@/hooks/use-realtime-sync'
 import { useUrlSync } from '@/hooks/use-url-sync'
@@ -56,24 +57,34 @@ export default function Home() {
       <PWARegister />
       <InstallPrompt />
       <main className="flex-1 pb-28 md:pb-8">
-        {view.view === 'home' && <HomeScreen />}
-        {view.view === 'search' && <SearchScreen />}
-        {view.view === 'story' && <StoryDetailScreen />}
-        {view.view === 'reader' && <ReaderScreen />}
-        {view.view === 'favorites' && <FavoritesScreen />}
-        {view.view === 'history' && <HistoryScreen />}
-        {view.view === 'bookmarks' && <BookmarksScreen />}
-        {view.view === 'profile' && <ProfileScreen />}
-        {view.view === 'settings' && <SettingsScreen />}
-        {view.view === 'about' && <AboutScreen />}
-        {view.view === 'stats' && <StatsScreen />}
-        {view.view === 'login' && <LoginScreen />}
-        {view.view === 'admin' && user?.role === 'admin' && <AdminShell />}
-        {view.view === 'admin' && user?.role !== 'admin' && (
-          <div className="py-16 text-center text-muted-foreground">
-            Bạn không có quyền truy cập trang quản trị.
-          </div>
-        )}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={`${view.view}:${view.view === 'story' ? view.seriesId : view.view === 'reader' ? view.chapterId : view.view === 'admin' ? view.tab + (view.seriesId || '') : ''}`}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.16, ease: 'easeOut' }}
+          >
+            {view.view === 'home' && <HomeScreen />}
+            {view.view === 'search' && <SearchScreen />}
+            {view.view === 'story' && <StoryDetailScreen />}
+            {view.view === 'reader' && <ReaderScreen />}
+            {view.view === 'favorites' && <FavoritesScreen />}
+            {view.view === 'history' && <HistoryScreen />}
+            {view.view === 'bookmarks' && <BookmarksScreen />}
+            {view.view === 'profile' && <ProfileScreen />}
+            {view.view === 'settings' && <SettingsScreen />}
+            {view.view === 'about' && <AboutScreen />}
+            {view.view === 'stats' && <StatsScreen />}
+            {view.view === 'login' && <LoginScreen />}
+            {view.view === 'admin' && user?.role === 'admin' && <AdminShell />}
+            {view.view === 'admin' && user?.role !== 'admin' && (
+              <div className="py-16 text-center text-muted-foreground">
+                Bạn không có quyền truy cập trang quản trị.
+              </div>
+            )}
+          </motion.div>
+        </AnimatePresence>
       </main>
       <PlayerBar />
       <BottomNav />

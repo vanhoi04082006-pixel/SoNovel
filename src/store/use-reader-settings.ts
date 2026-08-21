@@ -38,6 +38,9 @@ function saveLocal(s: { fontSize: number; fontFamily: FontFamily; lineHeight: nu
 // Persist store qua HMR (giống pattern Prisma client)
 const globalForReader = globalThis as unknown as { __readerSettings?: typeof useReaderSettings }
 
+// Debounce save server — tránh gọi API mỗi nấc kéo slider (fontSize/lineHeight).
+let serverSaveTimer: ReturnType<typeof setTimeout> | null = null
+
 export const useReaderSettings = globalForReader.__readerSettings ?? create<ReaderState>((set, get) => ({
   fontSize: 18,
   fontFamily: 'system',
@@ -65,14 +68,22 @@ export const useReaderSettings = globalForReader.__readerSettings ?? create<Read
     set({ fontSize: clamped })
     const s = get()
     saveLocal({ fontSize: s.fontSize, fontFamily: s.fontFamily, lineHeight: s.lineHeight })
-    api.saveSettings({ fontSize: clamped }).catch(() => {})
+    if (serverSaveTimer) clearTimeout(serverSaveTimer)
+    serverSaveTimer = setTimeout(() => {
+      const cur = get()
+      api.saveSettings({ fontSize: cur.fontSize, fontFamily: cur.fontFamily, lineHeight: cur.lineHeight }).catch(() => {})
+    }, 600)
   },
 
   setFontFamily: (f) => {
     set({ fontFamily: f })
     const s = get()
     saveLocal({ fontSize: s.fontSize, fontFamily: s.fontFamily, lineHeight: s.lineHeight })
-    api.saveSettings({ fontFamily: f }).catch(() => {})
+    if (serverSaveTimer) clearTimeout(serverSaveTimer)
+    serverSaveTimer = setTimeout(() => {
+      const cur = get()
+      api.saveSettings({ fontSize: cur.fontSize, fontFamily: cur.fontFamily, lineHeight: cur.lineHeight }).catch(() => {})
+    }, 600)
   },
 
   setLineHeight: (n) => {
@@ -80,7 +91,11 @@ export const useReaderSettings = globalForReader.__readerSettings ?? create<Read
     set({ lineHeight: clamped })
     const s = get()
     saveLocal({ fontSize: s.fontSize, fontFamily: s.fontFamily, lineHeight: s.lineHeight })
-    api.saveSettings({ lineHeight: clamped }).catch(() => {})
+    if (serverSaveTimer) clearTimeout(serverSaveTimer)
+    serverSaveTimer = setTimeout(() => {
+      const cur = get()
+      api.saveSettings({ fontSize: cur.fontSize, fontFamily: cur.fontFamily, lineHeight: cur.lineHeight }).catch(() => {})
+    }, 600)
   },
 }))
 
