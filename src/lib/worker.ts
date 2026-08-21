@@ -44,11 +44,17 @@ export async function proxyToWorker(
   const isFormData = typeof FormData !== 'undefined' && hasBody && init.body instanceof FormData
   if (hasBody && !isFormData && !headers['Content-Type']) headers['Content-Type'] = 'application/json'
   if (isFormData) delete headers['Content-Type']
-  const res = await fetch(url, {
-    method: init.method || 'GET',
-    headers,
-    body: init.body as any,
-  })
+  let res: Response
+  try {
+    res = await fetch(url, {
+      method: init.method || 'GET',
+      headers,
+      body: init.body as any,
+    })
+  } catch (e) {
+    const msg = (e as Error).message || String(e)
+    throw new Error(`Worker fetch failed: ${msg} (url=${url})`)
+  }
   let json: any = null
   const text = await res.text()
   try { json = text ? JSON.parse(text) : null } catch { json = { raw: text } }
