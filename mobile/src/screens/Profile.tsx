@@ -68,6 +68,17 @@ export function ProfileScreen() {
         </View>
       </View>
 
+      {/* Quick links */}
+      <View style={styles.section}>
+        <View style={styles.quickRow}>
+          <QuickLink icon="bookmark-outline" label="Đánh dấu" onPress={() => nav.navigate('Bookmarks')} />
+          <QuickLink icon="stats-chart-outline" label="Thống kê" onPress={() => nav.navigate('Stats')} />
+          <QuickLink icon="settings-outline" label="Cài đặt" onPress={() => nav.navigate('Settings')} />
+          <QuickLink icon="heart-outline" label="Yêu thích" onPress={() => nav.navigate('Tabs' as any, { screen: 'Favorites' } as any)} />
+          <QuickLink icon="time-outline" label="Lịch sử" onPress={() => nav.navigate('Tabs' as any, { screen: 'History' } as any)} />
+        </View>
+      </View>
+
       {/* Theme */}
       <View style={styles.section}>
         <Text style={[TYPO.title, { color: t.text }]}>Giao diện</Text>
@@ -108,6 +119,16 @@ export function ProfileScreen() {
   );
 }
 
+function QuickLink({ icon, label, onPress }: { icon: any; label: string; onPress: () => void }) {
+  const t = useTheme();
+  return (
+    <Pressable onPress={onPress} style={[styles.quickBtn, { backgroundColor: t.surface, borderColor: t.border }]}>
+      <Icon name={icon} size={20} color={t.primary} />
+      <Text style={[TYPO.caption, { color: t.text }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   card: {
     marginHorizontal: 16,
@@ -131,6 +152,17 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   section: { paddingHorizontal: 16, paddingTop: 24, gap: 12 },
+  quickRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  quickBtn: {
+    width: '48%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+  },
   themeGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',

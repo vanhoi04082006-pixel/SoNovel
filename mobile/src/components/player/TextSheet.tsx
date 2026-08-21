@@ -10,6 +10,7 @@ import {
 import { useTheme, TYPO, RADIUS } from '../../theme';
 import { SheetModal } from '../ui/SheetModal';
 import { Icon } from '../ui/Icon';
+import { useReaderSettings } from '../../lib/readerSettings';
 
 type ChapterText = {
   title?: string;
@@ -29,6 +30,7 @@ const SCREEN_H = Dimensions.get('window').height;
 
 export function TextSheet({ visible, onClose, chapter, currentIndex, charIndex, onSeek }: Props) {
   const t = useTheme();
+  const rs = useReaderSettings();
   const [follow, setFollow] = useState(true);
   const listRef = useRef<FlatList<(Paragraph | null)>>(null);
 
@@ -109,7 +111,7 @@ export function TextSheet({ visible, onClose, chapter, currentIndex, charIndex, 
               <Text
                 style={[
                   styles.para,
-                  { color: isActive ? t.primarySoftText : t.text },
+                  { color: isActive ? t.primarySoftText : t.text, fontSize: rs.fontSize, lineHeight: rs.lineHeight * rs.fontSize },
                 ]}
               >
                 {item}

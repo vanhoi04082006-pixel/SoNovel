@@ -28,6 +28,7 @@ type Props = {
   onTextSheet: () => void;
   onChaptersSheet: () => void;
   onSleepSheet: () => void;
+  onBookmark: () => void;
   onStop: () => void;
   onSetRate: (r: number) => void;
 };
@@ -107,6 +108,10 @@ export function PlayerControls(p: Props) {
         <Pressable onPress={p.onSleepSheet} style={({ pressed }) => [styles.secBtn, { backgroundColor: t.bgSubtle }, pressed && { opacity: 0.7 }]}>
           <Icon name="moon-outline" size={18} color={t.text} />
           <Text style={[TYPO.label, { color: t.text }]}>{p.sleepLabel}</Text>
+        </Pressable>
+        <Pressable onPress={p.onBookmark} style={({ pressed }) => [styles.secBtn, { backgroundColor: t.bgSubtle }, pressed && { opacity: 0.7 }]}>
+          <Icon name="bookmark-outline" size={18} color={t.text} />
+          <Text style={[TYPO.label, { color: t.text }]}>Đánh dấu</Text>
         </Pressable>
         <Pressable onPress={p.onStop} style={({ pressed }) => [styles.secBtn, { backgroundColor: t.dangerSoft }, pressed && { opacity: 0.7 }]}>
           <Icon name="stop-circle-outline" size={18} color={t.danger} />

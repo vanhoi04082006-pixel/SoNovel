@@ -34,8 +34,9 @@ import {
   ensureChapterContent,
   TtsChapter,
 } from '../lib/tts';
-import { listChapters, ChapterRow } from '../lib/progress';
+import { listChapters, ChapterRow, createBookmark } from '../lib/progress';
 import { nativeTts } from '../lib/nativeTts';
+import { showToast } from '../lib/toast';
 import { RootStackParamList } from '../navigation/types';
 
 type PlayerRouteProp = RouteProp<RootStackParamList, 'Player'>;
@@ -202,6 +203,21 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
     onSeek(np.currentChar + delta);
   };
 
+  const onBookmark = async () => {
+    const cur = getNowPlaying();
+    const ch = cur.chapters[cur.currentIndex];
+    if (!ch || !cur.seriesId) {
+      showToast('Chưa có chương để đánh dấu.');
+      return;
+    }
+    const id = await createBookmark({
+      seriesId: cur.seriesId,
+      chapterId: ch.id,
+      charIndex: cur.currentChar,
+    });
+    showToast(id ? `Đã đánh dấu tại ${cur.currentChar} — Chương ${cur.currentIndex + 1}` : 'Đánh dấu thất bại.');
+  };
+
   const openTextSheet = async () => {
     try {
       await ensureChapterContent(np.currentIndex);
@@ -276,6 +292,7 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
             onTextSheet={openTextSheet}
             onChaptersSheet={() => setShowChapters(true)}
             onSleepSheet={() => setShowSleep(true)}
+            onBookmark={onBookmark}
             onStop={() => { stopTts(); nav.goBack(); }}
             onSetRate={onSetRate}
           />

@@ -305,6 +305,108 @@ export async function saveSettings(data: Record<string, unknown>): Promise<void>
   } catch {}
 }
 
+// ---------- Bookmarks ----------
+export type BookmarkRow = {
+  id: string;
+  seriesId: string;
+  chapterId: string;
+  charIndex: number;
+  note: string;
+  createdAt: string;
+  series?: { id: string; title: string; coverUrl: string } | null;
+};
+
+export async function listBookmarks(): Promise<BookmarkRow[]> {
+  const userId = getUserId();
+  if (!userId) return [];
+  try {
+    const j: any = await workerJson('/api/bookmarks', { method: 'GET' });
+    return (j.items ?? []).map((b: any) => ({
+      id: b.id,
+      seriesId: b.seriesId,
+      chapterId: b.chapterId,
+      charIndex: b.charIndex ?? 0,
+      note: b.note ?? '',
+      createdAt: b.createdAt ?? '',
+      series: b.series ?? null,
+    }));
+  } catch {
+    try {
+      const { data, error } = await supabase.from('bookmarks').select('*').eq('user_id', userId).order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map((b: any) => ({
+        id: b.id,
+        seriesId: b.series_id,
+        chapterId: b.chapter_id,
+        charIndex: b.char_index ?? 0,
+        note: b.note ?? '',
+        createdAt: b.created_at ?? '',
+        series: null,
+      }));
+    } catch {
+      return [];
+    }
+  }
+}
+
+export async function createBookmark(opts: { seriesId: string; chapterId: string; charIndex: number; note?: string }): Promise<string | null> {
+  const userId = getUserId();
+  if (!userId) return null;
+  try {
+    const j: any = await workerJson('/api/bookmarks', {
+      method: 'POST',
+      body: JSON.stringify({
+        seriesId: opts.seriesId,
+        chapterId: opts.chapterId,
+        charIndex: opts.charIndex,
+        note: opts.note ?? '',
+      }),
+    });
+    if (j?.id) return j.id as string;
+  } catch {}
+  try {
+    const { data, error } = await supabase.from('bookmarks').insert({
+      user_id: userId,
+      series_id: opts.seriesId,
+      chapter_id: opts.chapterId,
+      char_index: opts.charIndex,
+      note: opts.note ?? '',
+    }).select('id').single();
+    if (error) throw error;
+    return data?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function deleteBookmark(id: string): Promise<void> {
+  const userId = getUserId();
+  if (!userId) return;
+  try {
+    await workerJson(`/api/bookmarks/${id}`, { method: 'DELETE' });
+  } catch {}
+  try {
+    await supabase.from('bookmarks').delete().eq('id', id).eq('user_id', userId);
+  } catch {}
+}
+
+// ---------- Stats (Worker primary, fallback rỗng) ----------
+export async function statsReading(): Promise<any> {
+  try { return await workerJson('/api/stats/reading', { method: 'GET' }); } catch { return { stats: null }; }
+}
+export async function statsStreak(): Promise<any> {
+  try { return await workerJson('/api/stats/streak', { method: 'GET' }); } catch { return { stats: null }; }
+}
+export async function statsAchievements(): Promise<any> {
+  try { return await workerJson('/api/stats/achievements', { method: 'GET' }); } catch { return { achievements: [], summary: { unlocked: 0, total: 0, progress: 0 } }; }
+}
+export async function statsChallenge(): Promise<any> {
+  try { return await workerJson('/api/stats/challenge', { method: 'GET' }); } catch { return { challenges: [], summary: { unlocked: 0, total: 0 } }; }
+}
+export async function statsHistory(): Promise<any> {
+  try { return await workerJson('/api/stats/history', { method: 'GET' }); } catch { return { items: [] }; }
+}
+
 export async function saveListenProgress(opts: {
   seriesId: string;
   chapterId: string;

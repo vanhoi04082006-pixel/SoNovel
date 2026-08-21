@@ -10,6 +10,9 @@ export type RootStackParamList = {
     startIndex?: number;
     startChar?: number;
   };
+  Bookmarks: undefined;
+  Stats: undefined;
+  Settings: undefined;
   Login: undefined;
 };
 

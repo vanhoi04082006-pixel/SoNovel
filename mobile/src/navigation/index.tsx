@@ -5,6 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useTheme, initTheme } from '../theme';
 import { initSession } from '../lib/session';
+import { initReaderSettings } from '../lib/readerSettings';
 import { loadSavedRate } from '../lib/tts';
 
 import { HomeScreen } from '../screens/Home';
@@ -15,6 +16,9 @@ import { ProfileScreen } from '../screens/Profile';
 import { SeriesScreen } from '../screens/Series';
 import { PlayerScreen } from '../screens/Player';
 import { LoginScreen } from '../screens/Login';
+import { BookmarksScreen } from '../screens/Bookmarks';
+import { StatsScreen } from '../screens/Stats';
+import { SettingsScreen } from '../screens/Settings';
 import { TabBar } from './TabBar';
 import { RootStackParamList, TabsParamList } from './types';
 
@@ -85,6 +89,21 @@ export function RootNavigator() {
           component={LoginScreen}
           options={{ presentation: 'modal', title: 'Đăng nhập' }}
         />
+        <Stack.Screen
+          name="Bookmarks"
+          component={BookmarksScreen}
+          options={{ title: 'Đánh dấu' }}
+        />
+        <Stack.Screen
+          name="Stats"
+          component={StatsScreen}
+          options={{ title: 'Thống kê' }}
+        />
+        <Stack.Screen
+          name="Settings"
+          component={SettingsScreen}
+          options={{ title: 'Cài đặt' }}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );
@@ -94,6 +113,7 @@ export function useBootstrap() {
   useEffect(() => {
     initSession();
     initTheme().catch(() => {});
+    initReaderSettings().catch(() => {});
     loadSavedRate().catch(() => {});
   }, []);
 }
