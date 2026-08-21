@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/session'
 import { createAdminSupabase } from '@/lib/supabase-admin'
+import { proxyToWorker } from '@/lib/worker'
 
-// PATCH /api/admin/users/[id] — đổi role / khóa mở tài khoản (admin)
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await requireAdmin()
-    const admin = createAdminSupabase()
     const { id } = await params
     const body = await req.json()
 
@@ -14,11 +13,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (body.role !== 'user' && body.role !== 'admin') {
         return NextResponse.json({ error: 'Role không hợp lệ.' }, { status: 400 })
       }
-      const { error } = await admin.from('profiles').upsert({ id, role: body.role })
-      if (error) return NextResponse.json({ error: 'Không cập nhật được role: ' + error.message }, { status: 500 })
+      const { res, json } = await proxyToWorker(`/api/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify({ role: body.role }), admin: true })
+      if (!res.ok) return NextResponse.json(json, { status: res.status })
       return NextResponse.json({ ok: true })
     }
 
+    const admin = createAdminSupabase()
     if (body.action === 'ban') {
       const { error } = await admin.auth.admin.updateUserById(id, { ban_duration: '876000h' })
       if (error) return NextResponse.json({ error: 'Không khóa được tài khoản: ' + error.message }, { status: 500 })

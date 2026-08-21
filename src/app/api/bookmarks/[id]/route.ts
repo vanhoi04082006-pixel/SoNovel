@@ -1,21 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { serverDb } from '@/lib/server-data'
-import { getSessionUser } from '@/lib/session'
+import { proxyToWorker } from '@/lib/worker'
 
-// DELETE /api/bookmarks/[id]
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const user = await getSessionUser()
-  if (!user) return NextResponse.json({ error: 'Vui lòng đăng nhập.' }, { status: 401 })
-  const { id } = await params
   try {
-    const supabase = serverDb()
-    const { data: bm } = await supabase.from('bookmarks').select('user_id').eq('id', id).maybeSingle()
-    if (!bm || bm.user_id !== user.id) {
-      return NextResponse.json({ error: 'Không tìm thấy đánh dấu.' }, { status: 404 })
-    }
-    await supabase.from('bookmarks').delete().eq('id', id)
-    return NextResponse.json({ ok: true })
+    const { id } = await params
+    const { res, json } = await proxyToWorker(`/api/bookmarks/${id}`, { method: 'DELETE' })
+    return NextResponse.json(json, { status: res.status })
   } catch (e) {
-    return NextResponse.json({ error: 'Xóa đánh dấu thất bại.' }, { status: 500 })
+    return NextResponse.json({ error: 'Xóa đánh dấu thất bại: ' + (e as Error).message }, { status: 500 })
   }
 }

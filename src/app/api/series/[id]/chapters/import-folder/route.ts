@@ -1,17 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { randomUUID } from 'crypto'
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
-import { serverDb } from '@/lib/server-data'
-import { chapterWordCount, recalcSeriesWordCount } from '@/lib/sonovel'
-import { invalidateAll } from '@/lib/server-cache'
 import { requireAdmin } from '@/lib/session'
 import { parseChapterFilename, naturalCompare } from '@/lib/chapter-filename'
+import { proxyToWorker } from '@/lib/worker'
 
-// POST /api/series/[id]/chapters/import-folder — nhập chương hàng loạt từ thư mục (admin)
-// Chỉ chạy được khi server có quyền đọc thư mục trên máy (local/dev). Không hoạt động trên serverless.
-// Body: { folderPath: string, preview?: boolean }
-//   preview=true → chỉ quét và trả danh sách {orderNo,title,fileName,charCount,exists}, không ghi DB.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await requireAdmin()
@@ -43,10 +36,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'Tối đa 500 chương mỗi lần nhập.' }, { status: 400 })
     }
 
-    const supabase = serverDb()
-
-    const { data: existing } = await supabase.from('chapters').select('order_no').eq('series_id', id)
-    const existingOrders = new Set((existing ?? []).map((c: any) => c.order_no))
+    let existingOrders = new Set<number>()
+    try {
+      const { res, json } = await proxyToWorker(`/api/series/${id}/chapters?all=1`, { method: 'GET', admin: true })
+      if (res.ok && json?.items) existingOrders = new Set((json.items as any[]).map((c: any) => c.orderNo))
+    } catch {}
 
     if (preview) {
       const previewRows = entries
@@ -59,8 +53,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ ok: true, preview: previewRows, total: previewRows.length })
     }
 
-    const rows: any[] = []
     const skipped: string[] = []
+    const chapters: any[] = []
     for (const file of entries) {
       const { orderNo, title } = parseChapterFilename(file)
       if (orderNo == null || orderNo < 1) continue
@@ -69,32 +63,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         continue
       }
       const content = await readFile(join(folderPath, file), 'utf8')
-      rows.push({
-        id: randomUUID(),
-        series_id: id,
-        order_no: orderNo,
-        title,
-        content,
-        status: 'published',
-        word_count: chapterWordCount(content),
-        published_at: new Date().toISOString(),
-      })
+      chapters.push({ orderNo, title, content, status: 'published' })
     }
 
-    if (rows.length === 0) {
+    if (chapters.length === 0) {
       return NextResponse.json({
         error: 'Không có chương mới hợp lệ. Tất cả số thứ tự đều đã tồn tại hoặc không có số "Chương N".',
         skipped: skipped.length,
       }, { status: 400 })
     }
 
-    const { error } = await supabase.from('chapters').upsert(rows, { onConflict: 'series_id,order_no', ignoreDuplicates: true })
-    if (error) throw error
-
-    await recalcSeriesWordCount(id)
-    invalidateAll()
-
-    return NextResponse.json({ ok: true, count: rows.length, skipped: skipped.length })
+    const { res, json } = await proxyToWorker(`/api/series/${id}/chapters/bulk`, {
+      method: 'POST',
+      body: JSON.stringify({ chapters }),
+      admin: true,
+    })
+    if (!res.ok) return NextResponse.json(json, { status: res.status })
+    return NextResponse.json({ ok: true, count: json.count, skipped: (json.skipped ?? 0) + skipped.length })
   } catch (e) {
     const msg = (e as Error).message
     if (msg === 'UNAUTHORIZED' || msg === 'FORBIDDEN') {

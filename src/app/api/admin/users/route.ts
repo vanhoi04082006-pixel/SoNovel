@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/session'
 import { createAdminSupabase } from '@/lib/supabase-admin'
+import { proxyToWorker } from '@/lib/worker'
 
-// GET /api/admin/users — danh sách người dùng (admin, service role)
 export async function GET(req: NextRequest) {
   try {
     await requireAdmin()
@@ -16,14 +16,17 @@ export async function GET(req: NextRequest) {
     }
 
     const all = data.users
-    let ids = all.map((u) => u.id)
+    const ids = all.map((u) => u.id)
     let roleMap = new Map<string, string>()
     if (ids.length) {
-      const { data: profiles, error: pErr } = await admin
-        .from('profiles')
-        .select('id, role')
-        .in('id', ids)
-      if (!pErr && profiles) roleMap = new Map(profiles.map((p) => [p.id, p.role as string]))
+      try {
+        const { res, json } = await proxyToWorker(`/api/profiles/roles?ids=${ids.join(',')}`, { method: 'GET', admin: true })
+        if (res.ok && json?.roles) roleMap = new Map(Object.entries(json.roles as Record<string, string>))
+      } catch {}
+      if (roleMap.size === 0) {
+        const { data: profiles } = await admin.from('profiles').select('id, role').in('id', ids)
+        if (profiles) roleMap = new Map(profiles.map((p) => [p.id, p.role as string]))
+      }
     }
 
     let users = all.map((u) => ({
