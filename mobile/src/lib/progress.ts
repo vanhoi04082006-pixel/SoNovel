@@ -198,11 +198,14 @@ export async function getProgress(seriesId: string): Promise<ProgressRow | null>
   }
   try {
     const j: any = await workerJson(`/api/progress?series_id=${seriesId}`, { method: 'GET' });
-    return mapProgress(j.progress);
-  } catch {
+    if (j.progress) return mapProgress(j.progress);
+  } catch {}
+  try {
     const { data, error } = await supabase.from('progress').select('*').eq('user_id', userId).eq('series_id', seriesId).maybeSingle();
     if (error) throw error;
     return data as ProgressRow | null;
+  } catch {
+    return null;
   }
 }
 
@@ -211,21 +214,25 @@ export async function listAllProgress(): Promise<(ProgressRow & { series?: Serie
   if (!userId) return [];
   try {
     const j: any = await workerJson('/api/progress/all', { method: 'GET' });
-    return (j.items ?? []).map((it: any) => ({
-      user_id: userId,
-      series_id: it.seriesId,
-      listen_chapter_id: it.listenChapterId,
-      listen_char_index: it.listenCharIndex,
-      audio_sec: 0,
-      playback_speed: 1.0,
-      last_listened_at: it.lastListenedAt,
-      read_chapter_id: null,
-      read_char_index: 0,
-      read_percent: it.percent ?? 0,
-      last_read_at: null,
-      series: undefined,
-    }));
-  } catch {
+    const items = j.items ?? [];
+    if (items.length > 0) {
+      return items.map((it: any) => ({
+        user_id: userId,
+        series_id: it.seriesId,
+        listen_chapter_id: it.listenChapterId,
+        listen_char_index: it.listenCharIndex,
+        audio_sec: 0,
+        playback_speed: 1.0,
+        last_listened_at: it.lastListenedAt,
+        read_chapter_id: null,
+        read_char_index: 0,
+        read_percent: it.percent ?? 0,
+        last_read_at: null,
+        series: undefined,
+      }));
+    }
+  } catch {}
+  try {
     const { data, error } = await supabase
       .from('progress')
       .select('*, series:series(*)')
@@ -235,6 +242,8 @@ export async function listAllProgress(): Promise<(ProgressRow & { series?: Serie
       .limit(20);
     if (error) throw error;
     return (data ?? []) as any;
+  } catch {
+    return [];
   }
 }
 
@@ -277,16 +286,22 @@ export async function listFavorites(): Promise<(FavoriteRow & { series?: SeriesR
   if (!userId) return [];
   try {
     const j: any = await workerJson('/api/favorites', { method: 'GET' });
-    return (j.items ?? []).map((s: any) => ({
-      user_id: userId,
-      series_id: s.id,
-      created_at: s.favoritedAt ?? s.updatedAt ?? '',
-      series: mapSeries(s),
-    }));
-  } catch {
+    const items = j.items ?? [];
+    if (items.length > 0) {
+      return items.map((s: any) => ({
+        user_id: userId,
+        series_id: s.id,
+        created_at: s.favoritedAt ?? s.updatedAt ?? '',
+        series: mapSeries(s),
+      }));
+    }
+  } catch {}
+  try {
     const { data, error } = await supabase.from('favorites').select('*, series:series(*)').eq('user_id', userId).order('created_at', { ascending: false });
     if (error) throw error;
     return (data ?? []) as any;
+  } catch {
+    return [];
   }
 }
 
@@ -295,11 +310,16 @@ export async function isFavorite(seriesId: string): Promise<boolean> {
   if (!userId) return false;
   try {
     const j: any = await workerJson('/api/favorites', { method: 'GET' });
-    return (j.items ?? []).some((s: any) => s.id === seriesId);
-  } catch {
+    const items = j.items ?? [];
+    if (items.some((s: any) => s.id === seriesId)) return true;
+    if (items.length > 0) return false;
+  } catch {}
+  try {
     const { data, error } = await supabase.from('favorites').select('series_id').eq('user_id', userId).eq('series_id', seriesId).maybeSingle();
     if (error) return false;
     return !!data;
+  } catch {
+    return false;
   }
 }
 
@@ -342,16 +362,22 @@ export async function listHistory(): Promise<(HistoryRow & { series?: SeriesRow 
   if (!userId) return [];
   try {
     const j: any = await workerJson('/api/history', { method: 'GET' });
-    return (j.items ?? []).map((s: any) => ({
-      user_id: userId,
-      series_id: s.id,
-      opened_count: s.openedCount ?? 1,
-      last_opened_at: s.lastOpenedAt ?? s.updatedAt ?? '',
-      series: mapSeries(s),
-    }));
-  } catch {
+    const items = j.items ?? [];
+    if (items.length > 0) {
+      return items.map((s: any) => ({
+        user_id: userId,
+        series_id: s.id,
+        opened_count: s.openedCount ?? 1,
+        last_opened_at: s.lastOpenedAt ?? s.updatedAt ?? '',
+        series: mapSeries(s),
+      }));
+    }
+  } catch {}
+  try {
     const { data, error } = await supabase.from('history').select('*, series:series(*)').eq('user_id', userId).order('last_opened_at', { ascending: false }).limit(20);
     if (error) throw error;
     return (data ?? []) as any;
+  } catch {
+    return [];
   }
 }

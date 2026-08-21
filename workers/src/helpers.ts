@@ -23,7 +23,7 @@ export class ApiError extends Error {
   }
 }
 
-type CachedUser = { exp: number; user: { id: string; email: string } | null }
+type CachedUser = { exp: number; user: { id: string; email: string } | null; ensured?: boolean }
 const userCache = new Map<string, CachedUser>()
 const USER_CACHE_TTL_MS = 5 * 60 * 1000
 
@@ -57,13 +57,14 @@ export async function getAuth(c: Context<{ Bindings: Env }>): Promise<AuthUser |
   if (!token) return null
 
   const key = await hashToken(token)
-  const hit = userCache.get(key)
+  let cached = userCache.get(key)
   let su: { id: string; email: string } | null
-  if (hit && hit.exp > Date.now()) {
-    su = hit.user
+  if (cached && cached.exp > Date.now()) {
+    su = cached.user
   } else {
     su = await fetchSupabaseUser(c.env, token)
-    userCache.set(key, { exp: Date.now() + USER_CACHE_TTL_MS, user: su })
+    cached = { exp: Date.now() + USER_CACHE_TTL_MS, user: su, ensured: false }
+    userCache.set(key, cached)
     if (userCache.size > 5000) {
       for (const [k, v] of userCache) if (v.exp < Date.now()) userCache.delete(k)
     }
@@ -72,9 +73,34 @@ export async function getAuth(c: Context<{ Bindings: Env }>): Promise<AuthUser |
 
   let role: string = 'user'
   try {
+    // Đảm bảo row profiles tồn tại trong D1 — nếu thiếu, mọi INSERT user-data
+    // (favorites/bookmarks/progress/history/...) vi phạm FK → FOREIGN KEY constraint failed.
+    // Chỉ chạy 1 lần mỗi 5 phút/isolate nhờ cờ ensured trong userCache.
+    if (!cached.ensured) {
+      const ins = await c.env.DB.prepare('INSERT OR IGNORE INTO profiles (id) VALUES (?)').bind(su.id).run()
+      const created = (ins.meta as { changes?: number } | undefined)?.changes ? true : false
+      if (created) {
+        // Profile vừa tạo — đồng bộ role thật từ Supabase profiles (RLS select public).
+        try {
+          const res = await fetch(
+            `${c.env.SUPABASE_URL}/rest/v1/profiles?select=role&id=eq.${encodeURIComponent(su.id)}`,
+            { headers: { apikey: c.env.SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` } }
+          )
+          if (res.ok) {
+            const rows: any[] = await res.json()
+            const r = rows?.[0]?.role
+            if (r === 'admin' || r === 'user') {
+              await c.env.DB.prepare('UPDATE profiles SET role=? WHERE id=?').bind(r, su.id).run()
+            }
+          }
+        } catch {}
+      }
+      cached.ensured = true
+    }
     const row = await c.env.DB.prepare('SELECT role FROM profiles WHERE id = ?').bind(su.id).first<any>()
     if (row?.role) role = row.role
   } catch {}
+
   return { id: su.id, email: su.email, role: role === 'admin' ? 'admin' : 'user', service: false }
 }
 
