@@ -155,8 +155,8 @@ app.post('/api/series/:id/chapters/bulk', async (c) => {
   const skipped = rows.filter(r=>existingOrders.has(r.order_no)).length
   const toInsert = rows.filter(r=>!existingOrders.has(r.order_no))
   const now = nowIso()
-  for (let i=0;i<toInsert.length;i+=12) {
-    const chunk = toInsert.slice(i,i+12)
+  for (let i=0;i<toInsert.length;i+=10) {
+    const chunk = toInsert.slice(i,i+10)
     const placeholders = chunk.map(()=>'(?,?,?,?,?,?,?,?,?)').join(',')
     const vals:any[]=[]; for(const r of chunk) vals.push(r.id,r.series_id,r.order_no,r.title,r.content,r.status,r.word_count,r.published_at,now)
     if(vals.length) await c.env.DB.prepare(`INSERT OR IGNORE INTO chapters (id,series_id,order_no,title,content,status,word_count,published_at,created_at) VALUES ${placeholders}`).bind(...vals).run()

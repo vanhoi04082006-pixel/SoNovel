@@ -117,13 +117,26 @@ export function ChapterBulkImport({ seriesId, existingOrders, onDone }: {
       return
     }
     setSubmitting(true)
+    const total = rows.length
+    const chunkSize = 50
+    let done = 0
+    let totalSkipped = 0
+    const toastId = total > 100 ? toast.loading(`Đang nhập 0/${total}...`) : null
     try {
-      const res = await api.bulkCreateChapters(seriesId, rows.map((r) => ({ orderNo: r.orderNo, title: r.title, content: r.content, status })))
-      toast.success(`Đã nhập ${res.count} chương` + (res.skipped ? ` (bỏ qua ${res.skipped} trùng)` : ''))
+      for (let i = 0; i < rows.length; i += chunkSize) {
+        const chunk = rows.slice(i, i + chunkSize)
+        const res = await api.bulkCreateChapters(seriesId, chunk.map((r) => ({ orderNo: r.orderNo, title: r.title, content: r.content, status })))
+        done += chunk.length
+        totalSkipped += res.skipped ?? 0
+        if (toastId) toast.loading(`Đang nhập ${Math.min(done, total)}/${total}...`, { id: toastId })
+      }
+      if (toastId) toast.dismiss(toastId)
+      toast.success(`Đã nhập ${total} chương` + (totalSkipped ? ` (bỏ qua ${totalSkipped} trùng)` : ''))
       setRows([])
       setOpen(false)
       onDone()
     } catch (e) {
+      if (toastId) toast.dismiss(toastId)
       toast.error('Nhập thất bại: ' + (e as Error).message)
     } finally {
       setSubmitting(false)
