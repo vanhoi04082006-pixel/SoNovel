@@ -28,9 +28,11 @@ npx wrangler deployments list
 # D1 hiện trống (Phase 3 sẽ migrate data Supabase → D1)
 ```
 
-## R2 (Phase 2)
-Cần bật R2 trong Dashboard: https://dash.cloudflare.com/3bc7982e8a2f3c210b766b046fd3557c/r2/overview
-Sau đó: `npx wrangler r2 bucket create sonovel-covers` + uncomment `[[r2_buckets]]` trong `wrangler.toml`
+## R2 (Phase 2 — code xong, chờ enable)
+- Worker: `POST /api/upload` (admin, `x-service-token`, multipart `file`, ≤5MB, `image/*`) → `COVERS.put(covers/<uuid>.<ext>)` → `{url:"/covers/<key>", key}`, `GET /covers/:key` public với `Cache-Control: immutable`.
+- Web: `src/app/api/upload/route.ts` → `uploadToWorker()` qua `WORKER_URL`/`SERVICE_TOKEN`, fallback Supabase Storage nếu Worker trả 503 (R2 chưa enable).
+- Deploy hiện tại `12324a2e…` chưa gắn R2 binding (để tránh lỗi bucket not found) → upload sẽ fallback Supabase, không lỗi.
+- Để kích hoạt R2: bật tại https://dash.cloudflare.com/3bc7982e8a2f3c210b766b046fd3557c/r2/overview → `npx wrangler r2 bucket create sonovel-covers` → uncomment `[[r2_buckets]]` trong `wrangler.toml:11` → `npx wrangler deploy`.
 
 ## Endpoints (Phase 1)
 Public: `GET /health`, `GET /api/tags`, `GET /api/series`, `GET /api/series/:id`, `GET /api/series/:id/chapters`, `GET /api/chapters/:id`

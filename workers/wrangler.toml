@@ -8,8 +8,6 @@ database_name = "sonovel"
 database_id = "00fd3513-159a-4bbd-b4a7-884980cc54e6"
 migrations_dir = "migrations"
 
-# R2 cho ảnh bìa (cần bật R2 trong Dashboard trước: https://dash.cloudflare.com/3bc7982e8a2f3c210b766b046fd3557c/r2/overview )
-# Chạy: npx wrangler r2 bucket create sonovel-covers --remote  (sau khi enable)
-# [[r2_buckets]]
-# binding = "COVERS"
-# bucket_name = "sonovel-covers"
+[[r2_buckets]]
+binding = "COVERS"
+bucket_name = "sonovel-covers"

@@ -23,7 +23,7 @@
 
 ## Tiến độ — Migration Workers + D1 (thêm 2026-08-21)
 - [x] Phase 1 (Worker infra): `workers/` build pass, D1 `sonovel` (00fd3513-...) APAC 13 bảng, `workers/src/index.ts:1` 25+ endpoints, secrets + subdomain `vanhoi04082006`, deploy `https://sonovel-api.vanhoi04082006.workers.dev` (3401fe58…), `npx tsc --noEmit` pass, `eslint src` pass — D1 trống chờ Phase 3 migrate (verify workers.dev bị chặn SSL local, đã xác minh qua `wrangler d1 execute`/`deployments list` + `dev.log` Ready)
-- [ ] Phase 2: R2 covers (cần enable Dashboard) + Worker upload
+- [x] Phase 2: R2 covers — Worker `POST /api/upload` + `GET /covers/:key` (`Env.COVERS:R2Bucket`, ≤5MB `image/*`, `Cache-Control: immutable`), web `src/app/api/upload/route.ts:1` proxy Worker + fallback Supabase, bucket `sonovel-covers` tạo 2026-08-21, `workers/wrangler.toml:11` gắn `[[r2_buckets]]`, deploy `52b291ca…` với `env.COVERS`, verify `r2 object put/get/delete --remote` OK
 - [ ] Phase 3: Migrate Supabase → D1 (series/chapters/tags)
 - [ ] Phase 4: Web proxy (src/app/api/** → Worker)
 - [ ] Phase 5: Mobile → Worker

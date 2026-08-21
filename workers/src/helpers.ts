@@ -2,6 +2,7 @@ import { Context } from 'hono'
 
 export type Env = {
   DB: D1Database
+  COVERS?: R2Bucket
   SUPABASE_URL: string
   SUPABASE_ANON_KEY: string
   SERVICE_TOKEN: string

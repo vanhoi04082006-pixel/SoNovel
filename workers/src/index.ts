@@ -635,6 +635,54 @@ app.get('/api/stats', async (c) => {
   return c.json({ series:seriesCount?.n??0, chapters:chapterCount?.n??0, users:userCount?.n??0, listeners:progressCount?.n??0, byStatus })
 })
 
+// ---------- R2 covers ----------
+
+app.post('/api/upload', async (c) => {
+  await requireAdmin(c)
+  if (!c.env.COVERS) return c.json({ error: 'R2 chưa cấu hình. Vui lòng bật R2 tại https://dash.cloudflare.com/3bc7982e8a2f3c210b766b046fd3557c/r2/overview rồi tạo bucket sonovel-covers.' }, 503)
+  const contentType = c.req.header('content-type') || ''
+  let file: File | null = null
+  let filename = ''
+  let mime = ''
+  if (contentType.includes('multipart/form-data')) {
+    const form = await c.req.formData()
+    const f = form.get('file') || form.get('cover') || form.get('image')
+    if (f && typeof (f as any).arrayBuffer === 'function') { file = f as unknown as File; filename = (f as unknown as File).name || 'cover'; mime = (f as unknown as File).type || 'image/jpeg' }
+  } else {
+    const body: any = await c.req.json().catch(() => null)
+    if (body?.image && typeof body.image === 'string') {
+      const b64 = body.image.replace(/^data:image\/\w+;base64,/, '')
+      const buf = Uint8Array.from(atob(b64), ch => ch.charCodeAt(0))
+      if (buf.length > 5 * 1024 * 1024) return c.json({ error: 'Ảnh vượt quá 5MB.' }, 400)
+      const ext = body.filename?.split('.').pop() || 'jpg'
+      const key = `covers/${uuid()}.${ext}`
+      await c.env.COVERS!.put(key, buf, { httpMetadata: { contentType: mime || 'image/jpeg' } })
+      return c.json({ url: `/covers/${key.replace('covers/','')}`, key })
+    }
+  }
+  if (!file) return c.json({ error: 'Thiếu file ảnh.' }, 400)
+  if (file.size > 5 * 1024 * 1024) return c.json({ error: 'Ảnh vượt quá 5MB.' }, 400)
+  if (file.type && !file.type.startsWith('image/')) return c.json({ error: 'Chỉ chấp nhận file ảnh.' }, 400)
+  const ext = (filename.split('.').pop() || mime.split('/')[1] || 'jpg').toLowerCase().replace(/[^a-z0-9]/g,'') || 'jpg'
+  const key = `covers/${uuid()}.${ext}`
+  const buf = new Uint8Array(await file.arrayBuffer())
+  await c.env.COVERS!.put(key, buf, { httpMetadata: { contentType: file.type || 'image/jpeg' } })
+  return c.json({ url: `/covers/${key.replace('covers/','')}`, key })
+})
+
+app.get('/covers/:key', async (c) => {
+  if (!c.env.COVERS) return c.json({ error: 'R2 chưa cấu hình' }, 503)
+  const key = c.req.param('key')
+  if (!key || key.includes('..') || key.includes('/')) return c.json({ error: 'Key không hợp lệ' }, 400)
+  const obj = await c.env.COVERS!.get(`covers/${key}`)
+  if (!obj) return c.json({ error: 'Không tìm thấy ảnh' }, 404)
+  const headers = new Headers()
+  headers.set('Content-Type', obj.httpMetadata?.contentType || 'image/jpeg')
+  headers.set('Cache-Control', 'public, max-age=31536000, immutable')
+  if (obj.httpMetadata?.contentType) headers.set('Content-Type', obj.httpMetadata.contentType)
+  return new Response(obj.body, { headers })
+})
+
 // ---------- ADMIN helpers ----------
 
 app.get('/api/profiles/roles', async (c) => {
