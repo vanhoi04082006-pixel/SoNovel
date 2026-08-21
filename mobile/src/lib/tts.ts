@@ -2,7 +2,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { EventSubscription } from 'expo-modules-core';
 import { supabase } from './supabase';
 import { getUserId } from './session';
+import { getChapterContent } from './chapters';
 import { nativeTts, TtsState, TtsProgress } from './nativeTts';
+import { workerJson } from './worker';
 
 /**
  * JS state manager cho native TTS module (theo §8.5).
@@ -16,7 +18,7 @@ import { nativeTts, TtsState, TtsProgress } from './nativeTts';
 export type TtsChapter = {
   id: string;
   title: string;
-  content: string;
+  content?: string;
   order_no: number;
   word_count?: number;
 };
@@ -28,6 +30,7 @@ export type NowPlaying = {
   chapters: TtsChapter[];
   currentIndex: number;
   currentChar: number;
+  charLength: number;
   rate: number;
   isPlaying: boolean;
   busy: boolean;
@@ -53,10 +56,45 @@ let coverUrl = '';
 let chapters: TtsChapter[] = [];
 let currentIndex = 0;
 let currentChar = 0;
+let currentCharLength = 0;
 let rate = 1.0;
 let isPlaying = false;
 let busy = false;
 let seriesEnded = false;
+
+// ---------- Cache nội dung chương (lazy load theo yêu cầu) ----------
+const contentCache = new Map<string, string>();
+
+/**
+ * Đảm bảo nội dung của chương `idx` đã có (tải + cache nếu chưa).
+ * Trả về nội dung (string) hoặc null nếu không tải được.
+ */
+export async function ensureChapterContent(idx: number): Promise<string | null> {
+  const ch = chapters[idx];
+  if (!ch) return null;
+  if (ch.content) {
+    currentCharLength = ch.content.length;
+    return ch.content;
+  }
+  const cached = contentCache.get(ch.id);
+  if (cached !== undefined) {
+    ch.content = cached;
+    currentCharLength = cached.length;
+    emitLocal('nowPlaying');
+    return cached;
+  }
+  try {
+    const row = await getChapterContent(seriesId!, ch.id);
+    const content = row?.content ?? '';
+    ch.content = content;
+    contentCache.set(ch.id, content);
+    currentCharLength = content.length;
+    emitLocal('nowPlaying');
+    return content;
+  } catch (_e) {
+    return ch.content ?? null;
+  }
+}
 
 // ---------- Local event bus ----------
 const listeners = new Map<string, Set<(payload?: any) => void>>();
@@ -152,10 +190,20 @@ export async function flushTtsSave(): Promise<void> {
   if (!seriesId) return;
   const chapter = chapters[currentIndex];
   if (!chapter) return;
-  // Luôn lưu local (chạy cả khi chưa đăng nhập)
   await saveLocalProgress(seriesId, chapter.id, currentChar);
   const userId = getUserId();
   if (!userId) return;
+  try {
+    await workerJson('/api/progress', {
+      method: 'PUT',
+      body: JSON.stringify({
+        seriesId,
+        listenChapterId: chapter.id,
+        listenCharIndex: currentChar,
+        playbackSpeed: rate,
+      }),
+    });
+  } catch {}
   try {
     await supabase.from('progress').upsert({
       user_id: userId,
@@ -167,9 +215,7 @@ export async function flushTtsSave(): Promise<void> {
       last_listened_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id,series_id' });
-  } catch (_e) {
-    // Bỏ qua lỗi mạng — chạy cả khi app ở nền
-  }
+  } catch {}
 }
 
 // ---------- State polling (sync UI với native) ----------
@@ -189,17 +235,12 @@ function startPolling() {
       const wasPlaying = isPlaying;
       isPlaying = state.playing;
 
-      // Detect chapter change
-      if (state.chapterIndex !== currentIndex) {
-        currentIndex = state.chapterIndex;
+      // Chỉ sync charIndex (progress) — currentIndex do JS điều phối chương
+      // (native không còn giữ list chương).
+      if (state.charIndex !== currentChar) {
         currentChar = state.charIndex;
-        emitLocal('chapterChange', { chapterIndex: currentIndex });
-        emitLocal('nowPlaying');
-        scheduleSave();
-      } else if (state.charIndex !== currentChar) {
-        // Update charIndex (progress)
-        currentChar = state.charIndex;
-        const charLength = state.charLength || 0;
+        if (state.charLength) currentCharLength = state.charLength;
+        const charLength = state.charLength || currentCharLength || 0;
         const fraction = charLength > 0 ? currentChar / charLength : 0;
         emitLocal('progress', {
           chapterIndex: currentIndex,
@@ -296,10 +337,11 @@ function wireNative() {
 
   subs.push(
     nativeTts.addListener('onProgress', (event: TtsProgress) => {
-      currentIndex = event.chapterIndex;
+      // Chỉ sync charIndex (progress) — currentIndex do JS điều phối chương.
       currentChar = event.charIndex;
+      currentCharLength = event.charLength;
       clearBusy();
-      emitLocal('progress', event);
+      emitLocal('progress', { ...event, chapterIndex: currentIndex });
       scheduleSave();
     })
   );
@@ -316,16 +358,13 @@ function wireNative() {
     nativeTts.addListener('onChapterEnd', (event: { chapterIndex: number }) => {
       scheduleSave();
       emitLocal('chapterEnd', event);
+      advanceToNextChapter();
     })
   );
 
   subs.push(
-    nativeTts.addListener('onChapterChange', (event: { chapterIndex: number }) => {
-      currentIndex = event.chapterIndex;
-      currentChar = 0;
-      emitLocal('chapterChange', event);
-      emitLocal('nowPlaying');
-      scheduleSave();
+    nativeTts.addListener('onChapterSeek', (event: { direction: number }) => {
+      seekChapterBy(event.direction);
     })
   );
 
@@ -358,6 +397,7 @@ export function getNowPlaying(): NowPlaying {
     chapters,
     currentIndex,
     currentChar,
+    charLength: currentCharLength,
     rate,
     isPlaying,
     busy,
@@ -408,14 +448,29 @@ export async function startTts(opts: {
   emitLocal('nowPlaying');
 
   try {
-    const chaptersJson = JSON.stringify(
-      opts.chapters.map((c) => ({ title: c.title, content: c.content }))
-    );
+    const start = opts.chapters[currentIndex] ?? opts.chapters[0];
+    if (!start) {
+      setBusy(false);
+      stopPolling();
+      emitLocal('error', { code: 500, message: 'Không có chương để phát' });
+      return;
+    }
+    // Lazy-load nội dung chương bắt đầu (metadata đã có, content tải theo yêu cầu).
+    const content = await ensureChapterContent(currentIndex);
+    if (content == null) {
+      setBusy(false);
+      stopPolling();
+      emitLocal('error', { code: 500, message: 'Không tải được nội dung chương' });
+      return;
+    }
+    // Native chỉ nhận NỘI DUNG 1 chương tại thời điểm phát (tránh Intent quá lớn
+    // → TransactionTooLargeException). Việc chuyển chương do JS điều phối ở đây.
     await nativeTts.play(
       opts.seriesTitle,
       opts.coverUrl,
-      chaptersJson,
-      currentIndex,
+      currentIndex + 1,
+      start.title,
+      content,
       currentChar,
       rate
     );
@@ -423,23 +478,34 @@ export async function startTts(opts: {
   } catch (e: any) {
     setBusy(false);
     stopPolling();
+    const detail = (e as any)?.nativeStackAndroid || (e as any)?.cause?.message || '';
+    console.warn('[SoNovel] startTts thất bại:', e?.message ?? e, detail ? ` | ${detail}` : '');
     emitLocal('error', { code: 500, message: `Không thể start TTS: ${e?.message ?? e}` });
+  }
+}
+
+async function sendPlayChapter(idx: number, startChar: number) {
+  const ch = chapters[idx];
+  if (!ch) return;
+  setBusy(true);
+  emitLocal('nowPlaying');
+  try {
+    const content = await ensureChapterContent(idx);
+    if (content == null) throw new Error('Không tải được nội dung chương');
+    await nativeTts.playChapter(idx + 1, ch.title, content, startChar);
+  } catch (e: any) {
+    setBusy(false);
+    emitLocal('error', { code: 500, message: `playChapter lỗi: ${e?.message ?? e}` });
   }
 }
 
 export async function playChapterTts(idx: number, startChar = 0): Promise<void> {
   if (!seriesId) return;
+  if (idx < 0 || idx >= chapters.length) return;
   currentIndex = idx;
   currentChar = startChar;
   seriesEnded = false;
-  setBusy(true);
-  emitLocal('nowPlaying');
-  try {
-    await nativeTts.playChapter(idx, startChar);
-  } catch (e: any) {
-    setBusy(false);
-    emitLocal('error', { code: 500, message: `playChapter lỗi: ${e?.message ?? e}` });
-  }
+  await sendPlayChapter(idx, startChar);
 }
 
 export async function pauseTts(): Promise<void> {
@@ -543,12 +609,39 @@ export async function nextChapterTts(): Promise<void> {
     emitLocal('nowPlaying');
     return;
   }
-  setBusy(true);
-  try { await nativeTts.nextChapter(); } catch (_e) {}
+  seekChapterBy(1);
 }
 
 export async function prevChapterTts(): Promise<void> {
   if (currentIndex <= 0) return;
-  setBusy(true);
-  try { await nativeTts.prevChapter(); } catch (_e) {}
+  seekChapterBy(-1);
+}
+
+// ---------- Điều phối chương (JS là nguồn duy nhất của danh sách chương) ----------
+
+/** Native báo hết 1 chương → tiến sang chương kế, hoặc kết thúc series nếu hết. */
+function advanceToNextChapter() {
+  if (currentIndex + 1 >= chapters.length) {
+    seriesEnded = true;
+    isPlaying = false;
+    clearBusy();
+    stopPolling();
+    flushTtsSave().catch(() => {});
+    emitLocal('seriesEnd');
+    return;
+  }
+  seekChapterBy(1);
+}
+
+/** Đổi chương theo hướng (+1/-1) rồi gửi nội dung chương mới cho native. */
+function seekChapterBy(direction: number) {
+  const nextIdx = currentIndex + direction;
+  if (nextIdx < 0 || nextIdx >= chapters.length) return;
+  currentIndex = nextIdx;
+  currentChar = 0;
+  currentCharLength = 0;
+  seriesEnded = false;
+  emitLocal('chapterChange', { chapterIndex: nextIdx });
+  emitLocal('nowPlaying');
+  sendPlayChapter(nextIdx, 0);
 }
