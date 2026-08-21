@@ -186,15 +186,15 @@ export function ChapterBulkImport({ seriesId, existingOrders, onDone }: {
       </Button>
 
       <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset() }}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+          <DialogHeader className="shrink-0">
             <DialogTitle>Nhập chương hàng loạt</DialogTitle>
             <DialogDescription>
               Tải lên từ file <code className="text-xs">.txt</code> hoặc nhập từ thư mục trên máy chủ (admin local).
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex items-center gap-1 rounded-lg bg-muted p-1">
+          <div className="flex items-center gap-1 rounded-lg bg-muted p-1 shrink-0">
             <button
               onClick={() => { setMode('files'); setFolderRows(null) }}
               className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${mode === 'files' ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
@@ -258,7 +258,7 @@ export function ChapterBulkImport({ seriesId, existingOrders, onDone }: {
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto rounded-lg border border-border divide-y divide-border">
+              <div className="flex-1 overflow-y-auto max-h-[38vh] min-h-0 rounded-lg border border-border divide-y divide-border">
                 {rows.map((r) => {
                   const dup = orderDuplicates.has(r.orderNo) || existingOrders.includes(r.orderNo)
                   return (
@@ -312,7 +312,7 @@ export function ChapterBulkImport({ seriesId, existingOrders, onDone }: {
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Tên file: <span className="font-medium">Chương 1_ Khởi Đầu Mới.txt</span> → chương số 1, tiêu đề
-                  <span className="font-medium"> Chương 1: Khởi Đầu Mới</span>. Trạng thái: <span className="font-medium">Đã đăng</span>.
+                  <span className="font-medium">Khởi Đầu Mới</span>. Trạng thái: <span className="font-medium">Đã đăng</span>.
                 </p>
               </div>
 
@@ -328,12 +328,12 @@ export function ChapterBulkImport({ seriesId, existingOrders, onDone }: {
                       )}
                     </div>
                   </div>
-                  <div className="flex-1 overflow-y-auto rounded-lg border border-border divide-y divide-border">
+                  <div className="flex-1 overflow-y-auto max-h-[38vh] min-h-0 rounded-lg border border-border divide-y divide-border">
                     {folderRows.map((r) => (
                       <div key={r.fileName} className={`flex items-center gap-2 px-3 py-2 ${r.exists ? 'opacity-50' : ''}`}>
                         <span className="grid h-8 w-10 shrink-0 place-items-center rounded-md bg-muted text-xs font-semibold">{r.orderNo}</span>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium line-clamp-1">{r.title}</p>
+                          <p className="text-sm font-medium line-clamp-1">{r.title || `Chương ${r.orderNo}`}</p>
                           <p className="text-xs text-muted-foreground truncate">{r.fileName}{r.exists && <span className="text-muted-foreground"> · đã có</span>}</p>
                         </div>
                       </div>
@@ -344,7 +344,7 @@ export function ChapterBulkImport({ seriesId, existingOrders, onDone }: {
             </div>
           )}
 
-          <DialogFooter className="gap-2">
+          <DialogFooter className="gap-2 shrink-0">
             <Button variant="ghost" onClick={() => { setOpen(false); reset() }} disabled={submitting}>Hủy</Button>
             {mode === 'files' ? (
               <Button onClick={submit} disabled={rows.length === 0 || submitting || hasConflict}>

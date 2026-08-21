@@ -1,9 +1,8 @@
 // SoNovel — parse tên file chương khi nhập hàng loạt.
 // Quy ước: "Chương 1_ Khởi Đầu Mới.txt"
 //   - orderNo = số trong "Chương N" (nếu có)
-//   - title   = toàn bộ tên file bỏ ".txt", giữ tiền tố "Chương N",
-//               thay "_" bằng ":" (vì ":" không hợp lệ trong tên file Windows)
-//   Ví dụ: "Chương 1_ Khởi Đầu Mới.txt" → orderNo 1, title "Chương 1: Khởi Đầu Mới"
+//   - title   = phần sau "Chương N" (bỏ tiền tố), "_" → " "
+//   Ví dụ: "Chương 1_ Khởi Đầu Mới.txt" → orderNo 1, title "Khởi Đầu Mới"
 //          "Chương 3.txt"               → orderNo 3, title "Chương 3"
 
 export type ParsedChapterFilename = {
@@ -13,13 +12,14 @@ export type ParsedChapterFilename = {
 
 export function parseChapterFilename(filename: string): ParsedChapterFilename {
   const base = filename.replace(/\.txt$/i, '').trim()
-  const m = base.match(/^Chương\s*(\d+)/i)
+  const m = base.match(/^Chương\s*(\d+)\s*[:_\-]?\s*(.*)$/i)
   const orderNo = m ? parseInt(m[1], 10) : null
-  return { orderNo, title: normalizeTitle(base) }
+  const rawTitle = m && m[2] ? m[2] : base
+  return { orderNo, title: normalizeTitle(rawTitle || base) }
 }
 
 function normalizeTitle(raw: string): string {
-  return raw.replace(/_/g, ':').replace(/\s+/g, ' ').trim()
+  return raw.replace(/_/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
 // Sắp xếp tên file theo thứ tự tự nhiên ("Chương 2" trước "Chương 10")
