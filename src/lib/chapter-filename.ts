@@ -2,7 +2,8 @@
 // Quy ước: "Chương 1_ Khởi Đầu Mới.txt"
 //   - orderNo = số trong "Chương N" (nếu có)
 //   - title   = phần sau "Chương N" (bỏ tiền tố), "_" → " "
-//   Ví dụ: "Chương 1_ Khởi Đầu Mới.txt" → orderNo 1, title "Khởi Đầu Mới"
+//   Ví dụ: "Chương 0_ Mở đầu.txt"       → orderNo 0, title "Mở đầu" (dùng cho Lời mở đầu)
+//          "Chương 1_ Khởi Đầu Mới.txt" → orderNo 1, title "Khởi Đầu Mới"
 //          "Chương 3.txt"               → orderNo 3, title "Chương 3"
 
 export type ParsedChapterFilename = {

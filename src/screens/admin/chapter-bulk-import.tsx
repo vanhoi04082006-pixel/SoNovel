@@ -60,7 +60,7 @@ export function ChapterBulkImport({ seriesId, existingOrders, onDone }: {
     return sorted.map((p) => {
       let no = p.orderNo
       let autoRenumbered = false
-      if (no == null || no < 1 || used.has(no)) {
+      if (no == null || no < 0 || used.has(no)) {
         while (used.has(nextFree)) nextFree++
         no = nextFree
         nextFree++
@@ -266,7 +266,7 @@ export function ChapterBulkImport({ seriesId, existingOrders, onDone }: {
                       <Input
                         type="number"
                         value={r.orderNo}
-                        min={1}
+                        min={0}
                         onChange={(e) => updateRow(r.fileId, { orderNo: Number(e.target.value) })}
                         className={`w-16 h-8 text-xs ${dup ? 'border-destructive' : ''}`}
                       />
@@ -311,8 +311,7 @@ export function ChapterBulkImport({ seriesId, existingOrders, onDone }: {
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Tên file: <span className="font-medium">Chương 1_ Khởi Đầu Mới.txt</span> → chương số 1, tiêu đề
-                  <span className="font-medium">Khởi Đầu Mới</span>. Trạng thái: <span className="font-medium">Đã đăng</span>.
+                  VD: <span className="font-medium">Chương 0_ Mở đầu.txt</span> → chương 0, <span className="font-medium">Chương 1_ Khởi Đầu Mới.txt</span> → chương 1, tiêu đề <span className="font-medium">Khởi Đầu Mới</span>. Trạng thái: <span className="font-medium">Đã đăng</span>.
                 </p>
               </div>
 

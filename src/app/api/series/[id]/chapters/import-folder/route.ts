@@ -46,7 +46,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const previewRows = entries
         .map((file) => {
           const { orderNo, title } = parseChapterFilename(file)
-          if (orderNo == null || orderNo < 1) return null
+          if (orderNo == null || orderNo < 0) return null
           return { fileName: file, orderNo, title, exists: existingOrders.has(orderNo) }
         })
         .filter((r): r is NonNullable<typeof r> => r !== null)
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const chapters: any[] = []
     for (const file of entries) {
       const { orderNo, title } = parseChapterFilename(file)
-      if (orderNo == null || orderNo < 1) continue
+      if (orderNo == null || orderNo < 0) continue
       if (existingOrders.has(orderNo)) {
         skipped.push(file)
         continue

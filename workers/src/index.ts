@@ -148,7 +148,7 @@ app.post('/api/series/:id/chapters/bulk', async (c) => {
     id: uuid(), series_id: id, order_no: Number(ch.orderNo), title: String(ch.title||'').trim(),
     content: String(ch.content||''), status: ch.status==='draft'?'draft':'published',
     word_count: chapterWordCount(String(ch.content||'')), published_at: ch.status==='draft'?null:nowIso()
-  })).filter(r => r.title && !isNaN(r.order_no) && r.order_no>0)
+  })).filter(r => r.title && !isNaN(r.order_no) && r.order_no>=0)
   if (rows.length===0) return c.json({ error: 'Không có chương hợp lệ (thiếu tiêu đề hoặc số thứ tự).' }, 400)
   const existing = await c.env.DB.prepare('SELECT order_no FROM chapters WHERE series_id=?').bind(id).all<any>()
   const existingOrders = new Set((existing.results??[]).map(r=>r.order_no))
