@@ -284,17 +284,29 @@ create policy "profiles_insert_owner"
 create policy "profiles_update_owner"
   on public.profiles for update using (auth.uid() = id) with check (auth.uid() = id);
 
--- series: select public; insert/update/delete chỉ admin
+-- series: select public chỉ thấy published/completed; insert/update/delete chỉ admin
 create policy "series_select_public"
-  on public.series for select using (true);
+  on public.series for select
+  using (status in ('published', 'completed') or public.is_admin());
 create policy "series_write_admin"
   on public.series for all
   using (public.is_admin())
   with check (public.is_admin());
 
--- chapters: select public; insert/update/delete chỉ admin
+-- chapters: select public chỉ thấy chapter published của series hiển thị; write admin
 create policy "chapters_select_public"
-  on public.chapters for select using (true);
+  on public.chapters for select
+  using (
+    public.is_admin()
+    or (
+      status = 'published'
+      and exists (
+        select 1 from public.series s
+        where s.id = chapters.series_id
+          and s.status in ('published', 'completed')
+      )
+    )
+  );
 create policy "chapters_write_admin"
   on public.chapters for all
   using (public.is_admin())

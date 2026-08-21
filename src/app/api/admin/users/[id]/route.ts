@@ -15,6 +15,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }
       const { res, json } = await proxyToWorker(`/api/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify({ role: body.role }), admin: true })
       if (!res.ok) return NextResponse.json(json, { status: res.status })
+      // Đồng bộ cả Supabase profiles để web (đọc role từ Supabase) khớp Worker (đọc role từ D1)
+      try {
+        const admin = createAdminSupabase()
+        await admin.from('profiles').upsert({ id, role: body.role }, { onConflict: 'id' })
+      } catch {}
       return NextResponse.json({ ok: true })
     }
 

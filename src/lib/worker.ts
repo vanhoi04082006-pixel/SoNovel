@@ -46,11 +46,14 @@ export async function proxyToWorker(
   if (isFormData) delete headers['Content-Type']
   let res: Response
   try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 25_000)
     res = await fetch(url, {
       method: init.method || 'GET',
       headers,
       body: init.body as any,
-    })
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timer))
   } catch (e) {
     const msg = (e as Error).message || String(e)
     throw new Error(`Worker fetch failed: ${msg} (url=${url})`)

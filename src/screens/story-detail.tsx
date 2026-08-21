@@ -5,6 +5,7 @@ import { Heart, Share2, Play, Headphones, ChevronLeft, BookOpen, Search as Searc
 import { useAppStore } from '@/store/use-app-store'
 import { api, type SeriesDetail, type ChapterItem } from '@/lib/api-client'
 import { CoverImage } from '@/components/sonovel/cover-image'
+import { StoryCard } from '@/components/sonovel/story-card'
 import { EmptyState } from '@/components/sonovel/empty-state'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -24,8 +25,16 @@ export function StoryDetailScreen() {
   const [loading, setLoading] = useState(true)
   const [chapterFilter, setChapterFilter] = useState('')
   const [visibleChapters, setVisibleChapters] = useState(200)
+  const [related, setRelated] = useState<SeriesItem[]>([])
   const playChapter = usePlayerStore((s) => s.playChapter)
   const setPlayerActive = useAppStore((s) => s.setPlayerActive)
+
+  useEffect(() => {
+    let cancelled = false
+    if (!seriesId) return
+    api.getRelated(seriesId, 6).then((r) => { if (!cancelled) setRelated(r.items) }).catch(() => {})
+    return () => { cancelled = true }
+  }, [seriesId])
 
   const load = useCallback(async () => {
     if (!seriesId) return
@@ -346,6 +355,18 @@ export function StoryDetailScreen() {
           </button>
         )}
       </div>
+
+      {/* Related stories */}
+      {related.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-lg font-semibold">Có thể bạn sẽ thích</h2>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6 sm:gap-4">
+            {related.map((s) => (
+              <StoryCard key={s.id} series={s} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

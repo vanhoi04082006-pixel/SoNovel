@@ -39,6 +39,24 @@ app.get('/api/settings/goal', async (c) => {
 
 // ---------- helpers for D1 ----------
 
+function jsonArr(text: unknown): string[] {
+  if (Array.isArray(text)) return text as string[]
+  if (typeof text !== 'string' || !text) return []
+  try {
+    const v = JSON.parse(text)
+    return Array.isArray(v) ? v : []
+  } catch { return [] }
+}
+
+function pageParams(url: URL, defLimit = 100, max = 200): { limit: number; offset: number } {
+  const l = Number(url.searchParams.get('limit') ?? defLimit)
+  const o = Number(url.searchParams.get('offset') ?? 0)
+  return {
+    limit: Number.isFinite(l) ? Math.min(max, Math.max(1, Math.trunc(l))) : defLimit,
+    offset: Number.isFinite(o) && o > 0 ? Math.trunc(o) : 0,
+  }
+}
+
 async function recalcSeriesWordCount(db: D1Database, seriesId: string) {
   try {
     const r = await db.prepare("SELECT COALESCE(SUM(word_count),0) as s FROM chapters WHERE series_id=? AND status='published'").bind(seriesId).first<any>()
@@ -93,6 +111,28 @@ app.get('/api/series/:id', async (c) => {
   })
   if (result === null) return c.json({ error: 'Không tìm thấy truyện.' }, 404)
   return c.json(result)
+})
+
+app.get('/api/series/:id/related', async (c) => {
+  const id = c.req.param('id')
+  const rawLimit = Number(new URL(c.req.url).searchParams.get('limit') || 6)
+  const limit = Number.isFinite(rawLimit) ? Math.min(12, Math.max(1, Math.trunc(rawLimit))) : 6
+  const s = await c.env.DB.prepare('SELECT genres, tags FROM series WHERE id=?').bind(id).first<any>()
+  if (!s) return c.json({ items: [] })
+  const genres: string[] = jsonArr(s.genres)
+  const tags: string[] = jsonArr(s.tags)
+  if (!genres.length && !tags.length) return c.json({ items: [] })
+  const rows = await c.env.DB.prepare("SELECT id, title, author, description, cover_url, status, genres, tags, word_count, created_at, updated_at FROM series WHERE id != ? AND status IN ('published','completed')").bind(id).all<any>()
+  const scored = (rows.results ?? []).map((r: any) => {
+    const rg = jsonArr(r.genres)
+    const rt = jsonArr(r.tags)
+    let score = 0
+    for (const g of genres) if (rg.includes(g)) score += 2
+    for (const t of tags) if (rt.includes(t)) score += 1
+    return { row: r, score }
+  }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score).slice(0, limit)
+  const items = scored.map(({ row }) => mapSeries(row as SeriesRow))
+  return c.json({ items })
 })
 
 app.get('/api/series/:id/chapters', async (c) => {
@@ -225,8 +265,10 @@ app.post('/api/series/create', async (c) => {
   const st = valid.includes(body.status)?body.status:'published'
   const genres = Array.isArray(body.genres)?body.genres:String(body.genres||'').split(',').map((x:string)=>x.trim()).filter(Boolean)
   const tags = Array.isArray(body.tags)?body.tags:String(body.tags||'').split(',').map((x:string)=>x.trim()).filter(Boolean)
-  const nid=uuid(); const now=nowIso()
-  await c.env.DB.prepare('INSERT INTO series (id,title,author,description,cover_url,status,genres,tags,word_count,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+  const nid = (body.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(body.id))) ? String(body.id) : uuid()
+  const now=nowIso()
+  // Upsert theo id — retry/fallback an toàn, không tạo trùng lặp
+  await c.env.DB.prepare('INSERT INTO series (id,title,author,description,cover_url,status,genres,tags,word_count,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title, author=excluded.author, description=excluded.description, cover_url=excluded.cover_url, status=excluded.status, genres=excluded.genres, tags=excluded.tags, updated_at=excluded.updated_at')
     .bind(nid, String(body.title).trim(), String(body.author||'').trim(), String(body.description||'').trim(), String(body.coverUrl||'').trim(), st, JSON.stringify(genres), JSON.stringify(tags), 0, now, now).run()
   invalidateAll()
   return c.json({ ok: true, series: { id: nid } })
@@ -388,10 +430,12 @@ app.get('/api/progress/all', async (c) => {
 
 app.get('/api/favorites', async (c) => {
   const u=await getAuth(c)
-  if(!u) return c.json({ items: [] })
-  const rows=await c.env.DB.prepare('SELECT f.created_at as favorited_at, s.* FROM favorites f JOIN series s ON s.id=f.series_id WHERE f.user_id=? ORDER BY f.created_at DESC').bind(u.id).all<any>()
+  if(!u) return c.json({ items: [], total: 0 })
+  const { limit, offset } = pageParams(new URL(c.req.url))
+  const countRow=await c.env.DB.prepare('SELECT COUNT(*) as n FROM favorites WHERE user_id=?').bind(u.id).first<any>()
+  const rows=await c.env.DB.prepare('SELECT f.created_at as favorited_at, s.* FROM favorites f JOIN series s ON s.id=f.series_id WHERE f.user_id=? ORDER BY f.created_at DESC LIMIT ? OFFSET ?').bind(u.id, limit, offset).all<any>()
   const items=(rows.results??[]).map((r:any)=>({ id:r.id, title:r.title, author:r.author, coverUrl:r.cover_url, status:r.status, genres:(()=>{try{return JSON.parse(r.genres)}catch{return []}})(), tags:(()=>{try{return JSON.parse(r.tags)}catch{return []}})(), wordCount:r.word_count, chapterCount:null, updatedAt:r.updated_at, favoritedAt:r.favorited_at }))
-  return c.json({ items })
+  return c.json({ items, total: countRow?.n ?? 0 })
 })
 app.post('/api/favorites', async (c) => {
   const u=await requireUser(c)
@@ -405,10 +449,12 @@ app.post('/api/favorites', async (c) => {
 
 app.get('/api/history', async (c) => {
   const u=await getAuth(c)
-  if(!u) return c.json({ items:[] })
-  const rows=await c.env.DB.prepare('SELECT h.opened_count, h.last_opened_at, s.* FROM history h JOIN series s ON s.id=h.series_id WHERE h.user_id=? ORDER BY h.last_opened_at DESC LIMIT 20').bind(u.id).all<any>()
+  if(!u) return c.json({ items:[], total:0 })
+  const { limit, offset } = pageParams(new URL(c.req.url), 50)
+  const countRow=await c.env.DB.prepare('SELECT COUNT(*) as n FROM history WHERE user_id=?').bind(u.id).first<any>()
+  const rows=await c.env.DB.prepare('SELECT h.opened_count, h.last_opened_at, s.* FROM history h JOIN series s ON s.id=h.series_id WHERE h.user_id=? ORDER BY h.last_opened_at DESC LIMIT ? OFFSET ?').bind(u.id, limit, offset).all<any>()
   const items=(rows.results??[]).map((r:any)=>({ id:r.id, title:r.title, author:r.author, coverUrl:r.cover_url, status:r.status, genres:(()=>{try{return JSON.parse(r.genres)}catch{return []}})(), wordCount:r.word_count, chapterCount:null, updatedAt:r.updated_at, openedCount:r.opened_count, lastOpenedAt:r.last_opened_at }))
-  return c.json({ items })
+  return c.json({ items, total: countRow?.n ?? 0 })
 })
 app.post('/api/history', async (c) => {
   const u=await getAuth(c)
@@ -468,10 +514,12 @@ app.get('/api/continue-listening', async (c) => {
 
 app.get('/api/bookmarks', async (c) => {
   const u=await getAuth(c)
-  if(!u) return c.json({ items:[] })
-  const rows=await c.env.DB.prepare('SELECT b.id, b.series_id, b.chapter_id, b.char_index, b.note, b.created_at, s.id as s_id, s.title as s_title, s.cover_url as s_cover_url FROM bookmarks b LEFT JOIN series s ON s.id=b.series_id WHERE b.user_id=? ORDER BY b.created_at DESC').bind(u.id).all<any>()
+  if(!u) return c.json({ items:[], total:0 })
+  const { limit, offset } = pageParams(new URL(c.req.url))
+  const countRow=await c.env.DB.prepare('SELECT COUNT(*) as n FROM bookmarks WHERE user_id=?').bind(u.id).first<any>()
+  const rows=await c.env.DB.prepare('SELECT b.id, b.series_id, b.chapter_id, b.char_index, b.note, b.created_at, s.id as s_id, s.title as s_title, s.cover_url as s_cover_url FROM bookmarks b LEFT JOIN series s ON s.id=b.series_id WHERE b.user_id=? ORDER BY b.created_at DESC LIMIT ? OFFSET ?').bind(u.id, limit, offset).all<any>()
   const items=(rows.results??[]).map((r:any)=>({ id:r.id, seriesId:r.series_id, chapterId:r.chapter_id, charIndex:r.char_index, note:r.note, createdAt:r.created_at, series: r.s_id?{ id:r.s_id, title:r.s_title, coverUrl:r.s_cover_url }:null }))
-  return c.json({ items })
+  return c.json({ items, total: countRow?.n ?? 0 })
 })
 app.post('/api/bookmarks', async (c) => {
   const u=await requireUser(c)
@@ -651,36 +699,53 @@ app.get('/api/stats', async (c) => {
 
 // ---------- R2 covers ----------
 
+// Sniff magic bytes để xác thực ảnh thật (không tin MIME client khai báo).
+function sniffImage(buf: Uint8Array): { mime: string; ext: string } | null {
+  const b = buf
+  if (b.length < 12) return null
+  // PNG
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47 && b[4] === 0x0d && b[5] === 0x0a) return { mime: 'image/png', ext: 'png' }
+  // JPEG
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return { mime: 'image/jpeg', ext: 'jpg' }
+  // GIF
+  if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38) return { mime: 'image/gif', ext: 'gif' }
+  // WEBP
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return { mime: 'image/webp', ext: 'webp' }
+  // BMP
+  if (b[0] === 0x42 && b[1] === 0x4d) return { mime: 'image/bmp', ext: 'bmp' }
+  return null
+}
+
 app.post('/api/upload', async (c) => {
   await requireAdmin(c)
   if (!c.env.COVERS) return c.json({ error: 'R2 chưa cấu hình. Vui lòng bật R2 tại https://dash.cloudflare.com/3bc7982e8a2f3c210b766b046fd3557c/r2/overview rồi tạo bucket sonovel-covers.' }, 503)
   const contentType = c.req.header('content-type') || ''
   let file: File | null = null
-  let filename = ''
-  let mime = ''
   if (contentType.includes('multipart/form-data')) {
     const form = await c.req.formData()
     const f = form.get('file') || form.get('cover') || form.get('image')
-    if (f && typeof (f as any).arrayBuffer === 'function') { file = f as unknown as File; filename = (f as unknown as File).name || 'cover'; mime = (f as unknown as File).type || 'image/jpeg' }
+    if (f && typeof (f as any).arrayBuffer === 'function') { file = f as unknown as File }
   } else {
     const body: any = await c.req.json().catch(() => null)
     if (body?.image && typeof body.image === 'string') {
       const b64 = body.image.replace(/^data:image\/\w+;base64,/, '')
       const buf = Uint8Array.from(atob(b64), ch => ch.charCodeAt(0))
       if (buf.length > 5 * 1024 * 1024) return c.json({ error: 'Ảnh vượt quá 5MB.' }, 400)
-      const ext = body.filename?.split('.').pop() || 'jpg'
-      const key = `covers/${uuid()}.${ext}`
-      await c.env.COVERS!.put(key, buf, { httpMetadata: { contentType: mime || 'image/jpeg' } })
+      const sniffed = sniffImage(buf)
+      if (!sniffed) return c.json({ error: 'File không phải ảnh hợp lệ (PNG/JPEG/GIF/WEBP/BMP).' }, 400)
+      const key = `covers/${uuid()}.${sniffed.ext}`
+      await c.env.COVERS!.put(key, buf, { httpMetadata: { contentType: sniffed.mime } })
       return c.json({ url: `/covers/${key.replace('covers/','')}`, key })
     }
   }
   if (!file) return c.json({ error: 'Thiếu file ảnh.' }, 400)
   if (file.size > 5 * 1024 * 1024) return c.json({ error: 'Ảnh vượt quá 5MB.' }, 400)
-  if (file.type && !file.type.startsWith('image/')) return c.json({ error: 'Chỉ chấp nhận file ảnh.' }, 400)
-  const ext = (filename.split('.').pop() || mime.split('/')[1] || 'jpg').toLowerCase().replace(/[^a-z0-9]/g,'') || 'jpg'
-  const key = `covers/${uuid()}.${ext}`
   const buf = new Uint8Array(await file.arrayBuffer())
-  await c.env.COVERS!.put(key, buf, { httpMetadata: { contentType: file.type || 'image/jpeg' } })
+  // Xác thực bằng magic bytes — không tin file.type client khai báo
+  const sniffed = sniffImage(buf)
+  if (!sniffed) return c.json({ error: 'File không phải ảnh hợp lệ (PNG/JPEG/GIF/WEBP/BMP).' }, 400)
+  const key = `covers/${uuid()}.${sniffed.ext}`
+  await c.env.COVERS!.put(key, buf, { httpMetadata: { contentType: sniffed.mime } })
   return c.json({ url: `/covers/${key.replace('covers/','')}`, key })
 })
 

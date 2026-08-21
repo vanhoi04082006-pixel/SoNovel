@@ -7,6 +7,14 @@ import { requireAdmin } from '@/lib/session'
 export async function POST(req: NextRequest) {
   let bodyText = ''
   try { bodyText = await req.text() } catch {}
+  // Sinh id MỘT lần → mọi retry/fallback dùng chung id (worker upsert + Supabase),
+  // tránh tạo series trùng lặp khác id giữa 2 DB.
+  let body: any = {}
+  try { body = JSON.parse(bodyText || '{}') } catch {}
+  if (!body.id) {
+    body.id = crypto.randomUUID()
+    bodyText = JSON.stringify(body)
+  }
   try {
     const { res, json } = await proxyToWorker('/api/series/create', { method: 'POST', body: bodyText, admin: true })
     if (res.ok) return NextResponse.json(json, { status: res.status })
@@ -17,13 +25,13 @@ export async function POST(req: NextRequest) {
     if (msg.includes('Worker fetch failed') || msg.includes('Failed to fetch')) {
       try {
         await requireAdmin()
-        const body = JSON.parse(bodyText || '{}')
         if (!body.title || !String(body.title).trim()) return NextResponse.json({ error: 'Tên truyện là bắt buộc.' }, { status: 400 })
         const valid = ['draft', 'published', 'completed', 'hidden']
         const seriesStatus = valid.includes(body.status) ? body.status : 'published'
         const seriesGenres = Array.isArray(body.genres) ? body.genres : String(body.genres || '').split(',').map((x: string) => x.trim()).filter(Boolean)
         const seriesTags = Array.isArray(body.tags) ? body.tags : String(body.tags || '').split(',').map((x: string) => x.trim()).filter(Boolean)
-        const { data, error } = await serverDb().from('series').insert({
+        const { data, error } = await serverDb().from('series').upsert({
+          id: body.id,
           title: String(body.title).trim(),
           author: String(body.author || '').trim(),
           description: String(body.description || '').trim(),
@@ -31,16 +39,9 @@ export async function POST(req: NextRequest) {
           status: seriesStatus,
           genres: seriesGenres,
           tags: seriesTags,
-        }).select('id').single()
+        }, { onConflict: 'id' }).select('id').single()
         if (error) throw error
         invalidateAll()
-        try {
-          await fetch(`${process.env.WORKER_URL}/api/series/create`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-service-token': process.env.SERVICE_TOKEN || '' },
-            body: bodyText,
-          }).catch(() => {})
-        } catch {}
         return NextResponse.json({ ok: true, series: { id: data.id } })
       } catch (fallbackErr) {
         return NextResponse.json({ error: 'Tạo truyện thất bại: ' + (fallbackErr as Error).message + ' (Worker: ' + msg + ')' }, { status: 500 })

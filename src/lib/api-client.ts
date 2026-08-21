@@ -40,6 +40,30 @@ export type SessionUser = { id: string; email: string; role: 'user' | 'admin' }
 type CacheEntry = { exp: number; value: unknown }
 const clientCache = new Map<string, CacheEntry>()
 
+// ---- typed error + timeout + retry ----
+export class ApiError extends Error {
+  status: number
+  body: any
+  constructor(message: string, status: number, body?: any) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.body = body
+  }
+}
+
+const TIMEOUT_MS = 20_000
+
+function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
+  return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer))
+}
+
+function isNetworkError(e: any): boolean {
+  return e instanceof TypeError || e?.name === 'AbortError' || (e as any)?.cause instanceof TypeError
+}
+
 function isCatalogUrl(url: string): boolean {
   return url.startsWith('/api/series') || url.startsWith('/api/chapters') || url.startsWith('/api/tags')
 }
@@ -71,26 +95,35 @@ async function json<T = any>(url: string, init?: RequestInit): Promise<T> {
     }
   }
 
-  const res = await fetch(url, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
-    credentials: 'include',
-  })
-  let data: any = null
-  try { data = await res.json() } catch {}
-  if (!res.ok) {
-    const msg = (data && data.error) || `Lỗi ${res.status}`
-    const err = new Error(msg) as any
-    err.status = res.status
-    err.body = data
-    throw err
-  }
+  // Retry 1 lần cho GET khi lỗi mạng/timeout (các mutation không retry — tránh trùng lặp)
+  const attempts = method === 'GET' ? 2 : 1
+  let lastErr: any
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      const res = await fetchWithTimeout(url, {
+        ...init,
+        headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
+        credentials: 'include',
+      })
+      let data: any = null
+      try { data = await res.json() } catch {}
+      if (!res.ok) {
+        const msg = (data && data.error) || `Lỗi ${res.status}`
+        throw new ApiError(msg, res.status, data)
+      }
 
-  // GET catalog thành công → lưu cache
-  if (method === 'GET' && isCatalogUrl(url)) {
-    clientCache.set(url, { exp: Date.now() + catalogTtlMs(url), value: data })
+      // GET catalog thành công → lưu cache
+      if (method === 'GET' && isCatalogUrl(url)) {
+        clientCache.set(url, { exp: Date.now() + catalogTtlMs(url), value: data })
+      }
+      return data as T
+    } catch (e) {
+      lastErr = e
+      if (!(attempt === attempts - 1) && isNetworkError(e)) continue
+      throw lastErr
+    }
   }
-  return data as T
+  throw lastErr
 }
 
 export const api = {
@@ -106,6 +139,7 @@ export const api = {
     return json<{ items: SeriesItem[]; total: number; offset: number; limit: number }>(`/api/series?${q}`)
   },
   getSeries: (id: string) => json<SeriesDetail>(`/api/series/${id}`),
+  getRelated: (id: string, limit = 6) => json<{ items: SeriesItem[] }>(`/api/series/${id}/related?limit=${limit}`),
   createSeries: (data: any) => json('/api/series/create', { method: 'POST', body: JSON.stringify(data) }),
   updateSeries: (id: string, data: any) => json(`/api/series/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteSeries: (id: string) => json(`/api/series/${id}`, { method: 'DELETE' }),
@@ -173,6 +207,10 @@ export const api = {
   upload: (file: File) => {
     const fd = new FormData()
     fd.append('file', file)
-    return fetch('/api/upload', { method: 'POST', body: fd, credentials: 'include' }).then((r) => r.json())
+    return fetchWithTimeout('/api/upload', { method: 'POST', body: fd, credentials: 'include' }).then(async (r) => {
+      const j = await r.json().catch(() => null)
+      if (!r.ok) throw new ApiError((j && j.error) || `Lỗi ${r.status}`, r.status, j)
+      return j
+    })
   },
 }
