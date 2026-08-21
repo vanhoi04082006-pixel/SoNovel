@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -42,9 +42,10 @@ export function HomeScreen() {
   const [recent, setRecent] = useState<SeriesRow[]>([]);
   const [popular, setPopular] = useState<SeriesRow[]>([]);
   const [progressItems, setProgressItems] = useState<(ProgressRow & { series?: SeriesRow })[]>([]);
+  const firstLoadRef = useRef(true);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const [r, p] = await Promise.all([
         listSeries({ limit: 10, orderBy: 'updated_at' }),
@@ -83,11 +84,18 @@ export function HomeScreen() {
       }
     } catch (_e) {
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [auth.session]);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  useFocusEffect(useCallback(() => {
+    if (firstLoadRef.current) {
+      firstLoadRef.current = false;
+      load(false);
+    } else {
+      load(true);
+    }
+  }, [load]));
 
   const openSeries = (s: SeriesRow) => nav.navigate('Series', { seriesId: s.id });
 
@@ -123,7 +131,7 @@ export function HomeScreen() {
   };
 
   return (
-    <Screen scroll refreshControl={<RefreshControl refreshing={loading} onRefresh={load} colors={[t.primary]} tintColor={t.primary} />}
+    <Screen scroll refreshControl={<RefreshControl refreshing={loading} onRefresh={() => load(false)} colors={[t.primary]} tintColor={t.primary} />}
       contentContainerStyle={{ paddingBottom: pad + 16 }}>
       {/* Hero gradient */}
       <LinearGradient

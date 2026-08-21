@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Image, StyleSheet, Text, View, ViewStyle, ImageStyle, DimensionValue, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../theme';
@@ -42,6 +42,11 @@ export function CoverImage({ title, coverUrl, width = '100%', height, borderRadi
     return trimmed.charAt(0).toUpperCase();
   }, [title]);
   const [loading, setLoading] = useState(false);
+  const [errored, setErrored] = useState(false);
+  useEffect(() => {
+    setErrored(false);
+    setLoading(false);
+  }, [coverUrl]);
 
   const shadowStyle = shadow
     ? {
@@ -53,7 +58,7 @@ export function CoverImage({ title, coverUrl, width = '100%', height, borderRadi
       }
     : null;
 
-  if (coverUrl && coverUrl.length > 0) {
+  if (coverUrl && coverUrl.length > 0 && !errored) {
     return (
       <View style={[{ width, height, borderRadius }, shadowStyle, style as ViewStyle]}>
         <Image
@@ -62,6 +67,7 @@ export function CoverImage({ title, coverUrl, width = '100%', height, borderRadi
           resizeMode="cover"
           onLoadStart={() => setLoading(true)}
           onLoadEnd={() => setLoading(false)}
+          onError={() => { setLoading(false); setErrored(true); }}
         />
         {loading ? (
           <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', borderRadius }]}>

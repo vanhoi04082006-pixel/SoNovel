@@ -3,7 +3,7 @@ import { View } from 'react-native';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { useTheme } from '../theme';
+import { useTheme, initTheme } from '../theme';
 import { initSession } from '../lib/session';
 import { loadSavedRate } from '../lib/tts';
 
@@ -93,6 +93,7 @@ export function RootNavigator() {
 export function useBootstrap() {
   useEffect(() => {
     initSession();
+    initTheme().catch(() => {});
     loadSavedRate().catch(() => {});
   }, []);
 }

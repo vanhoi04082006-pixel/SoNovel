@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, View, Dimensions } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View, Dimensions } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme, TYPO, RADIUS, SPACING } from '../theme';
@@ -25,6 +25,7 @@ export function FavoritesScreen() {
   const pad = useMiniPlayerPad(true);
   const [items, setItems] = useState<SeriesRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
 
   const load = useCallback(async () => {
     if (!auth.session) {
@@ -32,11 +33,12 @@ export function FavoritesScreen() {
       return;
     }
     setLoading(true);
+    setError(false);
     try {
       const rows = await listFavorites();
       setItems(rows.map((r) => r.series).filter(Boolean) as SeriesRow[]);
     } catch (_e) {
-      setItems([]);
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -64,6 +66,13 @@ export function FavoritesScreen() {
         <View style={{ paddingHorizontal: 16 }}>
           <SkeletonList count={6} height={200} />
         </View>
+      ) : error ? (
+        <View style={{ alignItems: 'center', paddingVertical: 40, gap: 12 }}>
+          <Text style={[TYPO.bodySm, { color: t.textMuted }]}>Không tải được danh sách yêu thích.</Text>
+          <Pressable onPress={load} style={{ paddingHorizontal: 20, paddingVertical: 9, borderRadius: RADIUS.pill, backgroundColor: t.primary }}>
+            <Text style={{ color: t.primaryText, fontSize: 13, fontWeight: '600' }}>Thử lại</Text>
+          </Pressable>
+        </View>
       ) : items.length === 0 ? (
         <EmptyState
           icon="heart-outline"
@@ -79,6 +88,9 @@ export function FavoritesScreen() {
           numColumns={COLS}
           columnWrapperStyle={{ gap: 8, paddingHorizontal: 16, marginBottom: 8 }}
           contentContainerStyle={{ paddingBottom: pad + 16 }}
+          refreshControl={
+            <RefreshControl refreshing={loading} onRefresh={load} colors={[t.primary]} tintColor={t.primary} />
+          }
           renderItem={({ item }) => (
             <View style={{ width: CARD_W }}>
               <SeriesCard series={item} onPress={(s) => nav.navigate('Series', { seriesId: s.id })} favorited />

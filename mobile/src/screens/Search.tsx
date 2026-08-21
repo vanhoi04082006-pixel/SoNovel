@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   FlatList,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -40,6 +41,7 @@ export function SearchScreen() {
   const [sort, setSort] = useState<Sort>('new');
   const [results, setResults] = useState<SeriesRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
   const [offset, setOffset] = useState(0);
   const [total, setTotal] = useState(0);
   const [recents, setRecents] = useState<string[]>([]);
@@ -77,6 +79,7 @@ export function SearchScreen() {
 
   const fetchResults = useCallback(async (reset: boolean) => {
     setLoading(true);
+    setError(false);
     try {
       const newOffset = reset ? 0 : offset;
       const data = await listSeries({
@@ -92,6 +95,7 @@ export function SearchScreen() {
       setOffset(newOffset + data.length);
       setTotal((prev) => (reset ? data.length : prev + data.length));
     } catch (_e) {
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -233,6 +237,14 @@ export function SearchScreen() {
         numColumns={COLS}
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: pad + 16, gap: 8 }}
         columnWrapperStyle={{ gap: 8 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={loading && results.length > 0}
+            onRefresh={() => fetchResults(true)}
+            colors={[t.primary]}
+            tintColor={t.primary}
+          />
+        }
         renderItem={({ item }) => (
           <View style={{ width: CARD_W }}>
             <SeriesCard series={item} />
@@ -243,7 +255,15 @@ export function SearchScreen() {
         ListFooterComponent={loading ? <ActivityIndicator color={t.primary} style={{ padding: 12 }} /> : null}
         ListEmptyComponent={
           !loading ? (
-            debounced || genre || tag ? (
+            error ? (
+              <View style={{ alignItems: 'center', paddingVertical: 40, gap: 12 }}>
+                <Icon name="cloud-offline-outline" size={40} color={t.textMuted} />
+                <Text style={[TYPO.bodySm, { color: t.textMuted }]}>Không tải được kết quả tìm kiếm.</Text>
+                <Pressable onPress={() => fetchResults(true)} style={[styles.retryBtn, { backgroundColor: t.primary }]}>
+                  <Text style={{ color: t.primaryText, fontSize: 13, fontWeight: '600' }}>Thử lại</Text>
+                </Pressable>
+              </View>
+            ) : debounced || genre || tag ? (
               <EmptyState icon="search-outline" title="Không tìm thấy truyện" message="Thử từ khóa khác hoặc bỏ bớt bộ lọc." />
             ) : null
           ) : null
@@ -305,5 +325,10 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 4,
+  },
+  retryBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 9,
+    borderRadius: RADIUS.pill,
   },
 });

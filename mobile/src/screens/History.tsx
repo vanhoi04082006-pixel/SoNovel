@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme, TYPO, RADIUS, SPACING } from '../theme';
@@ -44,6 +44,7 @@ export function HistoryScreen() {
   const pad = useMiniPlayerPad(true);
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
 
   const load = useCallback(async () => {
     if (!auth.session) {
@@ -51,11 +52,12 @@ export function HistoryScreen() {
       return;
     }
     setLoading(true);
+    setError(false);
     try {
       const rows = await listHistory();
       setItems(rows);
     } catch (_e) {
-      setItems([]);
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -83,6 +85,13 @@ export function HistoryScreen() {
         <View style={{ paddingHorizontal: 16 }}>
           <SkeletonList count={6} height={70} />
         </View>
+      ) : error ? (
+        <View style={{ alignItems: 'center', paddingVertical: 40, gap: 12 }}>
+          <Text style={[TYPO.bodySm, { color: t.textMuted }]}>Không tải được lịch sử.</Text>
+          <Pressable onPress={load} style={{ paddingHorizontal: 20, paddingVertical: 9, borderRadius: RADIUS.pill, backgroundColor: t.primary }}>
+            <Text style={{ color: t.primaryText, fontSize: 13, fontWeight: '600' }}>Thử lại</Text>
+          </Pressable>
+        </View>
       ) : items.length === 0 ? (
         <EmptyState
           icon="time-outline"
@@ -96,6 +105,9 @@ export function HistoryScreen() {
           data={items}
           keyExtractor={(item) => item.series_id}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: pad + 16, gap: 8 }}
+          refreshControl={
+            <RefreshControl refreshing={loading} onRefresh={load} colors={[t.primary]} tintColor={t.primary} />
+          }
           renderItem={({ item }) => {
             const s = item.series;
             if (!s) return null;

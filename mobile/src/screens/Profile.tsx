@@ -11,8 +11,17 @@ import { Icon } from '../components/ui/Icon';
 import { AppButton } from '../components/ui/AppButton';
 import { useAuth } from '../lib/session';
 import { supabase } from '../lib/supabase';
-import { setTheme } from '../theme';
+import { saveSettings } from '../lib/progress';
+import { setTheme, ThemeName } from '../theme';
+import { IconName } from '../components/ui/Icon';
 import { RootStackParamList } from '../navigation/types';
+
+const THEME_OPTIONS: { name: ThemeName; label: string; icon: IconName }[] = [
+  { name: 'light', label: 'Sáng', icon: 'sunny-outline' },
+  { name: 'dark', label: 'Tối', icon: 'moon-outline' },
+  { name: 'sepia', label: 'Vàng giấy', icon: 'book-outline' },
+  { name: 'amoled', label: 'Đen tuyền', icon: 'contrast-outline' },
+];
 
 export function ProfileScreen() {
   const t = useTheme();
@@ -24,6 +33,12 @@ export function ProfileScreen() {
 
   const onLogout = async () => {
     try { await supabase.auth.signOut(); } catch (_e) {}
+  };
+
+  const pickTheme = (name: ThemeName | null) => {
+    setTheme(name);
+    const effective = name ?? (t.name === 'sepia' || t.name === 'amoled' ? t.name : (t.name === 'dark' ? 'dark' : 'light'));
+    saveSettings({ theme: effective }).catch(() => {});
   };
 
   if (!auth.session) {
@@ -56,10 +71,27 @@ export function ProfileScreen() {
       {/* Theme */}
       <View style={styles.section}>
         <Text style={[TYPO.title, { color: t.text }]}>Giao diện</Text>
-        <View style={[styles.segmented, { backgroundColor: t.bgSubtle }]}>
-          <ThemeSegment label="Sáng" icon="sunny-outline" active={t.name === 'light'} onPress={() => setTheme('light')} />
-          <ThemeSegment label="Tối" icon="moon-outline" active={t.name === 'dark'} onPress={() => setTheme('dark')} />
-          <ThemeSegment label="Hệ thống" icon="contrast-outline" active={t.name !== 'light' && t.name !== 'dark'} onPress={() => setTheme(null)} />
+        <View style={styles.themeGrid}>
+          {THEME_OPTIONS.map((o) => (
+            <Pressable
+              key={o.name}
+              onPress={() => pickTheme(o.name)}
+              style={[styles.themeCard, { borderColor: t.border, backgroundColor: t.name === o.name ? t.primarySoft : t.surface }]}
+            >
+              <Icon name={o.icon} size={20} color={t.name === o.name ? t.primary : t.textMuted} />
+              <Text style={{ color: t.name === o.name ? t.primarySoftText : t.text, fontSize: 12, fontWeight: '600' }}>
+                {o.label}
+              </Text>
+              {t.name === o.name ? <Icon name="checkmark-circle" size={16} color={t.primary} /> : null}
+            </Pressable>
+          ))}
+          <Pressable
+            onPress={() => pickTheme(null)}
+            style={[styles.themeCard, { borderColor: t.border, backgroundColor: 'transparent' }]}
+          >
+            <Icon name="contrast-outline" size={20} color={t.textMuted} />
+            <Text style={{ color: t.text, fontSize: 12, fontWeight: '500' }}>Hệ thống</Text>
+          </Pressable>
         </View>
       </View>
 
@@ -73,21 +105,6 @@ export function ProfileScreen() {
         />
       </View>
     </Screen>
-  );
-}
-
-function ThemeSegment({ label, icon, active, onPress }: { label: string; icon: any; active: boolean; onPress: () => void }) {
-  const t = useTheme();
-  return (
-    <Pressable
-      onPress={onPress}
-      style={[styles.segBtn, { backgroundColor: active ? t.primary : 'transparent' }]}
-    >
-      <Icon name={icon} size={18} color={active ? t.primaryText : t.textMuted} />
-      <Text style={{ color: active ? t.primaryText : t.textMuted, fontSize: 12, fontWeight: active ? '700' : '500' }}>
-        {label}
-      </Text>
-    </Pressable>
   );
 }
 
@@ -114,19 +131,19 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   section: { paddingHorizontal: 16, paddingTop: 24, gap: 12 },
-  segmented: {
+  themeGrid: {
     flexDirection: 'row',
-    gap: 6,
-    borderRadius: RADIUS.lg,
-    padding: 4,
+    flexWrap: 'wrap',
+    gap: 8,
   },
-  segBtn: {
-    flex: 1,
+  themeCard: {
+    width: '48%',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: RADIUS.md,
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
   },
 });

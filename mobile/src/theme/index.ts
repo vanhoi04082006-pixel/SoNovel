@@ -1,13 +1,13 @@
 import { useSyncExternalStore } from 'react';
 import { Appearance, ColorSchemeName } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
- * Theme manager — 2 theme light/dark, không sync user_settings (theo §9).
- * Theo dõi system color scheme + cho phép override cứng bằng setTheme().
- * Chứa đầy đủ design tokens: color, gradient, spacing, radius, shadow, typography.
+ * Theme manager — 4 theme light/dark/sepia/amoled, persist AsyncStorage,
+ * sync user_settings.theme khi người dùng đổi. Theo dõi system color scheme.
  */
 
-export type ThemeName = 'light' | 'dark';
+export type ThemeName = 'light' | 'dark' | 'sepia' | 'amoled';
 
 export type GradientPair = [string, string];
 export type GradientTriple = [string, string, string];
@@ -150,9 +150,74 @@ const DARK: Theme = {
   shadowCard: { shadowColor: 'rgba(0,0,0,0.6)', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 1, shadowRadius: 16, elevation: 5 },
 };
 
-const THEMES: Record<ThemeName, Theme> = { light: LIGHT, dark: DARK };
+const SEPIA: Theme = {
+  name: 'sepia',
+  bg: '#f6ecd8',
+  bgElevated: '#efe2c6',
+  bgSubtle: '#e8d9b8',
+  surface: '#fbf3e0',
+  border: '#ddc9a3',
+  text: '#3b3226',
+  textMuted: '#7a6a50',
+  textInvert: '#3b3226',
+  primary: '#a16207',
+  primaryText: '#fff7e6',
+  accent: '#c2410c',
+  danger: '#b91c1c',
+  warning: '#a16207',
+  success: '#15803d',
+  overlay: 'rgba(59,50,38,0.5)',
+  shadow: 'rgba(59,50,38,0.18)',
+  primarySoft: '#f3e3c0',
+  primarySoftText: '#854d0e',
+  accentSoft: '#fde4d0',
+  dangerSoft: '#fde3e3',
+  successSoft: '#dcf5e6',
+  warningSoft: '#fbf0d3',
+  gradientPrimary: ['#b45309', '#a16207'],
+  gradientPrimaryReverse: ['#a16207', '#b45309'],
+  gradientHero: ['#a16207', '#c2410c', '#d97706'],
+  gradientAccent: ['#c2410c', '#ea580c'],
+  shadowSoft: { shadowColor: 'rgba(59,50,38,0.12)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 1, shadowRadius: 2, elevation: 1 },
+  shadowCard: { shadowColor: 'rgba(59,50,38,0.2)', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 1, shadowRadius: 16, elevation: 5 },
+};
+
+const AMOLED: Theme = {
+  name: 'amoled',
+  bg: '#000000',
+  bgElevated: '#050507',
+  bgSubtle: '#101014',
+  surface: '#0a0a0c',
+  border: '#1c1c22',
+  text: '#f4f4f6',
+  textMuted: '#8f8f9a',
+  textInvert: '#000000',
+  primary: '#a78bfa',
+  primaryText: '#12081f',
+  accent: '#f472b6',
+  danger: '#fb7185',
+  warning: '#fbbf24',
+  success: '#34d399',
+  overlay: 'rgba(0,0,0,0.82)',
+  shadow: 'rgba(0,0,0,0.9)',
+  primarySoft: '#1d1230',
+  primarySoftText: '#c4b5fd',
+  accentSoft: '#2a1220',
+  dangerSoft: '#301116',
+  successSoft: '#0d2c1e',
+  warningSoft: '#2e2410',
+  gradientPrimary: ['#a78bfa', '#7c3aed'],
+  gradientPrimaryReverse: ['#7c3aed', '#a78bfa'],
+  gradientHero: ['#6d28d9', '#a855f7', '#ec4899'],
+  gradientAccent: ['#f472b6', '#c026d3'],
+  shadowSoft: { shadowColor: 'rgba(0,0,0,0.9)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 1, shadowRadius: 2, elevation: 1 },
+  shadowCard: { shadowColor: 'rgba(0,0,0,0.95)', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 1, shadowRadius: 16, elevation: 5 },
+};
+
+const THEMES: Record<ThemeName, Theme> = { light: LIGHT, dark: DARK, sepia: SEPIA, amoled: AMOLED };
 
 let override: ThemeName | null = null;
+let initialized = false;
 
 function resolveTheme(): ThemeName {
   if (override) return override;
@@ -183,12 +248,34 @@ export function useTheme(): Theme {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
+const THEME_STORAGE_KEY = 'sonovel.theme';
+
+export async function initTheme(): Promise<void> {
+  if (initialized) return;
+  initialized = true;
+  try {
+    const raw = await AsyncStorage.getItem(THEME_STORAGE_KEY);
+    if (raw && (raw === 'light' || raw === 'dark' || raw === 'sepia' || raw === 'amoled')) {
+      override = raw as ThemeName;
+      currentName = override;
+      listeners.forEach((l) => l());
+    }
+  } catch {}
+}
+
 export function setTheme(name: ThemeName | null) {
   override = name;
   currentName = name ?? resolveTheme();
   listeners.forEach((l) => l());
+  try {
+    AsyncStorage.setItem(THEME_STORAGE_KEY, name ?? 'system').catch(() => {});
+  } catch {}
 }
 
 export function getTheme(): Theme {
   return THEMES[currentName];
+}
+
+export function getThemeName(): ThemeName | null {
+  return override;
 }

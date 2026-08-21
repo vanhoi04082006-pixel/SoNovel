@@ -18,6 +18,7 @@ import { Chip } from '../components/ui/Chip';
 import { CoverImage } from '../components/ui/CoverImage';
 import { Icon } from '../components/ui/Icon';
 import { AppButton } from '../components/ui/AppButton';
+import { setSearchFilter } from '../lib/searchFilter';
 import {
   ChapterRow,
   SeriesRow,
@@ -187,7 +188,15 @@ export function SeriesScreen({ route }: { route: SeriesRouteProp }) {
               ) : null}
               <View style={styles.chips}>
                 {(series.genres ?? []).slice(0, 4).map((g) => (
-                  <Chip key={g} label={g} compact onPress={() => nav.navigate('Tabs' as any, { screen: 'Search' } as any)} />
+                  <Chip
+                    key={g}
+                    label={g}
+                    compact
+                    onPress={() => {
+                      setSearchFilter({ genre: g });
+                      nav.navigate('Tabs' as any, { screen: 'Search' } as any);
+                    }}
+                  />
                 ))}
               </View>
             </View>

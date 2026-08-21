@@ -298,6 +298,13 @@ export async function saveSession(opts: { seriesId: string; chapterId?: string |
   } catch {}
 }
 
+// Đồng bộ user_settings (theme, rate, font...) lên Worker.
+export async function saveSettings(data: Record<string, unknown>): Promise<void> {
+  try {
+    await workerJson('/api/settings', { method: 'PUT', body: JSON.stringify(data) });
+  } catch {}
+}
+
 export async function saveListenProgress(opts: {
   seriesId: string;
   chapterId: string;
