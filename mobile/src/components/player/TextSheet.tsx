@@ -13,7 +13,7 @@ import { Icon } from '../ui/Icon';
 
 type ChapterText = {
   title?: string;
-  content: string;
+  content?: string;
 };
 
 type Props = {

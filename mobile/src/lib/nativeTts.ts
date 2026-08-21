@@ -39,6 +39,7 @@ export interface SonovelTtsEvents {
   onChunkDone: { chapterIndex: number; chunkIndex: number };
   onChapterEnd: { chapterIndex: number };
   onChapterChange: { chapterIndex: number };
+  onChapterSeek: { direction: number };
   onSeriesEnd: Record<string, never>;
   onError: { code: number; message: string };
 }
@@ -47,19 +48,23 @@ export interface SonovelTtsApi {
   play(
     seriesTitle: string,
     coverUrl: string,
-    chaptersJson: string,
-    startChapter: number,
+    chapterNumber: number,
+    chapterTitle: string,
+    chapterContent: string,
     startChar: number,
     rate: number
   ): Promise<string>;
-  playChapter(idx: number, startChar: number): Promise<string>;
+  playChapter(
+    chapterNumber: number,
+    chapterTitle: string,
+    chapterContent: string,
+    startChar: number
+  ): Promise<string>;
   pause(): Promise<string>;
   resume(): Promise<string>;
   stop(): Promise<string>;
   seekTo(char: number): Promise<string>;
   setRate(rate: number): Promise<string>;
-  nextChapter(): Promise<string>;
-  prevChapter(): Promise<string>;
   getState(): Promise<TtsStateSnapshot>;
   requestNotificationPermission(): Promise<boolean>;
 }

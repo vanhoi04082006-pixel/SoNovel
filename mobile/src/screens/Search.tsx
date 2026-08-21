@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   FlatList,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -16,6 +17,7 @@ import { SeriesCard } from '../components/ui/SeriesCard';
 import { Chip } from '../components/ui/Chip';
 import { Icon } from '../components/ui/Icon';
 import { EmptyState } from '../components/ui/EmptyState';
+import { SheetModal } from '../components/ui/SheetModal';
 import { listSeries, SeriesRow } from '../lib/progress';
 import { addRecentSearch, getRecentSearches, removeRecentSearch, clearRecentSearches } from '../lib/recentSearch';
 import { consumeSearchFilter, peekSearchFilter } from '../lib/searchFilter';
@@ -43,6 +45,7 @@ export function SearchScreen() {
   const [recents, setRecents] = useState<string[]>([]);
   const [genres, setGenres] = useState<string[]>([]);
   const [tags, setTags] = useState<string[]>([]);
+  const [filterOpen, setFilterOpen] = useState(false);
 
   useEffect(() => {
     const id = setTimeout(() => setDebounced(q.trim()), 350);
@@ -176,29 +179,7 @@ export function SearchScreen() {
         </View>
       ) : null}
 
-      {/* Facets */}
-      {(genres.length > 0 || tags.length > 0) ? (
-        <View style={styles.section}>
-          <Text style={[TYPO.title, { color: t.text }]}>Thể loại</Text>
-          <View style={styles.chipsRow}>
-            {genres.slice(0, 16).map((g) => (
-              <Chip key={g} label={g} icon="pricetag-outline" iconSize={12} selected={genre === g} onPress={() => setGenre(genre === g ? null : g)} />
-            ))}
-          </View>
-          {tags.length > 0 ? (
-            <>
-              <Text style={[TYPO.title, { color: t.text, marginTop: SPACING.md }]}>Tag</Text>
-              <View style={styles.chipsRow}>
-                {tags.slice(0, 16).map((tg) => (
-                  <Chip key={tg} label={tg} prefix="#" selected={tag === tg} onPress={() => setTag(tag === tg ? null : tg)} />
-                ))}
-              </View>
-            </>
-          ) : null}
-        </View>
-      ) : null}
-
-      {/* Sort */}
+      {/* Sort + filter */}
       <View style={styles.sortRow}>
         {(['new', 'title', 'chapters'] as Sort[]).map((s) => (
           <Chip
@@ -209,7 +190,42 @@ export function SearchScreen() {
             onPress={() => setSort(s)}
           />
         ))}
+        <Pressable
+          onPress={() => setFilterOpen(true)}
+          hitSlop={8}
+          style={[styles.filterBtn, { backgroundColor: t.bgSubtle, borderColor: (genre || tag) ? t.primary : t.border }]}
+        >
+          <Icon name="options-outline" size={18} color={(genre || tag) ? t.primary : t.textMuted} />
+          {(genre || tag) ? <View style={[styles.filterDot, { backgroundColor: t.primary }]} /> : null}
+        </Pressable>
       </View>
+
+      {/* Filter sheet */}
+      <SheetModal visible={filterOpen} onClose={() => setFilterOpen(false)} heightPct={0.7}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
+          <Text style={[TYPO.title, { color: t.text }]}>Bộ lọc</Text>
+          {genres.length > 0 ? (
+            <>
+              <Text style={[TYPO.label, { color: t.textMuted, marginTop: SPACING.md, marginBottom: 8 }]}>Thể loại</Text>
+              <View style={styles.chipsRow}>
+                {genres.map((g) => (
+                  <Chip key={g} label={g} icon="pricetag-outline" iconSize={12} selected={genre === g} onPress={() => setGenre(genre === g ? null : g)} />
+                ))}
+              </View>
+            </>
+          ) : null}
+          {tags.length > 0 ? (
+            <>
+              <Text style={[TYPO.label, { color: t.textMuted, marginTop: SPACING.md, marginBottom: 8 }]}>Tag</Text>
+              <View style={styles.chipsRow}>
+                {tags.map((tg) => (
+                  <Chip key={tg} label={tg} prefix="#" selected={tag === tg} onPress={() => setTag(tag === tg ? null : tg)} />
+                ))}
+              </View>
+            </>
+          ) : null}
+        </ScrollView>
+      </SheetModal>
 
       <FlatList
         data={results}
@@ -272,4 +288,22 @@ const styles = StyleSheet.create({
     maxWidth: 220,
   },
   sortRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16, paddingVertical: 12 },
+  filterBtn: {
+    position: 'relative',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 'auto',
+  },
+  filterDot: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
 });

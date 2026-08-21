@@ -25,8 +25,8 @@ export function FloatingMiniPlayer() {
 
   const chapter = np.chapters[np.currentIndex];
   const title = chapter ? `Chương ${np.currentIndex + 1}. ${chapter.title}` : np.seriesTitle;
-  const progress = chapter && chapter.content.length > 0
-    ? Math.min(1, np.currentChar / chapter.content.length)
+  const progress = np.charLength > 0
+    ? Math.min(1, np.currentChar / np.charLength)
     : 0;
 
   return (

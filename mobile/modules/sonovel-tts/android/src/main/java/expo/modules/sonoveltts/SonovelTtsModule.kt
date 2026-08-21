@@ -1,6 +1,7 @@
 package expo.modules.sonoveltts
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -21,12 +22,20 @@ class SonovelTtsModule : Module() {
         var instance: SonovelTtsModule? = null
     }
 
-    private val ctx
-        get() = appContext.reactContext
-            ?: throw IllegalStateException("Không có React context")
+    private val ctx: Context
+        get() {
+            appContext.reactContext?.let { return it }
+            appContext.activityProvider?.currentActivity?.let { return it }
+            throw IllegalStateException("Không có React context để gửi lệnh TTS")
+        }
 
     private fun sendAction(action: String, extras: Map<String, Any?> = emptyMap()) {
-        val intent = Intent(ctx, TtsService::class.java).apply {
+        val context = try {
+            ctx
+        } catch (e: Throwable) {
+            throw IllegalStateException("Không có context để gửi lệnh TTS ($action): ${e.message}")
+        }
+        val intent = Intent(context, TtsService::class.java).apply {
             this.action = action
             extras.forEach { (k, v) ->
                 when (v) {
@@ -40,7 +49,11 @@ class SonovelTtsModule : Module() {
                 }
             }
         }
-        ContextCompat.startForegroundService(ctx, intent)
+        try {
+            ContextCompat.startForegroundService(context, intent)
+        } catch (e: Throwable) {
+            throw IllegalStateException("Không thể start TTS service ($action): ${e.message}", e)
+        }
     }
 
     override fun definition() = ModuleDefinition {
@@ -60,25 +73,29 @@ class SonovelTtsModule : Module() {
             Events.ON_CHUNK_DONE,
             Events.ON_CHAPTER_END,
             Events.ON_CHAPTER_CHANGE,
+            Events.ON_CHAPTER_SEEK,
             Events.ON_SERIES_END,
             Events.ON_ERROR
         )
 
-        AsyncFunction("play") { seriesTitle: String, coverUrl: String, chaptersJson: String, startChapter: Int, startChar: Int, rate: Double ->
+        AsyncFunction("play") { seriesTitle: String, coverUrl: String, chapterNumber: Int, chapterTitle: String, chapterContent: String, startChar: Int, rate: Double ->
             sendAction(TtsService.ACTION_START, mapOf(
                 TtsService.EXTRA_SERIES_TITLE to seriesTitle,
                 TtsService.EXTRA_COVER_URL to coverUrl,
-                TtsService.EXTRA_CHAPTERS_JSON to chaptersJson,
-                TtsService.EXTRA_START_CHAPTER to startChapter,
+                TtsService.EXTRA_CHAPTER_NUMBER to chapterNumber,
+                TtsService.EXTRA_CHAPTER_TITLE to chapterTitle,
+                TtsService.EXTRA_CHAPTER_CONTENT to chapterContent,
                 TtsService.EXTRA_START_CHAR to startChar,
                 TtsService.EXTRA_RATE to rate.toFloat()
             ))
             "ok"
         }
 
-        AsyncFunction("playChapter") { idx: Int, startChar: Int ->
+        AsyncFunction("playChapter") { chapterNumber: Int, chapterTitle: String, chapterContent: String, startChar: Int ->
             sendAction(TtsService.ACTION_PLAY_CHAPTER, mapOf(
-                TtsService.EXTRA_CHAPTER_INDEX to idx,
+                TtsService.EXTRA_CHAPTER_NUMBER to chapterNumber,
+                TtsService.EXTRA_CHAPTER_TITLE to chapterTitle,
+                TtsService.EXTRA_CHAPTER_CONTENT to chapterContent,
                 TtsService.EXTRA_CHAR_INDEX to startChar
             ))
             "ok"
@@ -110,16 +127,6 @@ class SonovelTtsModule : Module() {
             sendAction(TtsService.ACTION_SET_RATE, mapOf(
                 TtsService.EXTRA_RATE to rate.toFloat()
             ))
-            "ok"
-        }
-
-        AsyncFunction("nextChapter") {
-            sendAction(TtsService.ACTION_NEXT)
-            "ok"
-        }
-
-        AsyncFunction("prevChapter") {
-            sendAction(TtsService.ACTION_PREV)
             "ok"
         }
 

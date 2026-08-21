@@ -30,6 +30,7 @@ import {
   startTts,
   stopTts,
   togglePlayPause,
+  ensureChapterContent,
   TtsChapter,
 } from '../lib/tts';
 import { listChapters, ChapterRow } from '../lib/progress';
@@ -156,6 +157,15 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
 
   const onSetRate = (r: number) => setRateTts(r);
 
+  const openTextSheet = async () => {
+    try {
+      await ensureChapterContent(np.currentIndex);
+    } catch (_e) {
+      // Đã có content trong cache → vẫn mở sheet được; nếu chưa, sheet trống.
+    }
+    setShowText(true);
+  };
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={['top']}>
       {/* Ambient gradient background */}
@@ -214,7 +224,7 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
             onPlayPause={onPlayPause}
             onPrev={() => prevChapterTts()}
             onNext={() => nextChapterTts()}
-            onTextSheet={() => setShowText(true)}
+            onTextSheet={openTextSheet}
             onChaptersSheet={() => setShowChapters(true)}
             onSleepSheet={() => setShowSleep(true)}
             onStop={() => { stopTts(); nav.goBack(); }}

@@ -11,9 +11,11 @@
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
+    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "expo-modules-core": ["./node_modules/expo/node_modules/expo-modules-core"]
     },
     "typeRoots": ["./node_modules/@types", "./types"]
   },

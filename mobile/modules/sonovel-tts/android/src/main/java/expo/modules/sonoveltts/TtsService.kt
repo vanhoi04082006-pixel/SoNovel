@@ -22,7 +22,6 @@ import androidx.media.app.NotificationCompat.MediaStyle
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
-import org.json.JSONArray
 import java.util.Locale
 
 /**
@@ -54,11 +53,11 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
 
         const val EXTRA_SERIES_TITLE = "seriesTitle"
         const val EXTRA_COVER_URL = "coverUrl"
-        const val EXTRA_CHAPTERS_JSON = "chaptersJson"
-        const val EXTRA_START_CHAPTER = "startChapterIndex"
+        const val EXTRA_CHAPTER_NUMBER = "chapterNumber"
+        const val EXTRA_CHAPTER_TITLE = "chapterTitle"
+        const val EXTRA_CHAPTER_CONTENT = "chapterContent"
         const val EXTRA_START_CHAR = "startCharIndex"
         const val EXTRA_RATE = "rate"
-        const val EXTRA_CHAPTER_INDEX = "chapterIndex"
         const val EXTRA_CHAR_INDEX = "charIndex"
 
         const val SETTLE_MS = 200L
@@ -79,7 +78,8 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
     private var pendingPlay: (() -> Unit)? = null
 
     // --- Playback state ---
-    private var chapters: List<ChapterInfo> = emptyList()
+    private var chapterTitle = ""
+    private var chapterContent = ""
     @Volatile private var chapterIndex = 0
     @Volatile private var charIndex = 0
     @Volatile private var chunkIndex = 0
@@ -132,8 +132,8 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
             ACTION_PAUSE -> onPause()
             ACTION_RESUME -> onResume()
             ACTION_STOP -> onStop(true)
-            ACTION_NEXT -> nextChapter()
-            ACTION_PREV -> prevChapter()
+            ACTION_NEXT -> emitChapterSeek(1)
+            ACTION_PREV -> emitChapterSeek(-1)
             ACTION_SEEK -> {
                 val ch = intent?.getIntExtra(EXTRA_CHAR_INDEX, 0) ?: 0
                 ensureTts { playFrom(ch) }
@@ -172,15 +172,17 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
     private fun handleStartAction(intent: Intent) {
         val seriesTitle = intent.getStringExtra(EXTRA_SERIES_TITLE) ?: ""
         val coverUrl = intent.getStringExtra(EXTRA_COVER_URL) ?: ""
-        val chaptersJson = intent.getStringExtra(EXTRA_CHAPTERS_JSON) ?: "[]"
-        val startChapter = intent.getIntExtra(EXTRA_START_CHAPTER, 0)
+        val chapterNumber = intent.getIntExtra(EXTRA_CHAPTER_NUMBER, 1)
+        val title = intent.getStringExtra(EXTRA_CHAPTER_TITLE) ?: ""
+        val content = intent.getStringExtra(EXTRA_CHAPTER_CONTENT) ?: ""
         val startChar = intent.getIntExtra(EXTRA_START_CHAR, 0)
         val rate = intent.getFloatExtra(EXTRA_RATE, 1.0f)
 
         this.seriesTitle = seriesTitle
         this.coverUrl = coverUrl
-        this.chapters = parseChapters(chaptersJson)
-        this.chapterIndex = if (chapters.isEmpty()) 0 else startChapter.coerceIn(0, chapters.size - 1)
+        this.chapterTitle = title
+        this.chapterContent = content
+        this.chapterIndex = maxOf(chapterNumber - 1, 0)
         this.charIndex = startChar
         this.announceTitle = (startChar == 0)
         this.rate = rate
@@ -193,29 +195,18 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
     }
 
     private fun handlePlayChapterAction(intent: Intent) {
-        if (chapters.isEmpty()) return
-        val idx = intent.getIntExtra(EXTRA_CHAPTER_INDEX, 0).coerceIn(0, chapters.size - 1)
+        val chapterNumber = intent.getIntExtra(EXTRA_CHAPTER_NUMBER, 1)
+        val title = intent.getStringExtra(EXTRA_CHAPTER_TITLE) ?: ""
+        val content = intent.getStringExtra(EXTRA_CHAPTER_CONTENT) ?: ""
         val ch = intent.getIntExtra(EXTRA_CHAR_INDEX, 0)
-        this.chapterIndex = idx
+        this.chapterTitle = title
+        this.chapterContent = content
+        this.chapterIndex = maxOf(chapterNumber - 1, 0)
         this.charIndex = ch
         this.announceTitle = (ch == 0)
         this.retryCount = 0
         updateMediaMetadata()
         ensureTts { playFrom(ch) }
-    }
-
-    private fun parseChapters(json: String): List<ChapterInfo> {
-        return try {
-            val arr = JSONArray(json)
-            val out = ArrayList<ChapterInfo>(arr.length())
-            for (i in 0 until arr.length()) {
-                val o = arr.getJSONObject(i)
-                out.add(ChapterInfo(o.optString("title"), o.optString("content")))
-            }
-            out
-        } catch (_: Throwable) {
-            emptyList()
-        }
     }
 
     // -------------------------------------------------------------------
@@ -257,8 +248,8 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
 
     private fun buildNotification(isPlaying: Boolean): Notification {
         val title = seriesTitle.ifEmpty { "SoNovel" }
-        val text = if (chapters.isEmpty() || chapterIndex !in chapters.indices) "Đang chuẩn bị…"
-                   else "Chương ${chapterIndex + 1}. ${chapters[chapterIndex].title}"
+        val text = if (chapterContent.isBlank()) "Đang chuẩn bị…"
+                   else "Chương ${chapterIndex + 1}. $chapterTitle"
 
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_media_play)
@@ -329,8 +320,8 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
 
     private fun updateMediaMetadata() {
         try {
-            val title = if (chapters.isEmpty() || chapterIndex !in chapters.indices) seriesTitle
-                else "Chương ${chapterIndex + 1}. ${chapters[chapterIndex].title}"
+            val title = if (chapterContent.isBlank()) seriesTitle
+                else "Chương ${chapterIndex + 1}. $chapterTitle"
             val md = MediaMetadataCompat.Builder()
                 .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
                 .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, seriesTitle)
@@ -505,20 +496,18 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         }
         cancelWatchdog()
         val engine = tts ?: return
-        if (chapters.isEmpty()) {
-            emitError(2, "Không có chương để phát")
+        if (chapterContent.isBlank()) {
+            emitError(2, "Không có nội dung chương để phát")
             return
         }
-        if (chapterIndex !in chapters.indices) chapterIndex = chapters.size - 1
-        val content = chapters[chapterIndex].content
+        val content = chapterContent
         val clamped = targetChar.coerceIn(0, content.length)
         pendingTargetChar = clamped
         engineStarted = false
 
         chunks = TtsChunker.chunk(content)
         if (chunks.isEmpty()) {
-            emit(Events.ON_CHAPTER_END, mapOf("chapterIndex" to chapterIndex))
-            moveToNextChapter()
+            finishChapter()
             return
         }
         val idx = TtsChunker.findChunkIndex(chunks, clamped)
@@ -529,7 +518,7 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         // Lý do: queue chunk trước làm currentUtteranceId = chunkId, watchdog arm ngay →
         // nếu title phát >2s thì watchdog fire sai (chunk chưa onStart) → retry/re-init → error 12s.
         if (announceTitle && clamped == 0) {
-            val title = "Chương ${chapterIndex + 1}. ${chapters[chapterIndex].title}"
+            val title = "Chương ${chapterIndex + 1}. $chapterTitle"
             val titleId = "sonovel_title_${chapterIndex}_${++speakSeq}"
             val titleParams = Bundle().apply {
                 putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, titleId)
@@ -648,7 +637,7 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
             emit(Events.ON_PROGRESS, mapOf(
                 "chapterIndex" to chapterIndex,
                 "charIndex" to 0,
-                "charLength" to if (chapterIndex in chapters.indices) chapters[chapterIndex].content.length else 0,
+                "charLength" to chapterContent.length,
                 "fraction" to 0f
             ))
             return
@@ -669,7 +658,7 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         val offset = TtsChunker.chunkOffset(chunks, chunkIndex)
         val ci = offset + start
         charIndex = ci
-        val contentLen = if (chapterIndex in chapters.indices) chapters[chapterIndex].content.length else 0
+        val contentLen = chapterContent.length
         val frac = if (contentLen > 0) ci.toFloat() / contentLen else 0f
         emit(Events.ON_PROGRESS, mapOf(
             "chapterIndex" to chapterIndex,
@@ -699,10 +688,7 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         if (chunkIndex < chunks.size) {
             speakNextChunk()
         } else {
-            announceTitle = true
-            charIndex = 0
-            emit(Events.ON_CHAPTER_END, mapOf("chapterIndex" to chapterIndex))
-            moveToNextChapter()
+            finishChapter()
         }
     }
 
@@ -717,53 +703,32 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
     // Chapter navigation
     // -------------------------------------------------------------------
 
-    private fun moveToNextChapter() {
-        if (chapterIndex + 1 >= chapters.size) {
-            playing = false
-            updateNotification()
-            updateMediaMetadata()
-            emit(Events.ON_SERIES_END, emptyMap<String, Any?>())
-            stopSelf()
-            return
-        }
-        chapterIndex++
-        chunkIndex = 0
-        charIndex = 0
+    /**
+     * Hết chương — emit ON_CHAPTER_END rồi DỪNG (không tự nhảy chương).
+     * JS (tts.ts) là nơi điều phối: lắng nghe chapterEnd → tăng index →
+     * gửi lại nội dung chương kế tiếp qua ACTION_PLAY_CHAPTER.
+     */
+    private fun finishChapter() {
+        playing = false
+        cancelWatchdog()
         announceTitle = true
-        emit(Events.ON_CHAPTER_CHANGE, mapOf("chapterIndex" to chapterIndex))
+        charIndex = 0
+        chunkIndex = 0
+        updateNotification()
         updateMediaMetadata()
-        playFrom(0)
+        emit(Events.ON_CHAPTER_END, mapOf("chapterIndex" to chapterIndex))
     }
 
-    fun nextChapter() {
-        if (chapters.isEmpty()) return
-        if (chapterIndex + 1 >= chapters.size) {
-            playing = false
-            updateNotification()
-            updateMediaMetadata()
-            emit(Events.ON_SERIES_END, emptyMap<String, Any?>())
-            stopSelf()
-            return
-        }
-        chapterIndex++
-        chunkIndex = 0
-        charIndex = 0
-        announceTitle = true
-        emit(Events.ON_CHAPTER_CHANGE, mapOf("chapterIndex" to chapterIndex))
-        updateMediaMetadata()
-        ensureTts { playFrom(0) }
-    }
-
-    fun prevChapter() {
-        if (chapters.isEmpty()) return
-        if (chapterIndex <= 0) return
-        chapterIndex--
-        chunkIndex = 0
-        charIndex = 0
-        announceTitle = true
-        emit(Events.ON_CHAPTER_CHANGE, mapOf("chapterIndex" to chapterIndex))
-        updateMediaMetadata()
-        ensureTts { playFrom(0) }
+    /**
+     * Nút next/prev từ notification/media session — native không còn giữ list chương,
+     * nên chỉ báo hướng cho JS (onChapterSeek); JS sẽ gửi lại nội dung chương mới.
+     */
+    private fun emitChapterSeek(direction: Int) {
+        try { tts?.stop() } catch (_: Throwable) {}
+        playing = false
+        engineStarted = false
+        cancelWatchdog()
+        emit(Events.ON_CHAPTER_SEEK, mapOf("direction" to direction))
     }
 
     // -------------------------------------------------------------------
@@ -817,8 +782,7 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
     // -------------------------------------------------------------------
 
     fun snapshotState(): Map<String, Any?> {
-        val contentLen = if (chapterIndex in chapters.indices) chapters[chapterIndex].content.length else 0
-        val chapterTitle = if (chapterIndex in chapters.indices) chapters[chapterIndex].title else ""
+        val contentLen = chapterContent.length
         val orderNo = chapterIndex + 1
         return mapOf(
             "playing" to playing,
@@ -828,7 +792,7 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
             "chapterTitle" to chapterTitle,
             "orderNo" to orderNo,
             "rate" to rate.toDouble(),
-            "chaptersCount" to chapters.size,
+            "chaptersCount" to 1,
             "seriesTitle" to seriesTitle,
             "ttsReady" to ttsReady,
             "serviceRunning" to true

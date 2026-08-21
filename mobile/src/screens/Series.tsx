@@ -160,7 +160,7 @@ export function SeriesScreen({ route }: { route: SeriesRouteProp }) {
   );
 
   const isCurSeries = np.seriesId === series.id;
-  const totalChars = chapters.reduce((sum, c) => sum + (c.content?.length ?? 0), 0);
+  const totalChars = chapters.reduce((sum, c) => sum + ((c.word_count ?? 0) * 5), 0);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={['top']}>
@@ -258,7 +258,7 @@ export function SeriesScreen({ route }: { route: SeriesRouteProp }) {
                 <View style={{ flex: 1 }}>
                   <Text style={[TYPO.body, { color: t.text }]} numberOfLines={2}>{c.title}</Text>
                   <Text style={[TYPO.caption, { color: t.textMuted, marginTop: 2 }]}>
-                    {c.content.length} ký tự · ~{Math.ceil(c.content.length / 270)} phút
+                    {((c.word_count ?? 0) * 5).toLocaleString('vi-VN')} ký tự · ~{Math.ceil(((c.word_count ?? 0) * 5) / 270)} phút
                   </Text>
                 </View>
                 {isCurChapter ? (
