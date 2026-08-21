@@ -44,6 +44,7 @@ workers/.dev.vars
 workers/covers/
 d1/snapshot-*.json
 d1/migrate-remote.sql
+d1/backfill-profiles.sql
 
 # supabase cli
 supabase/.temp/
