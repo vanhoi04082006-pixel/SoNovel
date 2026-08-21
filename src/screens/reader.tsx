@@ -22,6 +22,7 @@ export function ReaderScreen() {
   const [chapter, setChapter] = useState<ChapterItem | null>(null)
   const [loading, setLoading] = useState(true)
   const [listOpen, setListOpen] = useState(false)
+  const [visibleChapters, setVisibleChapters] = useState(200)
   const scrollRef = useRef<HTMLDivElement>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const currentCharRef = useRef(0)
@@ -152,7 +153,7 @@ export function ReaderScreen() {
 
       {listOpen && (
         <div className="mb-3 rounded-xl border border-border max-h-72 overflow-y-auto">
-          {chapters.map((c) => (
+          {chapters.slice(0, visibleChapters).map((c) => (
             <button
               key={c.id}
               onClick={() => gotoChapter(c.id)}
@@ -162,6 +163,14 @@ export function ReaderScreen() {
               <span className="flex-1 line-clamp-1">{c.title}</span>
             </button>
           ))}
+          {chapters.length > visibleChapters && (
+            <button
+              onClick={() => setVisibleChapters((v) => v + 200)}
+              className="w-full py-2 text-center text-xs text-primary hover:bg-accent/50"
+            >
+              Tải thêm chương ({chapters.length - visibleChapters} còn lại)
+            </button>
+          )}
         </div>
       )}
 

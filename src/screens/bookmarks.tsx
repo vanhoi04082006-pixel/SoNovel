@@ -59,11 +59,13 @@ export function BookmarksScreen() {
   }
 
   const onDelete = async (id: string) => {
+    const prev = items
+    setItems((cur) => cur.filter((x) => x.id !== id))
     try {
       await api.deleteBookmark(id)
-      setItems((prev) => prev.filter((x) => x.id !== id))
       toast.success('Đã xóa đánh dấu.')
     } catch {
+      setItems(prev)
       toast.error('Xóa thất bại.')
     }
   }

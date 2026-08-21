@@ -3,10 +3,11 @@
 import { create } from 'zustand'
 import type { SessionUser } from '@/lib/api-client'
 import { api, clearCatalogCache } from '@/lib/api-client'
+import { viewToHash } from '@/lib/view-url'
 
-type ThemeName = 'light' | 'dark' | 'sepia' | 'amoled'
+export type ThemeName = 'light' | 'dark' | 'sepia' | 'amoled'
 
-type ViewState =
+export type ViewState =
   | { view: 'home' }
   | { view: 'search'; q?: string; genre?: string; tag?: string; sort?: string }
   | { view: 'story'; seriesId: string }
@@ -69,7 +70,13 @@ export const useAppStore = globalForApp.__appStore ?? create<AppState>((set, _ge
   view: { view: 'home' },
   navigate: (v) => {
     set({ view: v })
-    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior })
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior })
+      try {
+        const hash = viewToHash(v)
+        if (window.location.hash !== hash) history.pushState(null, '', hash)
+      } catch {}
+    }
   },
 
   theme: 'light',

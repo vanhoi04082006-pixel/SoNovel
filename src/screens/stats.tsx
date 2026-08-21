@@ -555,13 +555,14 @@ function HistoryChart({ items }: { items: Array<{ date: string; seconds: number;
   const minutes = items.map(i => Math.round(i.seconds / 60))
   const maxMin = Math.max(...minutes, 1)
   const totalMin = minutes.reduce((a, b) => a + b, 0)
-  const avgMin = Math.round(totalMin / items.length)
+  const avgMin = items.length ? Math.round(totalMin / items.length) : 0
 
   // SVG line chart dimensions
   const w = 100 // viewBox width units
   const h = 40 // viewBox height units
+  const denom = Math.max(1, minutes.length - 1)
   const points = minutes.map((m, i) => {
-    const x = (i / (minutes.length - 1)) * w
+    const x = (i / denom) * w
     const y = h - (m / maxMin) * h
     return `${x},${y}`
   }).join(' ')
@@ -584,7 +585,7 @@ function HistoryChart({ items }: { items: Array<{ date: string; seconds: number;
           <polygon points={areaPoints} fill="url(#chartGradient)" />
           <polyline points={points} fill="none" stroke="var(--primary)" strokeWidth="0.8" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
           {minutes.map((m, i) => {
-            const x = (i / (minutes.length - 1)) * w
+            const x = (i / denom) * w
             const y = h - (m / maxMin) * h
             return <circle key={i} cx={x} cy={y} r="0.8" fill="var(--primary)" vectorEffect="non-scaling-stroke" />
           })}

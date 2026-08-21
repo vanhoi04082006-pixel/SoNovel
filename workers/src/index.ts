@@ -41,7 +41,7 @@ app.get('/api/settings/goal', async (c) => {
 
 async function recalcSeriesWordCount(db: D1Database, seriesId: string) {
   try {
-    const r = await db.prepare('SELECT COALESCE(SUM(word_count),0) as s FROM chapters WHERE series_id=?').bind(seriesId).first<any>()
+    const r = await db.prepare("SELECT COALESCE(SUM(word_count),0) as s FROM chapters WHERE series_id=? AND status='published'").bind(seriesId).first<any>()
     await db.prepare('UPDATE series SET word_count=?, updated_at=? WHERE id=?').bind(r?.s ?? 0, nowIso(), seriesId).run()
   } catch {}
 }
@@ -55,8 +55,10 @@ app.get('/api/series', async (c) => {
   const tag = url.searchParams.get('tag') || ''
   const status = url.searchParams.get('status') || 'published,completed'
   const sort = url.searchParams.get('sort') || 'new'
-  const limit = Math.min(48, Math.max(1, Number(url.searchParams.get('limit') || 24)))
-  const offset = Math.max(0, Number(url.searchParams.get('offset') || 0))
+  const rawLimit = Number(url.searchParams.get('limit') || 24)
+  const rawOffset = Number(url.searchParams.get('offset') || 0)
+  const limit = Number.isFinite(rawLimit) ? Math.min(48, Math.max(1, Math.trunc(rawLimit))) : 24
+  const offset = Number.isFinite(rawOffset) && rawOffset > 0 ? Math.trunc(rawOffset) : 0
   const statuses = status.split(',').filter(Boolean)
   const cacheKey = `series:${q}:${genre}:${tag}:${status}:${sort}:${limit}:${offset}`
   const result = await cachedFetch(cacheKey, 30_000, async () => {
@@ -70,7 +72,7 @@ app.get('/api/series', async (c) => {
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
     let order = 'updated_at DESC'
     if (sort === 'title') order = 'title ASC'
-    else if (sort === 'chapters') order = 'word_count DESC'
+    else if (sort === 'chapters') order = 'chapter_count DESC'
     const countRow = await db.prepare(`SELECT COUNT(*) as n FROM series ${whereSql}`).bind(...params).first<any>()
     const total = countRow?.n ?? 0
     const rows = await db.prepare(`SELECT *, (SELECT COUNT(*) FROM chapters WHERE chapters.series_id=series.id AND chapters.status='published') as chapter_count FROM series ${whereSql} ORDER BY ${order} LIMIT ? OFFSET ?`).bind(...params, limit, offset).all<SeriesRow & {chapter_count:number}>()
@@ -335,15 +337,25 @@ app.put('/api/progress', async (c) => {
   if (body.listenChapterId!==undefined || body.listenCharIndex!==undefined || body.playbackSpeed!==undefined) {
     row.last_listened_at = now
     if (body.listenChapterId!==undefined) row.listen_chapter_id = body.listenChapterId || null
-    if (body.listenCharIndex!==undefined) row.listen_char_index = Number(body.listenCharIndex)||0
-    if (body.playbackSpeed!==undefined) row.playback_speed = Number(body.playbackSpeed)||1.0
+    if (body.listenCharIndex!==undefined) {
+      const ci = Number(body.listenCharIndex)
+      row.listen_char_index = Number.isFinite(ci) && ci >= 0 ? Math.trunc(ci) : 0
+    }
+    if (body.playbackSpeed!==undefined) {
+      const ps = Number(body.playbackSpeed)
+      row.playback_speed = Number.isFinite(ps) && ps >= 0.5 && ps <= 3 ? ps : 1.0
+    }
   }
   if (body.readChapterId!==undefined || body.readCharIndex!==undefined) {
     row.last_read_at = now
     if (body.readChapterId!==undefined) row.read_chapter_id = body.readChapterId || null
     if (body.readCharIndex!==undefined) {
-      row.read_char_index = Number(body.readCharIndex)||0
-      if (body.readPercent!==undefined) row.read_percent = Number(body.readPercent)||0
+      const ci = Number(body.readCharIndex)
+      row.read_char_index = Number.isFinite(ci) && ci >= 0 ? Math.trunc(ci) : 0
+      if (body.readPercent!==undefined) {
+        const rp = Number(body.readPercent)
+        row.read_percent = Number.isFinite(rp) && rp >= 0 && rp <= 100 ? rp : 0
+      }
     }
   }
   const pid = existing?.id ?? uuid()
@@ -483,7 +495,9 @@ app.post('/api/stats/session', async (c) => {
   if(!u) return c.json({ ok:true, skipped:true })
   const { seriesId, chapterId, durationSec }=await c.req.json() as any
   if(!seriesId||!durationSec) return c.json({ error:'Thiếu seriesId/durationSec.' },400)
-  const dur=Math.max(1,Math.min(3600,Number(durationSec)||1))
+  const rawDur=Number(durationSec)
+  if(!Number.isFinite(rawDur)||rawDur<=0) return c.json({ error:'durationSec không hợp lệ.' },400)
+  const dur=Math.min(600,Math.trunc(rawDur))
   const existing=await c.env.DB.prepare('SELECT * FROM progress WHERE user_id=? AND series_id=?').bind(u.id, seriesId).first<any>()
   const now=nowIso()
   if(existing){

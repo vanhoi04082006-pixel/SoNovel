@@ -10,7 +10,7 @@ cd workers
 npx wrangler d1 migrations apply sonovel --remote
 npx wrangler secret put SUPABASE_URL
 npx wrangler secret put SUPABASE_ANON_KEY
-npx wrangler secret put SERVICE_TOKEN   # 78c9f90e... (lưu trong .env server-only)
+npx wrangler secret put SERVICE_TOKEN   # sinh mới (vd: openssl rand -hex 32) — KHÔNG commit token thật
 npx wrangler deploy
 ```
 

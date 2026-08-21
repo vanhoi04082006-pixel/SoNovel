@@ -26,18 +26,18 @@
   "shortcuts": [
     {
       "name": "Trang chủ",
-      "url": "/?view=home",
+      "url": "./#/",
       "description": "Mở trang chủ SoNovel"
     },
     {
       "name": "Tìm kiếm",
-      "url": "/?view=search",
+      "url": "./#/search",
       "description": "Tìm truyện"
     },
     {
       "name": "Tiếp tục nghe",
-      "url": "/?view=profile",
-      "description": "Xem truyện đang nghe dở"
+      "url": "./#/stats",
+      "description": "Xem thống kê và truyện đang nghe dở"
     }
   ]
 }

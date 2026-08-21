@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import { useAppStore } from '@/store/use-app-store'
 import { useRealtimeSync } from '@/hooks/use-realtime-sync'
+import { useUrlSync } from '@/hooks/use-url-sync'
 import { TopBar } from '@/components/sonovel/top-bar'
 import { BottomNav } from '@/components/sonovel/bottom-nav'
 import { PlayerBar } from '@/components/player/player-bar'
@@ -28,6 +29,7 @@ const PWARegister = dynamic(() => import('@/components/sonovel/pwa-register').th
 export default function Home() {
   const { view, initAuth, initTheme, user, authReady } = useAppStore()
   useRealtimeSync()
+  useUrlSync()
 
   useEffect(() => {
     initTheme()

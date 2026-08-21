@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Be_Vietnam_Pro } from "next/font/google";
 import "./globals.css";
-import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 
 const beVietnam = Be_Vietnam_Pro({
@@ -59,7 +58,6 @@ export default function RootLayout({
         className={`${beVietnam.variable} font-sans antialiased bg-background text-foreground`}
       >
         {children}
-        <Toaster />
         <SonnerToaster position="top-center" richColors />
       </body>
     </html>

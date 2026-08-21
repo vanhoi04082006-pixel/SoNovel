@@ -186,6 +186,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
       if (real < 0) real = chunk.offset
       set({ currentChar: Math.max(real, 0) })
       get().emit('progress', { charIndex: get().currentChar })
+      syncMediaSessionPosition()
     }
     u.onend = () => {
       if (gen !== generation) return
@@ -471,6 +472,25 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     navigator.mediaSession.setActionHandler('pause', () => get().pause())
     navigator.mediaSession.setActionHandler('previoustrack', () => get().prev())
     navigator.mediaSession.setActionHandler('nexttrack', () => get().next())
+    syncMediaSessionPosition()
+  }
+
+  // Đồng bộ vị trí lên lock-screen / media controls (Web Speech không phát audio thật,
+  // ước tính ~4.5 ký tự/giây ở rate 1 cho setPositionState).
+  const syncMediaSessionPosition = () => {
+    try {
+      if (typeof navigator === 'undefined' || !('mediaSession' in navigator) || !('setPositionState' in navigator.mediaSession)) return
+      const st = get()
+      const ch = st.chapters[st.currentIndex]
+      if (!ch) return
+      const len = Math.max(1, ch.content.length)
+      const charsPerSec = Math.max(0.5, 4.5 * (st.rate || 1))
+      navigator.mediaSession.setPositionState({
+        duration: len / charsPerSec,
+        position: Math.min(len, st.currentChar || 0) / charsPerSec,
+        playbackRate: st.rate || 1,
+      })
+    } catch {}
   }
 
   return {
@@ -583,6 +603,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
           set({ isPlaying: false, isPaused: true })
         }
       }
+      syncMediaSessionPosition()
       get().emit('progress', { charIndex: target })
       flushSave()
     },

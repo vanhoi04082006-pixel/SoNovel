@@ -12,7 +12,7 @@ export function StoryCard({ series, onClick, favorited, listenPercent }: { serie
   const navigate = useAppStore((s) => s.navigate)
   const go = () => onClick ? onClick() : navigate({ view: 'story', seriesId: series.id })
 
-  const listenMin = Math.max(1, Math.round((series.wordCount || 0) / 270))
+  const listenMin = Math.max(1, Math.round(((series.wordCount || 0) * 5) / 270))
   const primaryGenre = series.genres?.[0]
   const hasProgress = typeof listenPercent === 'number' && listenPercent > 0
 

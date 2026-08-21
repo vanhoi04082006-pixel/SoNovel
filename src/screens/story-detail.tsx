@@ -22,6 +22,7 @@ export function StoryDetailScreen() {
   const [favorited, setFavorited] = useState(false)
   const [loading, setLoading] = useState(true)
   const [chapterFilter, setChapterFilter] = useState('')
+  const [visibleChapters, setVisibleChapters] = useState(200)
   const playChapter = usePlayerStore((s) => s.playChapter)
   const setPlayerActive = useAppStore((s) => s.setPlayerActive)
 
@@ -62,6 +63,8 @@ export function StoryDetailScreen() {
   const filteredChapters = chapterFilter
     ? chapters.filter((c) => c.title.toLowerCase().includes(chapterFilter.toLowerCase()) || String(c.orderNo) === chapterFilter)
     : chapters
+  const shownChapters = filteredChapters.slice(0, visibleChapters)
+  const remainingChapters = filteredChapters.length - visibleChapters
 
   const listenChapterId = progress?.listenChapterId
   const listenCharIndex = progress?.listenCharIndex || 0
@@ -116,17 +119,20 @@ export function StoryDetailScreen() {
       navigate({ view: 'login' })
       return
     }
+    const prev = favorited
+    setFavorited(!prev)
     try {
       const r = await api.toggleFavorite(seriesId)
       setFavorited(r.favorited)
       toast.success(r.favorited ? 'Đã thêm vào yêu thích' : 'Đã bỏ khỏi yêu thích')
     } catch {
+      setFavorited(prev)
       toast.error('Không cập nhật được yêu thích.')
     }
   }
 
   const onShare = async () => {
-    const url = typeof window !== 'undefined' ? window.location.href : ''
+    const url = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}#/story/${seriesId}` : ''
     const text = detail ? `${detail.title} — ${detail.author}` : 'SoNovel'
     try {
       if (navigator.share) {
@@ -250,7 +256,7 @@ export function StoryDetailScreen() {
           </div>
         </div>
         <div className="rounded-xl border border-border divide-y divide-border overflow-hidden">
-          {filteredChapters.map((c) => {
+          {shownChapters.map((c) => {
             const isPlaying = currentPlayingChapterId === c.id
             const isListened = listenChapterId === c.id
             const pct = isPlaying && currentPlayingChar
@@ -320,6 +326,14 @@ export function StoryDetailScreen() {
             <div className="py-8 text-center text-sm text-muted-foreground">Không có chương phù hợp.</div>
           )}
         </div>
+        {remainingChapters > 0 && (
+          <button
+            onClick={() => setVisibleChapters((v) => v + 200)}
+            className="w-full rounded-lg border border-border py-2.5 text-sm text-primary hover:bg-accent/50 transition-colors"
+          >
+            Tải thêm chương ({remainingChapters} còn lại)
+          </button>
+        )}
       </div>
     </div>
   )

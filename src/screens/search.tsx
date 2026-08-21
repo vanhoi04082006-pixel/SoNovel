@@ -265,7 +265,7 @@ export function SearchScreen() {
 
 function FeaturedSearchCard({ series, rank }: { series: SeriesItem; rank: number }) {
   const navigate = useAppStore((s) => s.navigate)
-  const listenMin = Math.max(1, Math.round((series.wordCount || 0) / 270))
+  const listenMin = Math.max(1, Math.round(((series.wordCount || 0) * 5) / 270))
   const rankColors = ['text-amber-500', 'text-zinc-400', 'text-orange-700']
 
   return (
