@@ -49,6 +49,7 @@ export function SeriesScreen({ route }: { route: SeriesRouteProp }) {
   const [fav, setFav] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [visibleChapters, setVisibleChapters] = useState(100);
   const np = getNowPlaying();
 
   const load = useCallback(async () => {
@@ -158,6 +159,8 @@ export function SeriesScreen({ route }: { route: SeriesRouteProp }) {
     c.title.toLowerCase().includes(search.trim().toLowerCase()) ||
     String(c.order_no) === search.trim()
   );
+  const shownChapters = filtered.slice(0, visibleChapters);
+  const remainingChapters = filtered.length - visibleChapters;
 
   const isCurSeries = np.seriesId === series.id;
   const totalChars = chapters.reduce((sum, c) => sum + ((c.word_count ?? 0) * 5), 0);
@@ -240,11 +243,11 @@ export function SeriesScreen({ route }: { route: SeriesRouteProp }) {
                 placeholder="Tìm…"
                 placeholderTextColor={t.textMuted}
                 value={search}
-                onChangeText={setSearch}
+                onChangeText={(t) => { setSearch(t); setVisibleChapters(100) }}
               />
             </View>
           </View>
-          {filtered.map((c, i) => {
+          {shownChapters.map((c, i) => {
             const isCurChapter = isCurSeries && np.currentIndex === i;
             return (
               <Pressable
@@ -271,6 +274,16 @@ export function SeriesScreen({ route }: { route: SeriesRouteProp }) {
               </Pressable>
             );
           })}
+          {remainingChapters > 0 && (
+            <Pressable
+              onPress={() => setVisibleChapters((v) => v + 100)}
+              style={[styles.chapterRow, { borderColor: t.border, justifyContent: 'center' }]}
+            >
+              <Text style={{ color: t.primary, fontSize: 13, fontWeight: '600' }}>
+                Tải thêm chương ({remainingChapters} còn lại)
+              </Text>
+            </Pressable>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>

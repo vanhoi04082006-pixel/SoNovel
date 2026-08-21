@@ -212,6 +212,40 @@ export async function getProgress(seriesId: string): Promise<ProgressRow | null>
 export async function listAllProgress(): Promise<(ProgressRow & { series?: SeriesRow })[]> {
   const userId = getUserId();
   if (!userId) return [];
+  // Worker /api/continue-listening trả đủ series title/cover + chapter word_count
+  // → "Tiếp tục nghe" hiển thị đúng (trước đây /api/progress/all không có series → rỗng).
+  try {
+    const j: any = await workerJson('/api/continue-listening', { method: 'GET' });
+    const items = j.items ?? [];
+    if (items.length > 0) {
+      return items.map((it: any) => ({
+        user_id: userId,
+        series_id: it.seriesId,
+        listen_chapter_id: it.chapterId ?? null,
+        listen_char_index: it.listenCharIndex ?? 0,
+        audio_sec: 0,
+        playback_speed: it.playbackSpeed ?? 1.0,
+        last_listened_at: it.lastListenedAt,
+        read_chapter_id: null,
+        read_char_index: 0,
+        read_percent: it.percent ?? 0,
+        last_read_at: null,
+        series: {
+          id: it.seriesId,
+          title: it.title ?? '',
+          author: '',
+          description: '',
+          cover_url: it.coverUrl ?? '',
+          status: 'published',
+          genres: [],
+          tags: [],
+          word_count: it.chapterWordCount ?? 0,
+          updated_at: it.lastListenedAt ?? '',
+          created_at: it.lastListenedAt ?? '',
+        } as SeriesRow,
+      }));
+    }
+  } catch {}
   try {
     const j: any = await workerJson('/api/progress/all', { method: 'GET' });
     const items = j.items ?? [];
@@ -245,6 +279,23 @@ export async function listAllProgress(): Promise<(ProgressRow & { series?: Serie
   } catch {
     return [];
   }
+}
+
+// Ghi giờ nghe thực tế lên Worker (nuôi stats/streak/achievements cho mobile).
+// Endpoint có sẵn: POST /api/stats/session (worker cap 600s/lần).
+export async function saveSession(opts: { seriesId: string; chapterId?: string | null; durationSec: number }): Promise<void> {
+  const userId = getUserId();
+  if (!userId || !opts.seriesId || opts.durationSec <= 0) return;
+  try {
+    await workerJson('/api/stats/session', {
+      method: 'POST',
+      body: JSON.stringify({
+        seriesId: opts.seriesId,
+        chapterId: opts.chapterId ?? null,
+        durationSec: Math.min(600, Math.max(1, Math.round(opts.durationSec))),
+      }),
+    });
+  } catch {}
 }
 
 export async function saveListenProgress(opts: {

@@ -6,19 +6,25 @@ import {
   Text,
   View,
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { useTheme, TYPO, RADIUS } from '../../theme';
 import { Chip } from '../ui/Chip';
 import { Icon } from '../ui/Icon';
+import { SeekBar } from './SeekBar';
 import { SleepOption } from './SleepSheet';
 
 type Props = {
   isPlaying: boolean;
   busy: boolean;
   rate: number;
+  charIndex: number;
+  charLength: number;
   sleepLabel: string;
   onPlayPause: () => void;
   onPrev: () => void;
   onNext: () => void;
+  onSeek: (char: number) => void;
+  onSeekBySeconds: (sec: number) => void;
   onTextSheet: () => void;
   onChaptersSheet: () => void;
   onSleepSheet: () => void;
@@ -30,22 +36,46 @@ const RATES = [0.75, 1, 1.25, 1.5, 2];
 
 export function PlayerControls(p: Props) {
   const t = useTheme();
+  const tap = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    p.onPlayPause();
+  };
+
   return (
     <View style={styles.wrap}>
+      {/* Seek bar + progress */}
+      <SeekBar charIndex={p.charIndex} charLength={p.charLength} rate={p.rate} onSeek={p.onSeek} />
+
       {/* Main controls */}
       <View style={styles.row}>
-        <Pressable onPress={p.onPrev} style={styles.iconBtn}>
+        <Pressable
+          onPress={p.onPrev}
+          onLongPress={() => p.onSeekBySeconds(-10)}
+          style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.6 }]}
+        >
           <Icon name="play-back" size={26} color={t.text} />
           <Text style={[TYPO.caption, { color: t.textMuted }]}>Trước</Text>
         </Pressable>
-        <Pressable onPress={p.onPlayPause} style={[styles.playBtn, { backgroundColor: t.primary }]}>
+        <Pressable
+          onPress={tap}
+          style={({ pressed }) => [
+            styles.playBtn,
+            { backgroundColor: t.primary },
+            pressed && { transform: [{ scale: 0.94 }], opacity: 0.9 },
+          ]}
+          disabled={p.busy}
+        >
           {p.busy ? (
             <ActivityIndicator color={t.primaryText} size="large" />
           ) : (
             <Icon name={p.isPlaying ? 'pause' : 'play'} size={30} color={t.primaryText} />
           )}
         </Pressable>
-        <Pressable onPress={p.onNext} style={styles.iconBtn}>
+        <Pressable
+          onPress={p.onNext}
+          onLongPress={() => p.onSeekBySeconds(10)}
+          style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.6 }]}
+        >
           <Icon name="play-forward" size={26} color={t.text} />
           <Text style={[TYPO.caption, { color: t.textMuted }]}>Sau</Text>
         </Pressable>
@@ -66,19 +96,19 @@ export function PlayerControls(p: Props) {
 
       {/* Secondary actions */}
       <View style={styles.secondaryRow}>
-        <Pressable onPress={p.onTextSheet} style={[styles.secBtn, { backgroundColor: t.bgSubtle }]}>
+        <Pressable onPress={p.onTextSheet} style={({ pressed }) => [styles.secBtn, { backgroundColor: t.bgSubtle }, pressed && { opacity: 0.7 }]}>
           <Icon name="document-text-outline" size={18} color={t.text} />
           <Text style={[TYPO.label, { color: t.text }]}>Xem chữ</Text>
         </Pressable>
-        <Pressable onPress={p.onChaptersSheet} style={[styles.secBtn, { backgroundColor: t.bgSubtle }]}>
+        <Pressable onPress={p.onChaptersSheet} style={({ pressed }) => [styles.secBtn, { backgroundColor: t.bgSubtle }, pressed && { opacity: 0.7 }]}>
           <Icon name="list-outline" size={18} color={t.text} />
           <Text style={[TYPO.label, { color: t.text }]}>Chương</Text>
         </Pressable>
-        <Pressable onPress={p.onSleepSheet} style={[styles.secBtn, { backgroundColor: t.bgSubtle }]}>
+        <Pressable onPress={p.onSleepSheet} style={({ pressed }) => [styles.secBtn, { backgroundColor: t.bgSubtle }, pressed && { opacity: 0.7 }]}>
           <Icon name="moon-outline" size={18} color={t.text} />
           <Text style={[TYPO.label, { color: t.text }]}>{p.sleepLabel}</Text>
         </Pressable>
-        <Pressable onPress={p.onStop} style={[styles.secBtn, { backgroundColor: t.dangerSoft }]}>
+        <Pressable onPress={p.onStop} style={({ pressed }) => [styles.secBtn, { backgroundColor: t.dangerSoft }, pressed && { opacity: 0.7 }]}>
           <Icon name="stop-circle-outline" size={18} color={t.danger} />
           <Text style={[TYPO.label, { color: t.danger }]}>Dừng</Text>
         </Pressable>
@@ -88,7 +118,7 @@ export function PlayerControls(p: Props) {
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: 20 },
+  wrap: { gap: 16 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 4 },
   iconBtn: { alignItems: 'center', gap: 4, flex: 1, paddingVertical: 4 },
   playBtn: {

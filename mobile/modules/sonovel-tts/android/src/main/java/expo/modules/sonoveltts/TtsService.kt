@@ -102,6 +102,7 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
     private var watchdogRunnable: Runnable? = null
     private var initTimeoutRunnable: Runnable? = null
     private var settleRunnable: Runnable? = null
+    private var sleepRunnable: Runnable? = null
 
     // --- Notification / MediaSession / Audio focus ---
     private var notificationManager: NotificationManager? = null
@@ -152,6 +153,7 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         super.onDestroy()
         cancelWatchdog()
         cancelInitTimeout()
+        cancelSleepTimer()
         try { tts?.stop() } catch (_: Throwable) {}
         try { tts?.shutdown() } catch (_: Throwable) {}
         tts = null
@@ -259,6 +261,20 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
             .setOnlyAlertOnce(true)
             .setShowWhen(false)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+
+        // Tap notification → mở app
+        try {
+            val launch = packageManager.getLaunchIntentForPackage(packageName)
+            if (launch != null) {
+                val contentPi = PendingIntent.getActivity(
+                    this, 0, launch,
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    else PendingIntent.FLAG_UPDATE_CURRENT
+                )
+                builder.setContentIntent(contentPi)
+            }
+        } catch (_: Throwable) {}
 
         builder.addAction(android.R.drawable.ic_media_previous, "Trước",
             buildAction(ACTION_PREV, 1))
@@ -760,6 +776,7 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         playing = false
         engineStarted = false
         cancelWatchdog()
+        cancelSleepTimer()
         try { tts?.stop() } catch (_: Throwable) {}
         emit(Events.ON_STATE_CHANGE, mapOf("state" to "stopped"))
         updateMediaMetadata()
@@ -775,6 +792,26 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
             } catch (_: Throwable) {}
             stopSelf()
         }
+    }
+
+    // -------------------------------------------------------------------
+    // Sleep timer — dừng phát sau N ms kể cả khi app đã bị kill/ra nền.
+    // JS vẫn giữ bộ đếm riêng cho UI; native là lớp an toàn.
+    // -------------------------------------------------------------------
+
+    fun setSleepTimer(ms: Long) {
+        cancelSleepTimer()
+        if (ms <= 0) return
+        sleepRunnable = Runnable {
+            sleepRunnable = null
+            onStop(true)
+        }
+        main.postDelayed(sleepRunnable!!, ms)
+    }
+
+    private fun cancelSleepTimer() {
+        sleepRunnable?.let { main.removeCallbacks(it) }
+        sleepRunnable = null
     }
 
     // -------------------------------------------------------------------

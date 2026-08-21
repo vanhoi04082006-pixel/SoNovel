@@ -16,7 +16,7 @@ type Props = {
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-export function SeriesCard({ series, onPress, width, favorited, showChapterCount }: Props) {
+export const SeriesCard = React.memo(function SeriesCard({ series, onPress, width, favorited, showChapterCount }: Props) {
   const t = useTheme();
   const scale = useSharedValue(1);
   const completed = series.status === 'completed';
@@ -65,7 +65,7 @@ export function SeriesCard({ series, onPress, width, favorited, showChapterCount
       </AnimatedPressable>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   wrap: { marginBottom: 14 },

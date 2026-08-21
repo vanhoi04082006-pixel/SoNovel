@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import androidx.core.content.ContextCompat
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -127,6 +129,16 @@ class SonovelTtsModule : Module() {
             sendAction(TtsService.ACTION_SET_RATE, mapOf(
                 TtsService.EXTRA_RATE to rate.toFloat()
             ))
+            "ok"
+        }
+
+        AsyncFunction("sleepAfter") { ms: Long ->
+            // KHÔNG startForegroundService (tránh crash Android 12+ khi service chưa chạy).
+            // Chỉ set timer nếu service đã đang chạy.
+            val svc = TtsService.instance
+            if (svc != null) {
+                Handler(Looper.getMainLooper()).post { svc.setSleepTimer(ms) }
+            }
             "ok"
         }
 

@@ -22,11 +22,12 @@ type Props = {
   chapter: ChapterText | null;
   currentIndex: number;
   charIndex: number;
+  onSeek?: (char: number) => void;
 };
 
 const SCREEN_H = Dimensions.get('window').height;
 
-export function TextSheet({ visible, onClose, chapter, currentIndex, charIndex }: Props) {
+export function TextSheet({ visible, onClose, chapter, currentIndex, charIndex, onSeek }: Props) {
   const t = useTheme();
   const [follow, setFollow] = useState(true);
   const listRef = useRef<FlatList<(Paragraph | null)>>(null);
@@ -95,8 +96,10 @@ export function TextSheet({ visible, onClose, chapter, currentIndex, charIndex }
         renderItem={({ item, index }) => {
           if (item == null || item === '') return <View style={{ height: 8 }} />;
           const isActive = index === activeIdx;
+          const paraStart = offsets[index] ?? 0;
           return (
-            <View
+            <Pressable
+              onPress={() => onSeek?.(paraStart)}
               style={[
                 styles.paraWrap,
                 isActive && { backgroundColor: t.primarySoft, borderRadius: RADIUS.md },
@@ -111,7 +114,7 @@ export function TextSheet({ visible, onClose, chapter, currentIndex, charIndex }
               >
                 {item}
               </Text>
-            </View>
+            </Pressable>
           );
         }}
         onScrollToIndexFailed={() => {}}

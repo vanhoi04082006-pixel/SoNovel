@@ -65,6 +65,7 @@ export interface SonovelTtsApi {
   stop(): Promise<string>;
   seekTo(char: number): Promise<string>;
   setRate(rate: number): Promise<string>;
+  sleepAfter(ms: number): Promise<string>;
   getState(): Promise<TtsStateSnapshot>;
   requestNotificationPermission(): Promise<boolean>;
 }

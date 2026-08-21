@@ -30,10 +30,12 @@ import {
   startTts,
   stopTts,
   togglePlayPause,
+  seekToTts,
   ensureChapterContent,
   TtsChapter,
 } from '../lib/tts';
 import { listChapters, ChapterRow } from '../lib/progress';
+import { nativeTts } from '../lib/nativeTts';
 import { RootStackParamList } from '../navigation/types';
 
 type PlayerRouteProp = RouteProp<RootStackParamList, 'Player'>;
@@ -65,15 +67,44 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
   const [showChapters, setShowChapters] = useState(false);
   const [showSleep, setShowSleep] = useState(false);
   const [sleep, setSleep] = useState<SleepOption>('off');
+  const [sleepEnd, setSleepEnd] = useState(0);
+  const [now, setNow] = useState(Date.now());
   const [error, setError] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(false);
   const sleepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (sleepEnd <= 0) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [sleepEnd]);
+
+  const sleepRemainingSec = sleepEnd > 0 ? Math.max(0, Math.round((sleepEnd - now) / 1000)) : 0;
+
+  const refreshNp = useCallback(() => {
+    setNp((prev) => {
+      const next = getNowPlaying();
+      if (
+        prev.seriesId === next.seriesId &&
+        prev.currentIndex === next.currentIndex &&
+        prev.currentChar === next.currentChar &&
+        prev.charLength === next.charLength &&
+        prev.rate === next.rate &&
+        prev.isPlaying === next.isPlaying &&
+        prev.busy === next.busy &&
+        prev.seriesEnded === next.seriesEnded
+      ) {
+        return prev;
+      }
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
     const unsubs = [
-      onTtsEvent('nowPlaying', () => setNp(getNowPlaying())),
-      onTtsEvent('stateChange', () => setNp(getNowPlaying())),
-      onTtsEvent('progress', () => setNp(getNowPlaying())),
+      onTtsEvent('nowPlaying', refreshNp),
+      onTtsEvent('stateChange', refreshNp),
+      onTtsEvent('progress', refreshNp),
       onTtsEvent('error', (p: any) => {
         setError(p?.message ?? 'Lỗi TTS');
       }),
@@ -85,7 +116,7 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
       }),
     ];
     return () => unsubs.forEach((u) => u());
-  }, [sleep]);
+  }, [sleep, refreshNp]);
 
   useEffect(() => {
     if (sleepTimerRef.current) {
@@ -99,6 +130,10 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
         setSleep('off');
       }, mins * 60 * 1000);
     }
+    // Đồng bộ native sleep timer — dừng phát kể cả khi app bị kill/ra nền.
+    try {
+      nativeTts.sleepAfter(mins != null ? mins * 60 * 1000 : 0).catch(() => {});
+    } catch (_e) {}
     return () => {
       if (sleepTimerRef.current) {
         clearTimeout(sleepTimerRef.current);
@@ -156,6 +191,16 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
   };
 
   const onSetRate = (r: number) => setRateTts(r);
+
+  const onSeek = (char: number) => {
+    setError(null);
+    seekToTts(Math.max(0, Math.min(np.charLength || 0, char)));
+  };
+
+  const onSeekBySeconds = (sec: number) => {
+    const delta = Math.round(sec * 4.5 * (np.rate || 1));
+    onSeek(np.currentChar + delta);
+  };
 
   const openTextSheet = async () => {
     try {
@@ -220,10 +265,14 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
             isPlaying={np.isPlaying}
             busy={np.busy}
             rate={np.rate}
+            charIndex={np.currentChar}
+            charLength={np.charLength}
             sleepLabel={SLEEP_LABELS[sleep]}
             onPlayPause={onPlayPause}
             onPrev={() => prevChapterTts()}
             onNext={() => nextChapterTts()}
+            onSeek={onSeek}
+            onSeekBySeconds={onSeekBySeconds}
             onTextSheet={openTextSheet}
             onChaptersSheet={() => setShowChapters(true)}
             onSleepSheet={() => setShowSleep(true)}
@@ -247,6 +296,7 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
         chapter={chapter}
         currentIndex={np.currentIndex}
         charIndex={np.currentChar}
+        onSeek={onSeek}
       />
       <ChaptersSheet
         visible={showChapters}
@@ -263,8 +313,17 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
         visible={showSleep}
         onClose={() => setShowSleep(false)}
         value={sleep}
-        onChange={setSleep}
+        onChange={(v) => {
+          setSleep(v);
+          const mins = SLEEP_MINUTES[v];
+          setSleepEnd(mins != null ? Date.now() + mins * 60 * 1000 : 0);
+        }}
       />
+      {sleepRemainingSec > 0 && (
+        <Text style={{ color: t.textMuted, fontSize: 12, textAlign: 'center', marginTop: 8 }}>
+          Hẹn giờ tắt: còn lại {Math.floor(sleepRemainingSec / 60)}:{String(sleepRemainingSec % 60).padStart(2, '0')}
+        </Text>
+      )}
     </SafeAreaView>
   );
 }

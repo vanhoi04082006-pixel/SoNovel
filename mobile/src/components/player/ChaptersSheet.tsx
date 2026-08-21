@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useTheme, TYPO, RADIUS, SPACING } from '../../theme';
 import { SheetModal } from '../ui/SheetModal';
 import { Icon } from '../ui/Icon';
@@ -32,6 +32,28 @@ export function ChaptersSheet({ visible, onClose, chapters, currentIndex, onSele
       );
   }, [q, chapters]);
 
+  const renderItem = useCallback(
+    ({ item }: { item: { c: ChapterListItem; i: number } }) => {
+      const { c, i } = item;
+      const isCur = i === currentIndex;
+      return (
+        <Pressable
+          onPress={() => { onSelect(i); onClose(); }}
+          style={[styles.row, { backgroundColor: isCur ? t.primarySoft : 'transparent' }]}
+        >
+          <View style={[styles.idxWrap, { backgroundColor: isCur ? t.primary : t.bgSubtle }]}>
+            <Text style={[styles.idx, { color: isCur ? t.primaryText : t.textMuted }]}>{i + 1}</Text>
+          </View>
+          <Text style={[styles.rowTitle, { color: t.text }]} numberOfLines={2}>
+            {c.title}
+          </Text>
+          {isCur ? <Icon name="volume-high" size={16} color={t.primary} /> : null}
+        </Pressable>
+      );
+    },
+    [currentIndex, onClose, onSelect, t]
+  );
+
   return (
     <SheetModal visible={visible} onClose={onClose} heightPct={0.7}>
       <View style={styles.head}>
@@ -48,26 +70,17 @@ export function ChaptersSheet({ visible, onClose, chapters, currentIndex, onSele
           onChangeText={setQ}
         />
       </View>
-      <View style={styles.list}>
-        {filtered.map(({ c, i }) => {
-          const isCur = i === currentIndex;
-          return (
-            <Pressable
-              key={c.id}
-              onPress={() => { onSelect(i); onClose(); }}
-              style={[styles.row, { backgroundColor: isCur ? t.primarySoft : 'transparent' }]}
-            >
-              <View style={[styles.idxWrap, { backgroundColor: isCur ? t.primary : t.bgSubtle }]}>
-                <Text style={[styles.idx, { color: isCur ? t.primaryText : t.textMuted }]}>{i + 1}</Text>
-              </View>
-              <Text style={[styles.rowTitle, { color: t.text }]} numberOfLines={2}>
-                {c.title}
-              </Text>
-              {isCur ? <Icon name="volume-high" size={16} color={t.primary} /> : null}
-            </Pressable>
-          );
-        })}
-      </View>
+      <FlatList
+        data={filtered}
+        keyExtractor={(item) => item.c.id}
+        renderItem={renderItem}
+        initialNumToRender={30}
+        maxToRenderPerBatch={30}
+        windowSize={11}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.list}
+        ListEmptyComponent={<Text style={[TYPO.caption, { color: t.textMuted, textAlign: 'center', paddingVertical: 24 }]}>Không có chương phù hợp.</Text>}
+      />
     </SheetModal>
   );
 }

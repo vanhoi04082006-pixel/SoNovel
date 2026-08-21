@@ -5,6 +5,7 @@ import { getUserId } from './session';
 import { getChapterContent } from './chapters';
 import { nativeTts, TtsState, TtsProgress } from './nativeTts';
 import { workerJson } from './worker';
+import { saveSession } from './progress';
 
 /**
  * JS state manager cho native TTS module (theo §8.5).
@@ -59,6 +60,8 @@ let currentChar = 0;
 let currentCharLength = 0;
 let rate = 1.0;
 let isPlaying = false;
+// Mốc thời gian đếm giờ nghe thực tế (reset khi pause/stop, set khi phát).
+let lastSessionMark = 0;
 let busy = false;
 let seriesEnded = false;
 
@@ -183,6 +186,15 @@ function scheduleSave() {
   saveTimer = setTimeout(() => {
     saveTimer = null;
     flushTtsSave().catch(() => {});
+    // Đếm giờ nghe thực tế (nuôi stats/streak/achievements) — chỉ khi đang phát.
+    if (isPlaying && seriesId) {
+      const now = Date.now();
+      if (lastSessionMark > 0) {
+        const sec = Math.round((now - lastSessionMark) / 1000);
+        if (sec > 0) saveSession({ seriesId, chapterId: chapters[currentIndex]?.id ?? null, durationSec: sec }).catch(() => {});
+      }
+      lastSessionMark = now;
+    }
   }, SAVE_THROTTLE_MS);
 }
 
@@ -443,6 +455,8 @@ export async function startTts(opts: {
   seriesEnded = false;
 
   setBusy(true);
+  // Android 13+: yêu cầu quyền notification để hiện media notification của foreground service.
+  try { nativeTts.requestNotificationPermission(); } catch (_e) {}
   // Start polling liên tục — sync UI với native state (chapter change, progress)
   startPolling();
   emitLocal('nowPlaying');
@@ -474,6 +488,8 @@ export async function startTts(opts: {
       currentChar,
       rate
     );
+    // Đánh dấu mốc đếm giờ nghe
+    lastSessionMark = Date.now();
     // busy + UI sẽ được sync bởi polling (getState mỗi 1s)
   } catch (e: any) {
     setBusy(false);
@@ -516,6 +532,7 @@ export async function pauseTts(): Promise<void> {
   await flushTtsSave();
   try { await nativeTts.pause(); } catch (_e) {}
   isPlaying = false;
+  lastSessionMark = 0;
   emitLocal('stateChange', { state: 'paused' });
   emitLocal('nowPlaying');
 }
@@ -566,6 +583,7 @@ export async function stopTts(): Promise<void> {
   isPlaying = false;
   busy = false;
   seriesEnded = false;
+  lastSessionMark = 0;
   if (busyTimer) {
     clearTimeout(busyTimer);
     busyTimer = null;

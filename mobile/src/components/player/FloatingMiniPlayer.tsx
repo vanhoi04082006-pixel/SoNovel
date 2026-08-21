@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme, TYPO, RADIUS } from '../../theme';
-import { getNowPlaying, onTtsEvent, togglePlayPause } from '../../lib/tts';
+import { getNowPlaying, onTtsEvent, togglePlayPause, prevChapterTts, nextChapterTts, stopTts } from '../../lib/tts';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
 import { CoverImage } from '../ui/CoverImage';
@@ -60,16 +60,40 @@ export function FloatingMiniPlayer() {
           </Text>
         </View>
       </View>
-      <Pressable
-        onPress={(e) => { e.stopPropagation(); togglePlayPause(); }}
-        style={[styles.playBtn, { backgroundColor: t.primary }]}
-      >
-        {np.busy ? (
-          <ActivityIndicator color={t.primaryText} size="small" />
-        ) : (
-          <Icon name={np.isPlaying ? 'pause' : 'play'} size={18} color={t.primaryText} />
-        )}
-      </Pressable>
+      <View style={styles.actions}>
+        <Pressable
+          onPress={(e) => { e.stopPropagation(); prevChapterTts(); }}
+          hitSlop={6}
+          style={styles.smallBtn}
+        >
+          <Icon name="play-back" size={18} color={t.textMuted} />
+        </Pressable>
+        <Pressable
+          onPress={(e) => { e.stopPropagation(); togglePlayPause(); }}
+          style={[styles.playBtn, { backgroundColor: t.primary }]}
+        >
+          {np.busy ? (
+            <ActivityIndicator color={t.primaryText} size="small" />
+          ) : (
+            <Icon name={np.isPlaying ? 'pause' : 'play'} size={18} color={t.primaryText} />
+          )}
+        </Pressable>
+        <Pressable
+          onPress={(e) => { e.stopPropagation(); nextChapterTts(); }}
+          hitSlop={6}
+          style={styles.smallBtn}
+        >
+          <Icon name="play-forward" size={18} color={t.textMuted} />
+        </Pressable>
+        <Pressable
+          onPress={(e) => { e.stopPropagation(); stopTts(); }}
+          hitSlop={6}
+          style={styles.smallBtn}
+          accessibilityLabel="Dừng"
+        >
+          <Icon name="stop" size={18} color={t.danger} />
+        </Pressable>
+      </View>
     </Pressable>
   );
 }
@@ -95,6 +119,13 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  smallBtn: {
+    width: 30,
+    height: 30,
     alignItems: 'center',
     justifyContent: 'center',
   },
