@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import { getUserId } from './session';
 import { getLocalProgress } from './tts';
 import { workerJson } from './worker';
+import { withCache, DEFAULT_TTL_MS, SHORT_TTL_MS } from './dataCache';
 
 export type SeriesRow = {
   id: string;
@@ -131,49 +132,58 @@ export async function listSeries(opts?: {
   if (search) sp.set('q', search);
   if (genre) sp.set('genre', genre);
   if (tag) sp.set('tag', tag);
-  try {
-    const j: any = await workerJson(`/api/series?${sp.toString()}`, { method: 'GET' });
-    return (j.items ?? []).map(mapSeries);
-  } catch {
-    let q = supabase.from('series').select('*').in('status', status).range(offset, offset + limit - 1);
-    if (orderBy === 'title') q = q.order('title', { ascending: false });
-    else if (orderBy === 'word_count') q = q.order('word_count', { ascending: false });
-    else q = q.order('updated_at', { ascending: false });
-    if (search) q = q.or(`title.ilike.%${search}%,author.ilike.%${search}%`);
-    if (genre) q = q.contains('genres', [genre]);
-    if (tag) q = q.contains('tags', [tag]);
-    const { data, error } = await q;
-    if (error) throw error;
-    return (data ?? []) as SeriesRow[];
-  }
+  // Cache catalogue 60s — chuyển tab/quay lại không phải tải lại từ đầu.
+  return withCache(`series:${sp.toString()}`, DEFAULT_TTL_MS, async () => {
+    try {
+      const j: any = await workerJson(`/api/series?${sp.toString()}`, { method: 'GET' });
+      return (j.items ?? []).map(mapSeries);
+    } catch {
+      let q = supabase.from('series').select('*').in('status', status).range(offset, offset + limit - 1);
+      if (orderBy === 'title') q = q.order('title', { ascending: false });
+      else if (orderBy === 'word_count') q = q.order('word_count', { ascending: false });
+      else q = q.order('updated_at', { ascending: false });
+      if (search) q = q.or(`title.ilike.%${search}%,author.ilike.%${search}%`);
+      if (genre) q = q.contains('genres', [genre]);
+      if (tag) q = q.contains('tags', [tag]);
+      const { data, error } = await q;
+      if (error) throw error;
+      return (data ?? []) as SeriesRow[];
+    }
+  });
 }
 
 export async function getSeries(id: string): Promise<SeriesRow | null> {
-  try {
-    const j: any = await workerJson(`/api/series/${id}`, { method: 'GET' });
-    if (!j?.id) return null;
-    return mapSeries(j);
-  } catch {
-    const { data, error } = await supabase.from('series').select('*').eq('id', id).maybeSingle();
-    if (error) throw error;
-    return data as SeriesRow | null;
-  }
+  return withCache(`seriesDetail:${id}`, DEFAULT_TTL_MS, async () => {
+    try {
+      const j: any = await workerJson(`/api/series/${id}`, { method: 'GET' });
+      if (!j?.id) return null;
+      return mapSeries(j);
+    } catch {
+      const { data, error } = await supabase.from('series').select('*').eq('id', id).maybeSingle();
+      if (error) throw error;
+      return data as SeriesRow | null;
+    }
+  });
 }
 
 export async function listChapters(seriesId: string): Promise<ChapterRow[]> {
-  try {
-    const j: any = await workerJson(`/api/series/${seriesId}/chapters`, { method: 'GET' });
-    return (j.items ?? []).map(mapChapter);
-  } catch {
-    const { data, error } = await supabase
-      .from('chapters')
-      .select('id, series_id, order_no, title, status, word_count, published_at')
-      .eq('series_id', seriesId)
-      .eq('status', 'published')
-      .order('order_no', { ascending: true });
-    if (error) throw error;
-    return (data ?? []) as ChapterRow[];
-  }
+  // fields=meta → chỉ metadata (id/order/title/word_count), KHÔNG kèm nội dung.
+  // Nội dung từng chương được tải lười qua getChapterContent() khi cần phát/đọc.
+  return withCache(`chapters:${seriesId}`, DEFAULT_TTL_MS, async () => {
+    try {
+      const j: any = await workerJson(`/api/series/${seriesId}/chapters?fields=meta`, { method: 'GET' });
+      return (j.items ?? []).map(mapChapter);
+    } catch {
+      const { data, error } = await supabase
+        .from('chapters')
+        .select('id, series_id, order_no, title, status, word_count, published_at')
+        .eq('series_id', seriesId)
+        .eq('status', 'published')
+        .order('order_no', { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as ChapterRow[];
+    }
+  });
 }
 
 // ---------- Progress (Worker primary, fallback local/supabase) ----------
@@ -215,7 +225,9 @@ export async function listAllProgress(): Promise<(ProgressRow & { series?: Serie
   // Worker /api/continue-listening trả đủ series title/cover + chapter word_count
   // → "Tiếp tục nghe" hiển thị đúng (trước đây /api/progress/all không có series → rỗng).
   try {
-    const j: any = await workerJson('/api/continue-listening', { method: 'GET' });
+    const j: any = await withCache(`continue:${userId}`, SHORT_TTL_MS, () =>
+      workerJson('/api/continue-listening', { method: 'GET' })
+    );
     const items = j.items ?? [];
     if (items.length > 0) {
       return items.map((it: any) => ({
@@ -412,8 +424,7 @@ export async function saveListenProgress(opts: {
   chapterId: string;
   charIndex: number;
   rate: number;
-}): Promise<void> {
-  const userId = getUserId();
+}): Promise<void> {  const userId = getUserId();
   if (!userId) return;
   try {
     await workerJson('/api/progress', {
@@ -437,6 +448,28 @@ export async function saveListenProgress(opts: {
       last_listened_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id,series_id' });
+  } catch {}
+}
+
+/** Lưu tiến độ ĐỌC (read track) — dùng bởi màn Reader. Worker PUT /api/progress hỗ trợ readChapterId/readCharIndex/readPercent. */
+export async function saveReadProgress(opts: {
+  seriesId: string;
+  chapterId: string;
+  charIndex: number;
+  percent?: number;
+}): Promise<void> {
+  const userId = getUserId();
+  if (!userId) return; // khách chưa đăng nhập: tiến độ đọc chỉ trong phiên
+  try {
+    await workerJson('/api/progress', {
+      method: 'PUT',
+      body: JSON.stringify({
+        seriesId: opts.seriesId,
+        readChapterId: opts.chapterId,
+        readCharIndex: opts.charIndex,
+        ...(opts.percent !== undefined ? { readPercent: Math.round(opts.percent) } : {}),
+      }),
+    });
   } catch {}
 }
 

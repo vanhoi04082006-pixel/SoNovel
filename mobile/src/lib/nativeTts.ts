@@ -30,6 +30,8 @@ export interface TtsStateSnapshot {
   chaptersCount: number;
   seriesTitle: string;
   ttsReady: boolean;
+  /** true ngay sau khi chương vừa phát xong (finishChapter) — JS dùng để nhận diện hết-chương qua polling. */
+  finished?: boolean;
   serviceRunning: boolean;
 }
 

@@ -19,6 +19,8 @@ import { LoginScreen } from '../screens/Login';
 import { BookmarksScreen } from '../screens/Bookmarks';
 import { StatsScreen } from '../screens/Stats';
 import { SettingsScreen } from '../screens/Settings';
+import { CatalogScreen } from '../screens/Catalog';
+import { ReaderScreen } from '../screens/Reader';
 import { TabBar } from './TabBar';
 import { RootStackParamList, TabsParamList } from './types';
 
@@ -75,6 +77,11 @@ export function RootNavigator() {
       >
         <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
         <Stack.Screen
+          name="Catalog"
+          component={CatalogScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
           name="Series"
           component={SeriesScreen}
           options={({ route }) => ({ title: route.params?.seriesId ? 'Chi tiết truyện' : 'Truyện' })}
@@ -83,6 +90,11 @@ export function RootNavigator() {
           name="Player"
           component={PlayerScreen}
           options={{ title: 'Trình nghe' }}
+        />
+        <Stack.Screen
+          name="Reader"
+          component={ReaderScreen}
+          options={{ headerShown: false }}
         />
         <Stack.Screen
           name="Login"

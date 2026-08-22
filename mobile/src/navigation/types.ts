@@ -10,6 +10,15 @@ export type RootStackParamList = {
     startIndex?: number;
     startChar?: number;
   };
+  /** Màn "Tất cả truyện" — sort truyền sẵn từ Bảng xếp hạng / Xem tất cả. */
+  Catalog: { sort?: 'new' | 'chapters' | 'title'; title?: string } | undefined;
+  /** Màn đọc chương — prev/next trong hệ thống bộ truyện. */
+  Reader: {
+    seriesId: string;
+    seriesTitle: string;
+    chapterId?: string;
+    chapterIndex?: number;
+  };
   Bookmarks: undefined;
   Stats: undefined;
   Settings: undefined;

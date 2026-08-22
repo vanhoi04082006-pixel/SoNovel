@@ -11,7 +11,8 @@ import {
   View,
   Dimensions,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, TYPO, SPACING, RADIUS } from '../theme';
 import { SeriesCard } from '../components/ui/SeriesCard';
@@ -20,6 +21,7 @@ import { Icon } from '../components/ui/Icon';
 import { EmptyState } from '../components/ui/EmptyState';
 import { SheetModal } from '../components/ui/SheetModal';
 import { listSeries, SeriesRow } from '../lib/progress';
+import { RootStackParamList } from '../navigation/types';
 import { addRecentSearch, getRecentSearches, removeRecentSearch, clearRecentSearches } from '../lib/recentSearch';
 import { consumeSearchFilter, peekSearchFilter } from '../lib/searchFilter';
 import { useMiniPlayerPad } from '../lib/useMiniPlayerPad';
@@ -32,7 +34,9 @@ type Sort = 'new' | 'title' | 'chapters';
 
 export function SearchScreen() {
   const t = useTheme();
+  const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const pad = useMiniPlayerPad(true);
+  const openSeries = useCallback((s: SeriesRow) => nav.navigate('Series', { seriesId: s.id }), [nav]);
 
   const [q, setQ] = useState('');
   const [debounced, setDebounced] = useState('');
@@ -247,7 +251,7 @@ export function SearchScreen() {
         }
         renderItem={({ item }) => (
           <View style={{ width: CARD_W }}>
-            <SeriesCard series={item} />
+            <SeriesCard series={item} onPress={openSeries} />
           </View>
         )}
         onEndReached={() => { if (results.length >= 24 && !loading) fetchResults(false); }}

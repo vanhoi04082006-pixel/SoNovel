@@ -17,6 +17,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.media.app.NotificationCompat.MediaStyle
 import android.support.v4.media.MediaMetadataCompat
@@ -64,6 +65,12 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         const val WATCHDOG_MS = 2000L
         const val INIT_TIMEOUT_MS = 6000L
         const val MAX_RETRY = 2
+        // Watchdog riêng cho utterance tiêu đề — engine OEM hay nuốt speak(QUEUE_FLUSH)
+        // ngay sau khi chương trước vừa kết thúc → nếu không có watchdog này thì
+        // không bao giờ có onStart/onDone → im lặng vĩnh viễn (bug auto-next).
+        const val TITLE_WATCHDOG_MS = 3000L
+
+        const val TAG = "SoNovelTTS"
 
         const val CHANNEL_ID = "sonovel_tts_channel"
         const val NOTIF_ID = 0x7f01
@@ -87,6 +94,9 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
     @Volatile private var rate = 1.0f
     @Volatile private var playing = false
     @Volatile private var engineStarted = false
+    // Bật true ngay sau khi 1 chương phát xong (finishChapter) — JS dùng polling
+    // getState() để nhận diện "hết chương" kể cả khi event ON_CHAPTER_END bị drop.
+    @Volatile private var finished = false
     private var seriesTitle = ""
     private var coverUrl = ""
     private var announceTitle = false
@@ -96,6 +106,11 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
     private var speakSeq = 0
     @Volatile private var pendingTargetChar = 0
     private var retryCount = 0
+
+    // --- Title utterance tracking (fix auto-next) ---
+    @Volatile private var titleStarted = false
+    private var titleWatchdogRunnable: Runnable? = null
+    private var titleRetry = 0
 
     // --- Handlers ---
     private val main = Handler(Looper.getMainLooper())
@@ -189,6 +204,8 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         this.announceTitle = (startChar == 0)
         this.rate = rate
         this.retryCount = 0
+        this.titleRetry = 0
+        this.finished = false
 
         startForegroundNow()
         requestAudioFocus()
@@ -207,8 +224,13 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         this.charIndex = ch
         this.announceTitle = (ch == 0)
         this.retryCount = 0
+        this.titleRetry = 0
+        this.finished = false
+        Log.d(TAG, "PLAY_CHAPTER nhận: chapter=${chapterIndex + 1}, chars=${content.length}, startChar=$ch")
         updateMediaMetadata()
-        ensureTts { playFrom(ch) }
+        // FIX auto-next: trễ SETTLE_MS trước khi speak — engine OEM hay nuốt
+        // speak(QUEUE_FLUSH) gọi ngay sau khi utterance chương trước vừa kết thúc.
+        main.postDelayed({ ensureTts { playFrom(ch) } }, SETTLE_MS)
     }
 
     // -------------------------------------------------------------------
@@ -540,14 +562,26 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
                 putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, titleId)
             }
             // currentUtteranceId giữ = titleId để handleOnStart/handleOnDone của title match.
-            // Title KHÔNG arm watchdog (ngắn, không cần) và KHÔNG emit stateChange.
             currentUtteranceId = titleId
+            titleStarted = false
+            Log.d(TAG, "playFrom: speak title id=$titleId")
             try {
-                engine.speak(title, TextToSpeech.QUEUE_FLUSH, titleParams, titleId)
+                val ok = engine.speak(title, TextToSpeech.QUEUE_FLUSH, titleParams, titleId)
+                if (ok != TextToSpeech.SUCCESS) {
+                    // Engine từ chối speak tiêu đề → bỏ qua title, phát thẳng nội dung
+                    Log.w(TAG, "speak(title) bị từ chối (ok=$ok) → bỏ qua title")
+                    announceTitle = false
+                    retryCount = 0
+                    speakNextChunk()
+                    return
+                }
             } catch (t: Throwable) {
                 emitError(3, "Không gọi được speak() tiêu đề: ${t.message}")
                 return
             }
+            // FIX auto-next: arm watchdog cho title — nếu engine nuốt utterance này
+            // (không bao giờ onStart/onDone) thì retry 1 lần rồi bỏ qua title.
+            armTitleWatchdog(titleId)
             // chunk đầu sẽ được speakNextChunk() gọi từ handleOnDone(titleId)
             return
         }
@@ -623,6 +657,64 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         watchdogRunnable = null
     }
 
+    // -------------------------------------------------------------------
+    // Title watchdog — fix auto-next: engine OEM hay nuốt speak(QUEUE_FLUSH)
+    // của utterance tiêu đề khi gọi ngay sau khi chương trước vừa kết thúc.
+    // Không có onStart/onDone → không bao giờ sang chunk nội dung → im lặng vĩnh viễn.
+    // Chiến lược: sau TITLE_WATCHDOG_MS nếu title chưa onStart → retry 1 lần
+    // (kèm SETTLE_MS) → vẫn im lặng thì BỎ QUA tiêu đề, phát thẳng chunk.
+    // -------------------------------------------------------------------
+
+    private fun armTitleWatchdog(expectedId: String) {
+        cancelTitleWatchdog()
+        titleWatchdogRunnable = Runnable {
+            if (currentUtteranceId == expectedId && !titleStarted) {
+                if (titleRetry < 1) {
+                    titleRetry++
+                    Log.w(TAG, "Title không onStart sau ${TITLE_WATCHDOG_MS}ms → thử phát lại (retry=$titleRetry)")
+                    main.postDelayed({
+                        if (currentUtteranceId == expectedId && !titleStarted) {
+                            val engine = tts
+                            if (engine == null) { skipTitleAndPlay(); return@postDelayed }
+                            try {
+                                val ok = engine.speak(
+                                    "Chương ${chapterIndex + 1}. $chapterTitle",
+                                    TextToSpeech.QUEUE_FLUSH,
+                                    Bundle().apply { putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, expectedId) },
+                                    expectedId
+                                )
+                                if (ok == TextToSpeech.SUCCESS) {
+                                    armTitleWatchdog(expectedId)
+                                } else {
+                                    skipTitleAndPlay()
+                                }
+                            } catch (_: Throwable) {
+                                skipTitleAndPlay()
+                            }
+                        }
+                    }, SETTLE_MS)
+                } else {
+                    skipTitleAndPlay()
+                }
+            }
+        }
+        main.postDelayed(titleWatchdogRunnable!!, TITLE_WATCHDOG_MS)
+    }
+
+    private fun skipTitleAndPlay() {
+        Log.w(TAG, "Bỏ qua tiêu đề bị nuốt → phát thẳng nội dung chương")
+        cancelTitleWatchdog()
+        announceTitle = false
+        titleRetry = 0
+        retryCount = 0
+        speakNextChunk()
+    }
+
+    private fun cancelTitleWatchdog() {
+        titleWatchdogRunnable?.let { main.removeCallbacks(it) }
+        titleWatchdogRunnable = null
+    }
+
     private fun handleEngineSpeakFailure() {
         if (retryCount < MAX_RETRY) {
             retryCount++
@@ -648,8 +740,11 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         if (utteranceId == null) return
         if (utteranceId != currentUtteranceId) return
         if (utteranceId.startsWith("sonovel_title_")) {
-            // Tiêu đề bắt đầu phát — emit progress với charIndex=0 để JS clear busy
-            // (tránh nút play xoay trong lúc title đang đọc).
+            // Tiêu đề bắt đầu phát — hủy title watchdog, emit progress với charIndex=0
+            // để JS clear busy (tránh nút play xoay trong lúc title đang đọc).
+            Log.d(TAG, "onStart(title) id=$utteranceId")
+            titleStarted = true
+            cancelTitleWatchdog()
             emit(Events.ON_PROGRESS, mapOf(
                 "chapterIndex" to chapterIndex,
                 "charIndex" to 0,
@@ -690,6 +785,8 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         if (utteranceId.startsWith("sonovel_title_")) {
             // Tiêu đề đọc xong → phát chunk đầu (không queue trước để tránh watchdog fire sai).
             // Reset announceTitle để chapter tiếp theo vẫn announce.
+            Log.d(TAG, "onDone(title) id=$utteranceId")
+            cancelTitleWatchdog()
             announceTitle = false
             speakNextChunk()
             return
@@ -730,8 +827,10 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         announceTitle = true
         charIndex = 0
         chunkIndex = 0
+        finished = true
         updateNotification()
         updateMediaMetadata()
+        Log.d(TAG, "finishChapter: chương ${chapterIndex + 1} kết thúc → emit ON_CHAPTER_END")
         emit(Events.ON_CHAPTER_END, mapOf("chapterIndex" to chapterIndex))
     }
 
@@ -832,6 +931,7 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
             "chaptersCount" to 1,
             "seriesTitle" to seriesTitle,
             "ttsReady" to ttsReady,
+            "finished" to finished,
             "serviceRunning" to true
         )
     }

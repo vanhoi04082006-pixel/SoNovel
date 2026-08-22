@@ -6,6 +6,8 @@ import { getChapterContent } from './chapters';
 import { nativeTts, TtsState, TtsProgress } from './nativeTts';
 import { workerJson } from './worker';
 import { saveSession } from './progress';
+import { invalidateCache } from './dataCache';
+import { markChapterRead } from './readMarkers';
 
 /**
  * JS state manager cho native TTS module (theo §8.5).
@@ -64,6 +66,9 @@ let isPlaying = false;
 let lastSessionMark = 0;
 let busy = false;
 let seriesEnded = false;
+// True khi NGƯỜI DÙNG chủ động pause — phân biệt với "hết chương tự nhiên"
+// trong poll-based chapter-end detection.
+let userPaused = false;
 
 // ---------- Cache nội dung chương (lazy load theo yêu cầu) ----------
 const contentCache = new Map<string, string>();
@@ -203,6 +208,7 @@ export async function flushTtsSave(): Promise<void> {
   const chapter = chapters[currentIndex];
   if (!chapter) return;
   await saveLocalProgress(seriesId, chapter.id, currentChar);
+  invalidateCache('continue:'); // Home "Tiếp tục nghe" lấy % mới nhất lần tới
   const userId = getUserId();
   if (!userId) return;
   try {
@@ -267,6 +273,21 @@ function startPolling() {
       if (state.playing && busy) {
         clearBusy();
       }
+      // Native đang phát → advance (nếu có) đã hoàn tất
+      if (state.playing) {
+        endAdvance();
+        markChapterLoadedOk();
+      }
+
+      // SAFETY NET auto-next: nhận diện hết chương qua cờ `finished` từ native
+      // (bật trong finishChapter, tắt khi ACTION_START/PLAY_CHAPTER xử lý xong).
+      // Đường này hoạt động kể cả khi event ON_CHAPTER_END bị drop.
+      if ((state as any).finished && !userPaused && !advanceInFlight && seriesId && chapters.length > 0) {
+        console.log('[SoNovel][tts] poll: finished=true → advance sang chương kế');
+        scheduleSave();
+        emitLocal('chapterEnd', { chapterIndex: currentIndex });
+        advanceToNextChapter();
+      }
 
       // Emit stateChange nếu trạng thái playing thay đổi
       if (isPlaying !== wasPlaying) {
@@ -289,6 +310,33 @@ function stopPolling() {
 // ---------- Busy safety net (20s timeout) ----------
 const BUSY_TIMEOUT_MS = 20000;
 let busyTimer: ReturnType<typeof setTimeout> | null = null;
+
+// ---------- Auto-next hardening ----------
+// Guard chống advance kép: onChapterEnd đôi khi bị emit 2 lần liên tiếp
+// (native retry/callback race) → nếu không chặn sẽ nhảy cóc 2 chương.
+let advanceInFlight = false;
+let advanceGuardTimer: ReturnType<typeof setTimeout> | null = null;
+// Đếm số chương tải nội dung thất bại liên tiếp — tránh lặp vô hạn khi mất mạng.
+let consecutiveLoadFailures = 0;
+
+function beginAdvance() {
+  advanceInFlight = true;
+  if (advanceGuardTimer) clearTimeout(advanceGuardTimer);
+  // Safety: tối đa 15s sau advance phải được giải phóng bởi tín hiệu phát/ lỗi.
+  advanceGuardTimer = setTimeout(() => { advanceInFlight = false; }, 15000);
+}
+
+function endAdvance() {
+  advanceInFlight = false;
+  if (advanceGuardTimer) {
+    clearTimeout(advanceGuardTimer);
+    advanceGuardTimer = null;
+  }
+}
+
+function markChapterLoadedOk() {
+  consecutiveLoadFailures = 0;
+}
 
 function setBusy(value: boolean) {
   if (busy === value) return;
@@ -341,6 +389,10 @@ function wireNative() {
       if (event.state === 'stopped') {
         seriesEnded = false;
       }
+      if (event.state === 'playing') {
+        endAdvance();
+        markChapterLoadedOk();
+      }
       clearBusy();
       emitLocal('stateChange', event);
       if (event.state !== 'playing') scheduleSave();
@@ -352,6 +404,8 @@ function wireNative() {
       // Chỉ sync charIndex (progress) — currentIndex do JS điều phối chương.
       currentChar = event.charIndex;
       currentCharLength = event.charLength;
+      endAdvance();
+      markChapterLoadedOk();
       clearBusy();
       emitLocal('progress', { ...event, chapterIndex: currentIndex });
       scheduleSave();
@@ -361,6 +415,8 @@ function wireNative() {
   subs.push(
     nativeTts.addListener('onChunkDone', (event: { chapterIndex: number; chunkIndex: number }) => {
       // Chunk done = native đang hoạt động → clear busy (tránh nút play xoay)
+      endAdvance();
+      markChapterLoadedOk();
       clearBusy();
       emitLocal('chunkDone', event);
     })
@@ -368,6 +424,7 @@ function wireNative() {
 
   subs.push(
     nativeTts.addListener('onChapterEnd', (event: { chapterIndex: number }) => {
+      console.log('[SoNovel][tts] event onChapterEnd nhận (chapterIndex=' + (event.chapterIndex + 1) + ')');
       scheduleSave();
       emitLocal('chapterEnd', event);
       advanceToNextChapter();
@@ -384,6 +441,7 @@ function wireNative() {
     nativeTts.addListener('onSeriesEnd', () => {
       isPlaying = false;
       seriesEnded = true;
+      endAdvance();
       clearBusy();
       stopPolling();
       flushTtsSave().catch(() => {});
@@ -394,6 +452,7 @@ function wireNative() {
   subs.push(
     nativeTts.addListener('onError', (event: { code: number; message: string }) => {
       isPlaying = false;
+      endAdvance();
       clearBusy();
       emitLocal('error', event);
     })
@@ -453,6 +512,8 @@ export async function startTts(opts: {
   currentChar = opts.startChar ?? 0;
   rate = opts.rate ?? rate;
   seriesEnded = false;
+  userPaused = false;
+  console.log(`[SoNovel][tts] startTts: "${opts.seriesTitle}", startIndex=${currentIndex + 1}/${opts.chapters.length}, startChar=${currentChar}`);
 
   setBusy(true);
   // Android 13+: yêu cầu quyền notification để hiện media notification của foreground service.
@@ -512,23 +573,64 @@ async function sendPlayChapter(idx: number, startChar: number) {
   emitLocal('nowPlaying');
 
   let content: string | null = null;
-  // Retry 1 lần nếu fetch content fail
-  for (let attempt = 0; attempt < 2; attempt++) {
+  // Retry 2 lần nếu fetch content fail (500ms giữa các lần)
+  for (let attempt = 0; attempt < 3; attempt++) {
     content = await ensureChapterContent(idx);
     if (content != null) break;
-    if (attempt === 0) await new Promise((r) => setTimeout(r, 500));
+    if (attempt < 2) await new Promise((r) => setTimeout(r, 500));
   }
 
   if (content == null) {
     setBusy(false);
+    consecutiveLoadFailures++;
+    console.warn(`[SoNovel][tts] sendPlayChapter: KHÔNG tải được chương ${idx + 1} (fail liên tiếp=${consecutiveLoadFailures})`);
     emitLocal('error', { code: 500, message: `Không tải được nội dung chương ${idx + 1}` });
+    // HARDENING auto-next: KHÔNG dừng im lặng —
+    // - Nếu chưa vượt ngưỡng lỗi liên tiếp và còn chương kế → tự bỏ qua chương lỗi, phát tiếp.
+    // - Ngược lại → kết thúc phiên một cách rõ ràng.
+    const canSkip =
+      consecutiveLoadFailures <= 3 &&
+      !!seriesId &&
+      idx + 1 < chapters.length &&
+      advanceInFlight; // chỉ tự skip khi đang trong luồng auto-next, không áp dụng cho bấm tay
+    if (canSkip) {
+      setTimeout(() => {
+        currentIndex = idx + 1;
+        currentChar = 0;
+        currentCharLength = 0;
+        emitLocal('chapterChange', { chapterIndex: currentIndex });
+        emitLocal('nowPlaying');
+        sendPlayChapter(currentIndex, 0);
+      }, 400);
+    } else {
+      endAdvance();
+      stopPolling();
+      flushTtsSave().catch(() => {});
+    }
     return;
   }
 
+  markChapterLoadedOk();
+
   try {
     await nativeTts.playChapter(idx + 1, ch.title, content, startChar);
+    console.log(`[SoNovel][tts] playChapter(${idx + 1}) đã gửi native (${content.length} ký tự)`);
+    // Watchdog chuyển chương: nếu sau 6s vẫn không phát được (im lặng giữa 2 chương
+    // quá lâu) → gửi lại playChapter đúng 1 lần để tự phục hồi.
+    setTimeout(async () => {
+      try {
+        const st = await nativeTts.getState();
+        if (st?.playing || !busy || isPlaying) return; // đã phát hoặc đã dừng/hủy
+        const st2 = await nativeTts.getState();
+        if (!st2?.playing && busy && !isPlaying) {
+          console.warn('[SoNovel][tts] watchdog 6s: chưa phát → gửi lại playChapter');
+          try { await nativeTts.playChapter(idx + 1, ch.title, content!, startChar); } catch (_e2) {}
+        }
+      } catch (_e) {}
+    }, 6000);
   } catch (e: any) {
     setBusy(false);
+    endAdvance();
     emitLocal('error', { code: 500, message: `playChapter lỗi: ${e?.message ?? e}` });
   }
 }
@@ -536,9 +638,12 @@ async function sendPlayChapter(idx: number, startChar: number) {
 export async function playChapterTts(idx: number, startChar = 0): Promise<void> {
   if (!seriesId) return;
   if (idx < 0 || idx >= chapters.length) return;
+  endAdvance(); // bấm tay chọn chương → hủy mọi guard auto-next đang treo
+  userPaused = false;
   currentIndex = idx;
   currentChar = startChar;
   seriesEnded = false;
+  console.log(`[SoNovel][tts] playChapterTts: idx=${idx + 1}, startChar=${startChar}`);
   await sendPlayChapter(idx, startChar);
 }
 
@@ -548,6 +653,7 @@ export async function pauseTts(): Promise<void> {
     saveTimer = null;
   }
   await flushTtsSave();
+  userPaused = true;
   try { await nativeTts.pause(); } catch (_e) {}
   isPlaying = false;
   lastSessionMark = 0;
@@ -569,6 +675,7 @@ export async function resumePlayback(): Promise<void> {
     return;
   }
   if (!seriesId || chapters.length === 0) return;
+  userPaused = false;
 
   // Thử dùng native resume (giữ charIndex chính xác từ service)
   try {
@@ -623,6 +730,8 @@ export async function stopTts(): Promise<void> {
   busy = false;
   seriesEnded = false;
   lastSessionMark = 0;
+  endAdvance();
+  consecutiveLoadFailures = 0;
   if (busyTimer) {
     clearTimeout(busyTimer);
     busyTimer = null;
@@ -678,9 +787,18 @@ export async function prevChapterTts(): Promise<void> {
 
 /** Native báo hết 1 chương → tiến sang chương kế, hoặc kết thúc series nếu hết. */
 function advanceToNextChapter() {
+  // Guard: onChapterEnd có thể emit 2 lần liên tiếp — bỏ qua lần trùng.
+  if (advanceInFlight) return;
+  beginAdvance();
+  console.log(`[SoNovel][tts] advanceToNextChapter: từ chương ${currentIndex + 1}`);
+
   if (currentIndex + 1 >= chapters.length) {
+    // Chương cuối vừa phát xong → cũng ghi dấu đã đọc.
+    const lastCh = chapters[currentIndex];
+    if (lastCh && seriesId) markChapterRead(seriesId, lastCh.id).catch(() => {});
     seriesEnded = true;
     isPlaying = false;
+    endAdvance();
     clearBusy();
     stopPolling();
     flushTtsSave().catch(() => {});
@@ -694,6 +812,11 @@ function advanceToNextChapter() {
 function seekChapterBy(direction: number) {
   const nextIdx = currentIndex + direction;
   if (nextIdx < 0 || nextIdx >= chapters.length) return;
+  // Đi tới (+1) = chương hiện tại được coi là đã nghe xong → ghi dấu đã đọc.
+  if (direction > 0 && seriesId) {
+    const curCh = chapters[currentIndex];
+    if (curCh) markChapterRead(seriesId, curCh.id).catch(() => {});
+  }
   currentIndex = nextIdx;
   currentChar = 0;
   currentCharLength = 0;

@@ -38,6 +38,7 @@ import {
 import { listChapters, ChapterRow, createBookmark } from '../lib/progress';
 import { nativeTts } from '../lib/nativeTts';
 import { showToast } from '../lib/toast';
+import { useReadMarkers } from '../lib/readMarkers';
 import { RootStackParamList } from '../navigation/types';
 
 type PlayerRouteProp = RouteProp<RootStackParamList, 'Player'>;
@@ -74,6 +75,7 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
   const [error, setError] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(false);
   const sleepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const readSet = useReadMarkers(np.seriesId);
 
   useEffect(() => {
     if (sleepEnd <= 0) return;
@@ -328,6 +330,7 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
           order_no: c.order_no,
         }))}
         currentIndex={np.currentIndex}
+        readIds={readSet}
         onSelect={(idx) => playChapterTts(idx, 0)}
       />
       <SleepSheet

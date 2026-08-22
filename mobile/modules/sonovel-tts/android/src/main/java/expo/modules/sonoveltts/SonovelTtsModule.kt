@@ -153,6 +153,7 @@ class SonovelTtsModule : Module() {
                 "chaptersCount" to 0,
                 "seriesTitle" to "",
                 "ttsReady" to false,
+                "finished" to false,
                 "serviceRunning" to false
             )
         }

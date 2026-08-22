@@ -139,18 +139,27 @@ app.get('/api/series/:id/chapters', async (c) => {
   const id = c.req.param('id')
   const url = new URL(c.req.url)
   const includeDraft = url.searchParams.get('all') === '1'
+  // fields=meta → chỉ trả metadata (không nội dung) — mobile dùng để list nhanh,
+  // nội dung từng chương được tải lười qua /api/chapters/:id.
+  const metaOnly = url.searchParams.get('fields') === 'meta'
   const q = (url.searchParams.get('q') || '').trim().toLowerCase()
   if (includeDraft) {
     const u = await getAuth(c)
     if (!u || (!u.service && u.role !== 'admin')) throw new ApiError(403, 'Bạn không có quyền quản trị.')
-    const rows = await c.env.DB.prepare('SELECT * FROM chapters WHERE series_id=? ORDER BY order_no ASC').bind(id).all<ChapterRow>()
+    const select = metaOnly
+      ? 'SELECT id, series_id, order_no, title, status, word_count, published_at FROM chapters WHERE series_id=? ORDER BY order_no ASC'
+      : 'SELECT * FROM chapters WHERE series_id=? ORDER BY order_no ASC'
+    const rows = await c.env.DB.prepare(select).bind(id).all<ChapterRow>()
     let chapters = (rows.results ?? []).map(mapChapter)
     if (q) chapters = chapters.filter(ch => ch.title.toLowerCase().includes(q) || String(ch.orderNo) === q)
     return c.json({ items: chapters })
   }
-  const cacheKey = `chapters:${id}:${q}`
+  const cacheKey = `chapters:${id}:${q}:${metaOnly ? 'meta' : 'full'}`
   const result = await cachedFetch(cacheKey, 20_000, async () => {
-    const rows = await c.env.DB.prepare("SELECT * FROM chapters WHERE series_id=? AND status='published' ORDER BY order_no ASC").bind(id).all<ChapterRow>()
+    const select = metaOnly
+      ? "SELECT id, series_id, order_no, title, status, word_count, published_at FROM chapters WHERE series_id=? AND status='published' ORDER BY order_no ASC"
+      : "SELECT * FROM chapters WHERE series_id=? AND status='published' ORDER BY order_no ASC"
+    const rows = await c.env.DB.prepare(select).bind(id).all<ChapterRow>()
     let chapters = (rows.results ?? []).map(mapChapter)
     if (q) chapters = chapters.filter(ch => ch.title.toLowerCase().includes(q) || String(ch.orderNo) === q)
     return { items: chapters }

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useTheme, TYPO, RADIUS, SPACING } from '../../theme';
 import { SheetModal } from '../ui/SheetModal';
@@ -16,11 +16,31 @@ type Props = {
   chapters: ChapterListItem[];
   currentIndex: number;
   onSelect: (idx: number) => void;
+  /** Set chapterId đã nghe/đọc — hiện tick xanh cạnh chương. */
+  readIds?: ReadonlySet<string>;
 };
 
-export function ChaptersSheet({ visible, onClose, chapters, currentIndex, onSelect }: Props) {
+export function ChaptersSheet({ visible, onClose, chapters, currentIndex, onSelect, readIds }: Props) {
   const t = useTheme();
   const [q, setQ] = useState('');
+  const listRef = useRef<FlatList<{ c: ChapterListItem; i: number }>>(null);
+
+  // Mở sheet → cuộn tới chương đang phát (fix: trước đây luôn đứng ở đầu,
+  // người dùng tưởng danh sách "bị hard cứng" không di chuyển được).
+  useEffect(() => {
+    if (!visible) return;
+    setQ('');
+    const id = setTimeout(() => {
+      try {
+        listRef.current?.scrollToIndex({
+          index: Math.max(0, Math.min(currentIndex, chapters.length - 1)),
+          animated: false,
+          viewPosition: 0.35,
+        });
+      } catch (_e) {}
+    }, 260);
+    return () => clearTimeout(id);
+  }, [visible, currentIndex, chapters.length]);
 
   const filtered = useMemo(() => {
     if (!q.trim()) return chapters.map((c, i) => ({ c, i }));
@@ -36,22 +56,27 @@ export function ChaptersSheet({ visible, onClose, chapters, currentIndex, onSele
     ({ item }: { item: { c: ChapterListItem; i: number } }) => {
       const { c, i } = item;
       const isCur = i === currentIndex;
+      const isRead = !!readIds?.has(c.id);
       return (
         <Pressable
           onPress={() => { onSelect(i); onClose(); }}
           style={[styles.row, { backgroundColor: isCur ? t.primarySoft : 'transparent' }]}
         >
-          <View style={[styles.idxWrap, { backgroundColor: isCur ? t.primary : t.bgSubtle }]}>
-            <Text style={[styles.idx, { color: isCur ? t.primaryText : t.textMuted }]}>{i + 1}</Text>
+          <View style={[styles.idxWrap, { backgroundColor: isCur ? t.primary : isRead ? t.successSoft : t.bgSubtle }]}>
+            <Text style={[styles.idx, { color: isCur ? t.primaryText : isRead ? t.success : t.textMuted }]}>{i + 1}</Text>
           </View>
-          <Text style={[styles.rowTitle, { color: t.text }]} numberOfLines={2}>
+          <Text style={[styles.rowTitle, { color: isRead && !isCur ? t.textMuted : t.text }]} numberOfLines={2}>
             {c.title}
           </Text>
-          {isCur ? <Icon name="volume-high" size={16} color={t.primary} /> : null}
+          {isCur ? (
+            <Icon name="volume-high" size={16} color={t.primary} />
+          ) : isRead ? (
+            <Icon name="checkmark-circle" size={16} color={t.success} />
+          ) : null}
         </Pressable>
       );
     },
-    [currentIndex, onClose, onSelect, t]
+    [currentIndex, onClose, onSelect, t, readIds]
   );
 
   return (
@@ -71,6 +96,7 @@ export function ChaptersSheet({ visible, onClose, chapters, currentIndex, onSele
         />
       </View>
       <FlatList
+        ref={listRef}
         data={filtered}
         keyExtractor={(item) => item.c.id}
         renderItem={renderItem}
@@ -97,7 +123,9 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
   },
   input: { flex: 1, fontSize: 14, paddingVertical: 0 },
-  list: { flex: 1, gap: 4 },
+  // QUAN TRỌNG: flexGrow (KHÔNG phải flex:1) — flex:1 ép contentContainer đúng bằng
+  // chiều cao viewport → danh sách dài không cuộn được.
+  list: { flexGrow: 1, gap: 4 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

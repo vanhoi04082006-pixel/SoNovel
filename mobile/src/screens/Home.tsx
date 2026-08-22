@@ -16,22 +16,22 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme, TYPO, SPACING, RADIUS } from '../theme';
 import { SeriesCard } from '../components/ui/SeriesCard';
 import { CoverImage } from '../components/ui/CoverImage';
+import { SectionHeader } from '../components/ui/SectionHeader';
+import { RankBadge } from '../components/ui/RankBadge';
 import { Chip } from '../components/ui/Chip';
 import { Screen } from '../components/ui/Screen';
 import { Skeleton } from '../components/ui/Skeleton';
 import { Icon } from '../components/ui/Icon';
 import { listSeries, listAllProgress, listChapters, getSeries, SeriesRow, ProgressRow } from '../lib/progress';
 import { useAuth } from '../lib/session';
-import { setSearchFilter } from '../lib/searchFilter';
 import { startTts, TtsChapter, listLocalProgress } from '../lib/tts';
 import { RootStackParamList } from '../navigation/types';
 import { useMiniPlayerPad } from '../lib/useMiniPlayerPad';
 
-const GENRES = ['Hệ thống', 'Xuyên không', 'Sảng văn', 'Ngôn tình', 'Kiếm hiệp', 'Tiên hiệp', 'Đô thị', 'Huyền huyễn', 'Đồng nhân', 'Dị giới', 'Võng du', 'Trọng sinh'];
-
-const COLS = 3;
-const SCREEN_W = Dimensions.get('window').width;
-const CARD_W = (SCREEN_W - 16 * 2 - 8 * (COLS - 1)) / COLS;
+const RANK_TABS: { key: 'new' | 'chapters'; label: string }[] = [
+  { key: 'new', label: 'Mới cập nhật' },
+  { key: 'chapters', label: 'Nhiều chương' },
+];
 
 export function HomeScreen() {
   const t = useTheme();
@@ -40,49 +40,58 @@ export function HomeScreen() {
   const pad = useMiniPlayerPad(true);
   const [loading, setLoading] = useState(true);
   const [recent, setRecent] = useState<SeriesRow[]>([]);
-  const [popular, setPopular] = useState<SeriesRow[]>([]);
+  const [rankNew, setRankNew] = useState<SeriesRow[]>([]);
+  const [rankLong, setRankLong] = useState<SeriesRow[]>([]);
+  const [rankTab, setRankTab] = useState<'new' | 'chapters'>('new');
   const [progressItems, setProgressItems] = useState<(ProgressRow & { series?: SeriesRow })[]>([]);
   const firstLoadRef = useRef(true);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [r, p] = await Promise.all([
-        listSeries({ limit: 10, orderBy: 'updated_at' }),
-        listSeries({ limit: 10, orderBy: 'word_count' }),
+      // Song song toàn bộ request — không chờ tuần tự.
+      const progressPromise: Promise<(ProgressRow & { series?: SeriesRow })[]> =
+        auth.session
+          ? listAllProgress().catch(() => [])
+          : listLocalProgress()
+              .then(async (locals) => {
+                const items: (ProgressRow & { series?: SeriesRow })[] = [];
+                for (const lp of locals.slice(0, 5)) {
+                  try {
+                    const s = await getSeries(lp.seriesId);
+                    if (s) {
+                      items.push({
+                        user_id: 'local',
+                        series_id: lp.seriesId,
+                        listen_chapter_id: lp.chapterId,
+                        listen_char_index: lp.charIndex,
+                        audio_sec: 0,
+                        playback_speed: 1.0,
+                        last_listened_at: lp.lastListenedAt,
+                        read_chapter_id: null,
+                        read_char_index: 0,
+                        read_percent: 0,
+                        last_read_at: null,
+                        series: s,
+                      });
+                    }
+                  } catch (_e) {}
+                }
+                return items;
+              })
+              .catch(() => []);
+
+      const [r, rankN, rankL, prog] = await Promise.all([
+        listSeries({ limit: 10, orderBy: 'updated_at' }).catch(() => [] as SeriesRow[]),
+        listSeries({ limit: 5, orderBy: 'word_count' }).catch(() => [] as SeriesRow[]),
+        listSeries({ limit: 5, orderBy: 'updated_at' }).catch(() => [] as SeriesRow[]),
+        progressPromise,
       ]);
       setRecent(r);
-      setPopular(p);
-      if (auth.session) {
-        const prog = await listAllProgress();
-        setProgressItems(prog.slice(0, 5));
-      } else {
-        const locals = await listLocalProgress();
-        const items: (ProgressRow & { series?: SeriesRow })[] = [];
-        for (const lp of locals.slice(0, 5)) {
-          try {
-            const s = await getSeries(lp.seriesId);
-            if (s) {
-              items.push({
-                user_id: 'local',
-                series_id: lp.seriesId,
-                listen_chapter_id: lp.chapterId,
-                listen_char_index: lp.charIndex,
-                audio_sec: 0,
-                playback_speed: 1.0,
-                last_listened_at: lp.lastListenedAt,
-                read_chapter_id: null,
-                read_char_index: 0,
-                read_percent: 0,
-                last_read_at: null,
-                series: s,
-              });
-            }
-          } catch (_e) {}
-        }
-        setProgressItems(items);
-      }
-    } catch (_e) {
+      // Bảng xếp hạng: "Mới cập nhật" theo updated_at, "Nhiều chương" theo word_count.
+      setRankNew(rankL.slice(0, 5));
+      setRankLong(rankN.slice(0, 5));
+      setProgressItems(prog.slice(0, 5));
     } finally {
       if (!silent) setLoading(false);
     }
@@ -98,6 +107,9 @@ export function HomeScreen() {
   }, [load]));
 
   const openSeries = (s: SeriesRow) => nav.navigate('Series', { seriesId: s.id });
+
+  const openCatalog = (sort: 'new' | 'chapters') =>
+    nav.navigate('Catalog', { sort, title: sort === 'new' ? 'Truyện mới cập nhật' : 'Truyện nhiều chương' });
 
   const continueListen = async (item: ProgressRow & { series?: SeriesRow }) => {
     if (!item.series || !item.listen_chapter_id) return;
@@ -130,30 +142,28 @@ export function HomeScreen() {
     } catch (_e) {}
   };
 
+  const rankList = rankTab === 'new' ? rankNew : rankLong;
+
   return (
-    <Screen scroll refreshControl={<RefreshControl refreshing={loading} onRefresh={() => load(false)} colors={[t.primary]} tintColor={t.primary} />}
-      contentContainerStyle={{ paddingBottom: pad + 16 }}>
-      {/* Hero gradient */}
-      <LinearGradient
-        colors={t.gradientHero}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.hero}
-      >
-        <View style={styles.heroContent}>
-          <Text style={styles.heroTitle}>SoNovel</Text>
-          <Text style={styles.heroSub}>
-            Nghe truyện chữ bằng giọng đọc tổng hợp — miễn phí, không quảng cáo.
-          </Text>
-          <Pressable
-            onPress={() => nav.navigate('Tabs' as any, { screen: 'Search' } as any)}
-            style={styles.heroSearch}
-          >
-            <Icon name="search" size={16} color="rgba(255,255,255,0.9)" />
-            <Text style={styles.heroSearchText}>Tìm truyện, tác giả…</Text>
-          </Pressable>
+    <Screen scroll refreshControl={
+      <RefreshControl refreshing={loading} onRefresh={() => load(false)} colors={[t.primary]} tintColor={t.primary} />
+    } contentContainerStyle={{ paddingBottom: pad + 16 }}>
+      {/* Brand header gọn */}
+      <View style={styles.brandRow}>
+        <View>
+          <Text style={[styles.brandTitle, { color: t.text }]}>SoNovel</Text>
+          <Text style={[TYPO.caption, { color: t.textMuted }]}>Nghe truyện chữ bằng giọng đọc tổng hợp</Text>
         </View>
-      </LinearGradient>
+        <Pressable
+          onPress={() => nav.navigate('Catalog', { title: 'Tất cả truyện' })}
+          style={({ pressed }) => [styles.allBtn, { backgroundColor: t.primarySoft }, pressed && { opacity: 0.8 }]}
+          accessibilityRole="button"
+          accessibilityLabel="Xem tất cả truyện"
+        >
+          <Icon name="library-outline" size={15} color={t.primarySoftText} />
+          <Text style={[TYPO.label, { color: t.primarySoftText }]}>Tất cả</Text>
+        </Pressable>
+      </View>
 
       {/* Continue listening */}
       {loading ? (
@@ -162,7 +172,8 @@ export function HomeScreen() {
           <Skeleton width="100%" height={170} radius={RADIUS.xl} />
         </View>
       ) : progressItems.length > 0 ? (
-        <Section title="Tiếp tục nghe">
+        <View style={styles.section}>
+          <SectionHeader title="Tiếp tục nghe" />
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingHorizontal: 16 }}>
             {progressItems.map((item, i) => {
               const s = item.series;
@@ -196,29 +207,60 @@ export function HomeScreen() {
               );
             })}
           </ScrollView>
-        </Section>
+        </View>
       ) : null}
 
-      {/* Genres */}
-      <Section title="Thể loại">
-        <View style={styles.chipsRow}>
-          {GENRES.map((g) => (
+      {/* Bảng xếp hạng */}
+      <View style={styles.section}>
+        <SectionHeader title="Bảng xếp hạng" onAction={() => openCatalog(rankTab === 'new' ? 'new' : 'chapters')} />
+        <View style={styles.rankTabs}>
+          {RANK_TABS.map((rt) => (
             <Chip
-              key={g}
-              label={g}
-              icon="pricetag-outline"
-              iconSize={12}
-              onPress={() => {
-                setSearchFilter({ genre: g });
-                nav.navigate('Tabs' as any, { screen: 'Search' } as any);
-              }}
+              key={rt.key}
+              label={rt.label}
+              selected={rankTab === rt.key}
+              variant={rankTab === rt.key ? 'filled' : 'soft'}
+              onPress={() => setRankTab(rt.key)}
             />
           ))}
         </View>
-      </Section>
+        {loading ? (
+          <View style={{ paddingHorizontal: 16, gap: 10 }}>
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} width="100%" height={64} radius={RADIUS.lg} />
+            ))}
+          </View>
+        ) : (
+          <View style={{ paddingHorizontal: 16 }}>
+            {rankList.map((s, i) => (
+              <Pressable
+                key={s.id}
+                onPress={() => openSeries(s)}
+                style={({ pressed }) => [
+                  styles.rankRow,
+                  { backgroundColor: t.surface, borderColor: t.border },
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <RankBadge rank={i + 1} />
+                <CoverImage title={s.title} coverUrl={s.cover_url} width={40} height={54} borderRadius={8} />
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={[TYPO.body, { color: t.text, fontWeight: '600' }]} numberOfLines={1}>{s.title}</Text>
+                  <Text style={[TYPO.caption, { color: t.textMuted }]} numberOfLines={1}>
+                    {s.author || 'Không rõ tác giả'} · {s.word_count.toLocaleString('vi-VN')} chữ
+                  </Text>
+                </View>
+                <Icon name="chevron-forward" size={16} color={t.border} />
+              </Pressable>
+            ))}
+            {rankList.length === 0 && <EmptyLabel t={t} text="Chưa có dữ liệu xếp hạng" />}
+          </View>
+        )}
+      </View>
 
-      {/* Recent */}
-      <Section title="Truyện mới cập nhật">
+      {/* Truyện mới cập nhật */}
+      <View style={styles.section}>
+        <SectionHeader title="Truyện mới cập nhật" onAction={() => openCatalog('new')} />
         {loading ? (
           <SkeletonListRow />
         ) : (
@@ -236,109 +278,52 @@ export function HomeScreen() {
             ListEmptyComponent={!loading ? <EmptyLabel t={t} text="Chưa có truyện nào" /> : null}
           />
         )}
-      </Section>
-
-      {/* Popular */}
-      <Section title="Phổ biến">
-        {loading ? (
-          <SkeletonGrid />
-        ) : (
-          <View style={styles.grid}>
-            {popular.map((s) => (
-              <View key={s.id} style={{ width: CARD_W }}>
-                <SeriesCard series={s} onPress={openSeries} />
-              </View>
-            ))}
-            {popular.length === 0 && !loading ? <EmptyLabel t={t} text="Chưa có truyện nào" /> : null}
-          </View>
-        )}
-      </Section>
+      </View>
     </Screen>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  const t = useTheme();
-  return (
-    <View style={styles.section}>
-      <Text style={[TYPO.h3, { color: t.text }]}>{title}</Text>
-      {children}
-    </View>
-  );
-}
-
-function SkeletonListRow() {
-  return (
-    <View style={{ flexDirection: 'row', gap: 12, paddingHorizontal: 16 }}>
-      {Array.from({ length: 3 }).map((_, i) => (
-        <Skeleton key={i} width={112} height={170} radius={RADIUS.md} />
-      ))}
-    </View>
-  );
-}
-
-function SkeletonGrid() {
-  return (
-    <View style={styles.grid}>
-      {Array.from({ length: 6 }).map((_, i) => (
-        <Skeleton key={i} width={CARD_W} height={CARD_W * 1.5 + 40} radius={RADIUS.md} />
-      ))}
-    </View>
-  );
-}
-
 function EmptyLabel({ t, text }: { t: ReturnType<typeof useTheme>; text: string }) {
-  return <Text style={[TYPO.bodySm, { color: t.textMuted, paddingHorizontal: 16, paddingVertical: 12 }]}>{text}</Text>;
+  return <Text style={[TYPO.bodySm, { color: t.textMuted, textAlign: 'center', paddingVertical: 16 }]}>{text}</Text>;
 }
 
 const styles = StyleSheet.create({
-  hero: {
-    marginHorizontal: 16,
-    borderRadius: RADIUS.xl,
-    overflow: 'hidden',
-  },
-  heroContent: {
-    padding: 20,
-    gap: 8,
-  },
-  heroTitle: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: '#fff',
-    letterSpacing: 0.5,
-    fontFamily: 'BeVietnamPro_800ExtraBold',
-  },
-  heroSub: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: 'rgba(255,255,255,0.92)',
-  },
-  heroSearch: {
-    marginTop: 6,
+  brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(255,255,255,0.22)',
-    borderRadius: RADIUS.pill,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: SPACING.md,
+    marginBottom: SPACING.lg,
+  },
+  brandTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+    fontFamily: 'BeVietnamPro_800ExtraBold',
+  },
+  allBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 9,
+    borderRadius: RADIUS.pill,
   },
-  heroSearchText: {
-    color: 'rgba(255,255,255,0.95)',
-    fontSize: 13,
-  },
-  section: { marginTop: 24, gap: 12 },
-  chipsRow: {
+  section: { marginTop: SPACING.xl, gap: 12 },
+  rankTabs: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 8,
     paddingHorizontal: 16,
   },
-  grid: {
+  rankRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    paddingHorizontal: 16,
+    alignItems: 'center',
+    gap: 12,
+    padding: 10,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    marginBottom: 8,
   },
   contCard: {
     width: 132,
@@ -362,3 +347,13 @@ const styles = StyleSheet.create({
   contBar: { height: 3, borderRadius: 2, overflow: 'hidden' },
   contBarFill: { height: '100%' },
 });
+
+function SkeletonListRow() {
+  return (
+    <View style={{ flexDirection: 'row', gap: 12, paddingHorizontal: 16 }}>
+      {Array.from({ length: 3 }).map((_, i) => (
+        <Skeleton key={i} width={112} height={170} radius={RADIUS.md} />
+      ))}
+    </View>
+  );
+}
