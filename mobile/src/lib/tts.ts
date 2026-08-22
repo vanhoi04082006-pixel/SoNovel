@@ -490,6 +490,10 @@ export async function startTts(opts: {
     );
     // Đánh dấu mốc đếm giờ nghe
     lastSessionMark = Date.now();
+    // Prefetch chương kế tiếp vào cache để chuyển chương không bị lag
+    if (currentIndex + 1 < chapters.length) {
+      ensureChapterContent(currentIndex + 1).catch(() => {});
+    }
     // busy + UI sẽ được sync bởi polling (getState mỗi 1s)
   } catch (e: any) {
     setBusy(false);
@@ -504,10 +508,24 @@ async function sendPlayChapter(idx: number, startChar: number) {
   const ch = chapters[idx];
   if (!ch) return;
   setBusy(true);
+  startPolling(); // đảm bảo polling/watchdog chạy khi chuyển chương
   emitLocal('nowPlaying');
+
+  let content: string | null = null;
+  // Retry 1 lần nếu fetch content fail
+  for (let attempt = 0; attempt < 2; attempt++) {
+    content = await ensureChapterContent(idx);
+    if (content != null) break;
+    if (attempt === 0) await new Promise((r) => setTimeout(r, 500));
+  }
+
+  if (content == null) {
+    setBusy(false);
+    emitLocal('error', { code: 500, message: `Không tải được nội dung chương ${idx + 1}` });
+    return;
+  }
+
   try {
-    const content = await ensureChapterContent(idx);
-    if (content == null) throw new Error('Không tải được nội dung chương');
     await nativeTts.playChapter(idx + 1, ch.title, content, startChar);
   } catch (e: any) {
     setBusy(false);
@@ -538,20 +556,41 @@ export async function pauseTts(): Promise<void> {
 }
 
 /**
- * Resume bug fix §8.5.1:
+ * Resume bug fix §8.5.1 (cải tiến):
  * - Native đang THỰC SỰ playing → chỉ sync UI.
- * - Mọi trường hợp khác (paused/stopped/service chết/series khác) →
- *   luôn `startTts()` khởi động lại hoàn toàn từ vị trí đang nhớ.
+ * - Nếu service còn sống (paused) → dùng nativeTts.resume() để giữ đúng charIndex native.
+ *   (Tránh race condition JS currentChar vs native charIndex khi full startTts()).
+ * - Service chết / chưa load chương → full startTts() từ currentChar JS.
  */
 export async function resumePlayback(): Promise<void> {
   if (isPlaying) {
-    // Đang phát thật — chỉ sync UI
     emitLocal('stateChange', { state: 'playing' });
     emitLocal('nowPlaying');
     return;
   }
   if (!seriesId || chapters.length === 0) return;
-  // Luôn khởi động lại hoàn toàn qua ACTION_START (path tin cậy nhất)
+
+  // Thử dùng native resume (giữ charIndex chính xác từ service)
+  try {
+    // Timeout 1s để không block nếu service dead
+    const statePromise = nativeTts.getState();
+    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 1000));
+    const state = await Promise.race([statePromise, timeoutPromise]);
+    if (state && (state as any).serviceRunning && !(state as any).playing) {
+      // Service đang alive và paused → resume native trực tiếp
+      setBusy(true);
+      try {
+        await nativeTts.resume();
+        return;
+      } catch (_e) {
+        // Resume lỗi → fallback startTts bên dưới
+      }
+    }
+  } catch (_e) {
+    // getState() lỗi → fallback startTts
+  }
+
+  // Fallback: service dead / chưa load → full restart từ vị trí JS nhớ
   await startTts({
     seriesId: seriesId!,
     seriesTitle,

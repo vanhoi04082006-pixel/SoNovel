@@ -32,6 +32,7 @@ import {
   togglePlayPause,
   seekToTts,
   ensureChapterContent,
+  loadSavedRate,
   TtsChapter,
 } from '../lib/tts';
 import { listChapters, ChapterRow, createBookmark } from '../lib/progress';
@@ -156,6 +157,8 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
     }
     setInitializing(true);
     try {
+      // Đảm bảo rate đã load từ AsyncStorage trước khi startTts
+      const savedRate = await loadSavedRate();
       const chs: ChapterRow[] = await listChapters(params.seriesId);
       const ttsChapters: TtsChapter[] = chs.map((c) => ({
         id: c.id,
@@ -171,6 +174,7 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
         chapters: ttsChapters,
         startIndex: params.startIndex ?? 0,
         startChar: params.startChar ?? 0,
+        rate: savedRate,
       });
     } catch (e: any) {
       setError(`Không tải được chương: ${e?.message ?? e}`);

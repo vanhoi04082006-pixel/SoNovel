@@ -61,17 +61,29 @@ export function TextSheet({ visible, onClose, chapter, currentIndex, charIndex, 
     return idx;
   }, [offsets, charIndex]);
 
+  // Chiều cao ước tính mỗi đoạn văn để getItemLayout hoạt động (fix FlatList freeze).
+  // Dùng fontSize × lineHeight × 3 dòng trung bình + padding.
+  const PARA_HEIGHT = rs.fontSize * rs.lineHeight + 16;
+
   useEffect(() => {
-    if (!visible || !follow) return;
+    if (!visible || !follow || paragraphs.length === 0) return;
+    const idx = Math.min(activeIdx, paragraphs.length - 1);
     try {
       listRef.current?.scrollToIndex({
-        index: activeIdx,
+        index: idx,
         animated: true,
         viewPosition: 0.4,
       });
     } catch (_e) {
+      // Fallback: dùng scrollToOffset khi getItemLayout chưa sẵn sàng
+      try {
+        listRef.current?.scrollToOffset({
+          offset: Math.max(0, idx * PARA_HEIGHT - SCREEN_H * 0.3),
+          animated: true,
+        });
+      } catch (_e2) {}
     }
-  }, [activeIdx, visible, follow]);
+  }, [activeIdx, visible, follow, PARA_HEIGHT, paragraphs.length]);
 
   return (
     <SheetModal visible={visible} onClose={onClose} heightPct={0.88}>
@@ -95,6 +107,26 @@ export function TextSheet({ visible, onClose, chapter, currentIndex, charIndex, 
         ref={listRef as any}
         data={paragraphs as any}
         keyExtractor={(_, i) => String(i)}
+        // getItemLayout giúp scrollToIndex không bị freeze (RN cần biết trước kích thước item).
+        getItemLayout={(_, index) => ({
+          length: PARA_HEIGHT,
+          offset: PARA_HEIGHT * index,
+          index,
+        })}
+        initialScrollIndex={Math.min(activeIdx, Math.max(0, paragraphs.length - 1))}
+        onScrollBeginDrag={() => {
+          // User chủ động cuộn → tắt auto-follow để không bị giật về
+          if (follow) setFollow(false);
+        }}
+        onScrollToIndexFailed={({ highestMeasuredFrameIndex }) => {
+          // Fallback khi index chưa render: scroll đến item gần nhất đã render
+          try {
+            listRef.current?.scrollToIndex({
+              index: highestMeasuredFrameIndex,
+              animated: false,
+            });
+          } catch (_e) {}
+        }}
         renderItem={({ item, index }) => {
           if (item == null || item === '') return <View style={{ height: 8 }} />;
           const isActive = index === activeIdx;
@@ -119,7 +151,6 @@ export function TextSheet({ visible, onClose, chapter, currentIndex, charIndex, 
             </Pressable>
           );
         }}
-        onScrollToIndexFailed={() => {}}
         contentContainerStyle={{ paddingBottom: 40 }}
       />
     </SheetModal>
