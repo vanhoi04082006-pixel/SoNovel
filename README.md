@@ -1,59 +1,123 @@
 # SoNovel
 
-Ứng dụng **nghe truyện chữ** tiếng Việt bằng giọng đọc tổng hợp (TTS).
-
-> Dựng lại từ đầu theo SPEC — self-contained, không cần repo cũ.
+Ứng dụng **nghe truyện chữ tiếng Việt bằng giọng đọc tổng hợp (TTS)** — web PWA + app Android, đồng bộ tiến độ đa thiết bị.
 
 ## Tính năng
 
-- **Nghe truyện bằng TTS**: Web dùng Web Speech API (`speechSynthesis`), Mobile (Android) dùng native module Kotlin `sonovel-tts` với foreground service.
-- **Tiếp tục nghe**: lưu tiến độ nghe mỗi 4 giây, resume từ đúng vị trí dừng.
-- **Duyệt + tìm kiếm**: theo tên, tác giả, thể loại, tag; sort mới/tiêu đề/nhiều chương.
-- **Yêu thích · Lịch sử · Đánh dấu** vị trí trong chương.
-- **4 theme giao diện**: Sáng / Tối / Vàng giấy / Đen tuyền (AMOLED).
-- **Admin CMS**: quản lý truyện, chương (chỉ 2 trạng thái `draft`/`published`), tag, ảnh bìa.
+### Nghe truyện (TTS)
+- **Web**: Web Speech API (`speechSynthesis`) — không cần cài gì.
+- **Android**: system TTS qua native module Kotlin `sonovel-tts` (foreground service `mediaPlayback`, điều khiển từ màn hình khóa/notification).
+- **Tự động chuyển chương** với 3 lớp bảo vệ độc lập:
+  1. Event `ON_CHAPTER_END` từ native → JS advance
+  2. Title-watchdog trong engine (tiêu đề bị nuốt → retry → bỏ qua, phát thẳng nội dung)
+  3. Poll-based safety net qua cờ `finished` mỗi giây
+- **Tiếp tục nghe** đúng vị trí ký tự — lưu tiến độ mỗi 4s, resume chính xác.
+- Điều khiển: tua ±10%, tốc độ đọc 0.75x–2x, hẹn giờ ngủ (kể cả "hết chương"), đánh dấu vị trí kèm ghi chú.
+- Chuyển chương từ media notification trên lock-screen.
+
+### Đọc & duyệt truyện
+- **Màn Reader độc lập**: Chương trước/sau (disabled ở đầu/cuối), danh sách chương dạng sheet, cài cỡ chữ, tự lưu tiến độ đọc, cuộn ≥95% tự đánh dấu đã đọc.
+- **Trang chủ**: Bảng xếp hạng (Mới cập nhật / Nhiều chương) + lối "Xem tất cả".
+- **Màn Tất cả truyện**: lưới vô hạn (infinite scroll), sort mới/tiêu đề/nhiều chương.
+- Trang chi tiết bộ truyện với tab **Thông tin | Chương**, hiện % đã nghe từng chương.
+- Dấu **✓ chương đã nghe/đọc** trong mọi danh sách chương.
+- Tìm kiếm theo tên/tác giả, lọc thể loại + tag, tìm kiếm gần đây.
+
+### Khác
+- Yêu thích · Lịch sử · Đánh dấu · Thống kê (giờ nghe, streak, thành tích, thử thách tuần).
+- 4 theme: Sáng / Tối / Vàng giấy / Đen tuyền (AMOLED).
+- Đồng bộ đa thiết bị: cùng Supabase Auth + DB → tiến độ/yêu thích/cài đặt theo user; Supabase Realtime đẩy thay đổi giữa các tab/thiết bị.
+- Web là PWA — cài được lên desktop/màn hình chính.
+- Hiệu năng: API trả metadata chương không kèm nội dung (`?fields=meta`, ~188KB/818 chương thay vì hàng chục MB), cache TTL client 60s, prefetch nội dung chương kế.
 
 ## Kiến trúc
 
 ```
 SoNovel/
-├── src/                 # Next.js 16 app (web người dùng + admin CMS)
-│   ├── app/api/         # REST API routes
-│   ├── screens/         # user + admin screens
-│   ├── components/      # sonovel/ + player/
-│   └── store/           # Zustand: app-store + player-store
-├── scripts/seed.ts      # seed dữ liệu lên Supabase
-├── mobile/              # Expo SDK 57 + native Kotlin sonovel-tts (§8.5)
-└── supabase/            # SQL schema + migrations (§5)
+├── src/            # Web + Admin CMS (Next.js 16 App Router)
+│   ├── app/api/    # ~33 route handlers — proxy sang Cloudflare Worker, fallback Supabase
+│   ├── screens/    # user + admin screens (SPA hash-routing tại src/app/page.tsx)
+│   ├── components/ # sonovel/ + player/ + ui/ (shadcn)
+│   └── store/      # Zustand: app-store, player-store, reader-settings
+├── mobile/         # App Android (Expo SDK 57 + RN 0.86.2)
+│   ├── modules/sonovel-tts/   # Native module Kotlin: foreground service + watchdogs
+│   └── src/        # navigation, screens, lib (tts.ts, progress.ts, readMarkers.ts...)
+├── workers/        # REST API thật (Cloudflare Worker + Hono)
+│   └── src/index.ts           # ~25+ endpoints, D1 (SQLite) + R2 (ảnh bìa)
+├── supabase/       # Schema PostgreSQL gốc + migrations + RLS
+├── d1/             # Schema D1 mirror + migration scripts
+├── scripts/        # seed Supabase, migrate Supabase→D1, backfill
+└── docs/SPEC.md    # Spec gốc của dự án
 ```
+
+**Luồng dữ liệu:** Mobile/Web → Cloudflare Worker (D1 + R2, cache server-side) → fallback trực tiếp Supabase (PostgreSQL). Supabase là DB gốc dùng chung; D1 là mirror phục vụ Worker.
 
 ## Công nghệ
 
 | Thành phần | Stack |
 |---|---|
-| Web + Admin | Next.js 16, React 19, TypeScript, Tailwind CSS 4, shadcn/ui |
-| Mobile | Expo SDK 57, React Native 0.86, Kotlin native module |
-| Database | Supabase (PostgreSQL, schema `public`) — dùng chung cho web & mobile |
-| Data + Auth | `@supabase/supabase-js` + `@supabase/ssr` (service role cho server, Supabase Auth) |
-| TTS web | Web Speech API (`speechSynthesis`) |
-| TTS mobile | Android system TTS qua `sonovel-tts` (foreground service + watchdog) |
+| Web + Admin | Next.js 16, React 19, TypeScript, Tailwind CSS 4, shadcn/ui, Zustand, Framer Motion |
+| Mobile | Expo SDK 57, React Native 0.86.2, New Architecture, native Kotlin module |
+| Backend API | Cloudflare Worker (Hono), D1 SQLite, R2 object storage |
+| Database | Supabase PostgreSQL (10 bảng, RLS, trigger đồng bộ `word_count`) |
+| Data + Auth | `@supabase/supabase-js` + `@supabase/ssr`; service-role key chỉ chạy server |
+| TTS web | Web Speech API |
+| TTS mobile | Android system TTS qua `sonovel-tts` |
 
 ## Chạy thử
 
+### Web
+
 ```sh
 bun install
-# Cấu hình .env.local theo .env.example (SUPABASE_URL, anon key, service role key)
-bun run db:seed     # seed tags + 15 series + 43 chương + admin/user demo lên Supabase
-bun run dev         # http://localhost:3000
+# Tạo .env.local theo .env.example (Supabase URL/anon/service key + WORKER_URL/SERVICE_TOKEN)
+bun run dev          # http://localhost:3000
+bun run lint
 ```
 
-Tài khoản demo (tạo qua seed):
-- Quản trị: `admin@sonovel.app` / `admin123`
-- Người dùng: `user@sonovel.app` / `user123`
+### Backend (Cloudflare Worker)
 
-## Tuân thủ SPEC
+```sh
+cd workers
+cp .dev.vars.example .dev.vars   # điền SUPABASE_URL, ANON_KEY, SERVICE_TOKEN
+npm install
+npx wrangler dev                 # dev local
+npx wrangler deploy              # deploy production (D1 + R2 đã bind sẵn trong wrangler.toml)
+```
 
-- §5 Schema: `chapters.status` chỉ `draft`/`published`; `series.word_count` tự cập nhật qua trigger `chapters_sync_word_count`.
-- §8.5 Native TTS: watchdog 2s + retry 2 + re-init engine, init-timeout 6s, SETTLE_MS 200 khi resume, utterance id duy nhất + callback guards, JS safety timeout 20s, resume luôn qua `ACTION_START`. **Không dùng `expo-speech`.**
-- Web & mobile dùng **chung Supabase** (DB + Auth) → tiến độ, yêu thích, lịch sử, đánh dấu đồng bộ 2 chiều.
-- UI 100% tiếng Việt, font Be Vietnam Pro.
+### Mobile (Android APK)
+
+> ⚠️ App dùng native module riêng — **không chạy được trên Expo Go**. Xem chi tiết môi trường build + các cạm bẫy tại [HANDOFF_AGENT.md](HANDOFF_AGENT.md).
+
+```sh
+cd mobile
+npm install
+npx expo prebuild --platform android --clean --no-install   # chỉ cần khi đổi native/config
+cd android
+.\gradlew.bat assembleRelease --no-daemon                   # JDK 17 + Android SDK
+# Output: mobile/android/app/build/outputs/apk/release/app-release.apk
+```
+
+Chỉ đổi JS thuần thì bỏ qua prebuild, chạy thẳng gradlew (Metro rebundle).
+
+## Biến môi trường
+
+| Biến | Nơi dùng | Mô tả |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Web (public) | Supabase project + anon key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Web server (secret) | Ghi DB bỏ qua RLS — không lộ ra client |
+| `WORKER_URL` / `SERVICE_TOKEN` | Web server | URL Worker đã deploy + token gọi endpoint admin |
+| `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SERVICE_TOKEN` | workers/.dev.vars | Env cho Worker |
+
+Mobile hardcode `WORKER_URL` + anon key tại `mobile/src/lib/{worker,supabase}.ts`.
+
+## Tài liệu
+
+- [`HANDOFF_AGENT.md`](HANDOFF_AGENT.md) — hướng dẫn build APK, debug crash qua adb, các cạm bẫy native
+- [`worklog.md`](worklog.md) — nhật ký triển khai đầy đủ theo phase
+- [`docs/SPEC.md`](docs/SPEC.md) — spec gốc
+- [`supabase/schema.sql`](supabase/schema.sql) — schema DB + RLS
+
+## License
+
+Dự án cá nhân — chỉ dùng cho mục đích học tập.
