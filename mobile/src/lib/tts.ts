@@ -780,7 +780,9 @@ export async function togglePlayPause(): Promise<void> {
   if (isPlaying) {
     await pauseTts();
   } else if (busy) {
-    await stopTts();
+    // Đang chuyển chương/tải nội dung — BỎ QUA lần bấm (trước đây dừng hẳn phiên
+    // nghe, dễ mất nhạc chỉ vì bấm nhầm 1 lần). Watchdog tự phục hồi nếu kẹt.
+    return;
   } else {
     await resumePlayback();
   }

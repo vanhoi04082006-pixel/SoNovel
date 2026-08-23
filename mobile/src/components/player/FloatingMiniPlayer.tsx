@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, TYPO, RADIUS } from '../../theme';
 import { getNowPlaying, onTtsEvent, togglePlayPause, prevChapterTts, nextChapterTts, stopTts } from '../../lib/tts';
@@ -93,11 +93,8 @@ export function FloatingMiniPlayer() {
           onPress={(e) => { e.stopPropagation(); togglePlayPause(); }}
           style={[styles.playBtn, { backgroundColor: t.primary }]}
         >
-          {np.busy ? (
-            <ActivityIndicator color={t.primaryText} size="small" />
-          ) : (
-            <Icon name={np.isPlaying ? 'pause' : 'play'} size={18} color={t.primaryText} />
-          )}
+          {/* KHÔNG xoay khi busy — luôn hiển thị icon theo trạng thái thật */}
+          <Icon name={np.isPlaying ? 'pause' : 'play'} size={18} color={t.primaryText} />
         </Pressable>
         <Pressable
           onPress={(e) => { e.stopPropagation(); nextChapterTts(); }}

@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  ActivityIndicator,
   Pressable,
   StyleSheet,
   Text,
@@ -64,13 +63,9 @@ export function PlayerControls(p: Props) {
             { backgroundColor: t.primary },
             pressed && { transform: [{ scale: 0.94 }], opacity: 0.9 },
           ]}
-          disabled={p.busy}
         >
-          {p.busy ? (
-            <ActivityIndicator color={t.primaryText} size="large" />
-          ) : (
-            <Icon name={p.isPlaying ? 'pause' : 'play'} size={30} color={t.primaryText} />
-          )}
+          {/* KHÔNG xoay khi busy — luôn hiển thị icon theo trạng thái thật */}
+          <Icon name={p.isPlaying ? 'pause' : 'play'} size={30} color={t.primaryText} />
         </Pressable>
         <Pressable
           onPress={p.onNext}
