@@ -1,19 +1,26 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, TYPO, RADIUS } from '../../theme';
 import { getNowPlaying, onTtsEvent, togglePlayPause, prevChapterTts, nextChapterTts, stopTts } from '../../lib/tts';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../navigation/types';
+import { useNavInfo } from '../../lib/navState';
+import { safeNavigate } from '../../lib/rootNav';
 import { CoverImage } from '../ui/CoverImage';
 import { Icon } from '../ui/Icon';
 
+/** Chiều cao ước lượng tab bar để mini player ngồi phía trên khi ở màn Tabs. */
+const TAB_BAR_H = 58;
+
 /**
- * Floating mini player — compact, nằm phía trên tab bar (render trong tabBar của Tabs).
+ * Floating mini player — overlay TOÀN CỤC (render ở RootNavigator):
+ * - Hiện trên mọi màn hình TRỪ Player và Reader (tránh che điều khiển).
+ * - Ở màn Tabs: nằm ngay phía trên tab bar. Ở màn stack (Series/Catalog...): nằm trên safe-area.
+ * - Sau khi tắt app rồi mở lại vẫn còn nhờ restoreNowPlaying() trong tts.ts.
  */
 export function FloatingMiniPlayer() {
   const t = useTheme();
-  const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const insets = useSafeAreaInsets();
+  const navInfo = useNavInfo();
   const [np, setNp] = useState(getNowPlaying());
 
   useEffect(() => {
@@ -22,7 +29,10 @@ export function FloatingMiniPlayer() {
   }, []);
 
   if (!np.seriesId) return null;
+  // Ẩn khi đang ở trình nghe đầy đủ hoặc Reader (có thanh điều khiển riêng)
+  if (navInfo.root === 'Player' || navInfo.root === 'Reader') return null;
 
+  const inTabs = navInfo.root === 'Tabs';
   const chapter = np.chapters[np.currentIndex];
   const title = chapter ? `Chương ${np.currentIndex + 1}. ${chapter.title}` : np.seriesTitle;
   const progress = np.charLength > 0
@@ -33,14 +43,25 @@ export function FloatingMiniPlayer() {
     <Pressable
       onPress={() => {
         if (np.seriesId) {
-          nav.navigate('Player', {
+          safeNavigate('Player', {
             seriesId: np.seriesId,
             seriesTitle: np.seriesTitle,
             coverUrl: np.coverUrl,
+            startIndex: np.currentIndex,
+            startChar: np.currentChar,
           });
         }
       }}
-      style={({ pressed }) => [styles.bar, { backgroundColor: t.surface, borderColor: t.border }, t.shadowCard, pressed && { opacity: 0.92 }]}
+      style={({ pressed }) => [
+        styles.bar,
+        {
+          backgroundColor: t.surface,
+          borderColor: t.border,
+          bottom: inTabs ? insets.bottom + TAB_BAR_H : insets.bottom + 10,
+        },
+        t.shadowCard,
+        pressed && { opacity: 0.92 },
+      ]}
     >
       <CoverImage
         title={np.seriesTitle || 'SoNovel'}
@@ -100,16 +121,19 @@ export function FloatingMiniPlayer() {
 
 const styles = StyleSheet.create({
   bar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     marginHorizontal: 14,
-    marginBottom: 10,
-    marginTop: 4,
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: RADIUS.xl,
     borderWidth: 1,
+    zIndex: 100,
+    elevation: 12,
   },
   meta: { flex: 1, gap: 5 },
   progressWrap: { flexDirection: 'row', alignItems: 'center', gap: 6 },

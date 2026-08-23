@@ -31,7 +31,7 @@ import {
 } from '../lib/progress';
 import { useAuth } from '../lib/session';
 import { RootStackParamList } from '../navigation/types';
-import { startTts, TtsChapter, getNowPlaying } from '../lib/tts';
+import { getNowPlaying } from '../lib/tts';
 import { getChapterContent } from '../lib/chapters';
 import { invalidateCache } from '../lib/dataCache';
 import { useReadMarkers } from '../lib/readMarkers';
@@ -95,29 +95,24 @@ export function SeriesScreen({ route }: { route: SeriesRouteProp }) {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const startListening = async (idx: number, startChar = 0) => {
+  /**
+   * Điều hướng sang Player NGAY LẬP TỨC (không chờ tải nội dung).
+   * Player tự load danh sách chương + resolve vị trí theo startChapterId rồi phát.
+   */
+  const startListening = (chapterId?: string, startChar = 0) => {
     if (!series) return;
-    const ttsChapters: TtsChapter[] = chapters.map((c) => ({
-      id: c.id,
-      title: c.title,
-      content: c.content,
-      order_no: c.order_no,
-      word_count: c.word_count,
-    }));
-    await startTts({
-      seriesId: series.id,
-      seriesTitle: series.title,
-      coverUrl: series.cover_url,
-      chapters: ttsChapters,
-      startIndex: idx,
-      startChar,
-    });
+    let idx = 0;
+    if (chapterId) {
+      const byId = chapters.findIndex((c) => c.id === chapterId);
+      if (byId >= 0) idx = byId;
+    }
     nav.navigate('Player', {
       seriesId: series.id,
       seriesTitle: series.title,
       coverUrl: series.cover_url,
       startIndex: idx,
       startChar,
+      ...(chapterId ? { startChapterId: chapterId } : {}),
     });
   };
 
@@ -126,11 +121,11 @@ export function SeriesScreen({ route }: { route: SeriesRouteProp }) {
     if (progress?.chapterId) {
       const idx = chapters.findIndex((c) => c.id === progress.chapterId);
       if (idx >= 0) {
-        startListening(idx, progress.charIndex);
+        startListening(progress.chapterId, progress.charIndex);
         return;
       }
     }
-    startListening(0, 0);
+    startListening(undefined, 0);
   };
 
   const openReader = (chapterId?: string) => {
@@ -194,7 +189,7 @@ export function SeriesScreen({ route }: { route: SeriesRouteProp }) {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={['top']}>
-      <ScrollView contentContainerStyle={{ paddingBottom: pad + 16 }} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={{ paddingBottom: pad + 96 }} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.headerWrap}>
           <LinearGradient colors={[t.gradientPrimary[0], 'transparent']} style={styles.headerGlow} />
@@ -313,7 +308,7 @@ export function SeriesScreen({ route }: { route: SeriesRouteProp }) {
               return (
                 <View key={c.id} style={styles.chapterItem}>
                   <Pressable
-                    onPress={() => startListening(globalIdx, 0)}
+                    onPress={() => startListening(c.id, 0)}
                     style={({ pressed }) => [
                       styles.chapterRow,
                       { borderColor: t.border },

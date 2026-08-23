@@ -437,6 +437,38 @@ app.get('/api/progress/all', async (c) => {
   return c.json({ items })
 })
 
+// Truyện người dùng đang nghe mà có chương mới hơn lần nghe cuối (cho mục "Có chương mới" ở Trang chủ).
+app.get('/api/following-updates', async (c) => {
+  const u = await getAuth(c)
+  if (!u) return c.json({ items: [] })
+  const rows = await c.env.DB.prepare(`
+    SELECT p.series_id, p.last_listened_at, s.title, s.cover_url,
+      (SELECT MAX(order_no) FROM chapters ch WHERE ch.series_id=p.series_id AND ch.status='published') AS max_order,
+      (SELECT order_no FROM chapters ch WHERE ch.id = p.listen_chapter_id) AS listened_order
+    FROM progress p JOIN series s ON s.id = p.series_id
+    WHERE p.user_id=? AND p.listen_chapter_id IS NOT NULL
+    ORDER BY p.last_listened_at DESC LIMIT 20
+  `).bind(u.id).all<any>()
+  const items = (rows.results ?? [])
+    .map((r: any) => {
+      const maxOrder = Number(r.max_order) || 0
+      const listenedOrder = Number(r.listened_order) || 0
+      const newChapters = Math.max(0, maxOrder - listenedOrder)
+      return {
+        seriesId: r.series_id,
+        title: r.title,
+        coverUrl: r.cover_url,
+        newChapters,
+        lastOrderNo: maxOrder,
+        listenedOrderNo: listenedOrder,
+        lastListenedAt: r.last_listened_at,
+      }
+    })
+    .filter((it: any) => it.newChapters > 0)
+    .slice(0, 10)
+  return c.json({ items })
+})
+
 app.get('/api/favorites', async (c) => {
   const u=await getAuth(c)
   if(!u) return c.json({ items: [], total: 0 })

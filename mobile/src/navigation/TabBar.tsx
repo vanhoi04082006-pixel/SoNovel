@@ -5,7 +5,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useTheme, SPACING, RADIUS } from '../theme';
 import { Icon, IconName } from '../components/ui/Icon';
-import { FloatingMiniPlayer } from '../components/player/FloatingMiniPlayer';
 
 const TAB_ICONS: Record<string, { active: IconName; inactive: IconName }> = {
   Home: { active: 'home', inactive: 'home-outline' },
@@ -25,7 +24,6 @@ export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 
   return (
     <View style={{ backgroundColor: t.bg }}>
-      <FloatingMiniPlayer />
       <View style={[styles.bar, { backgroundColor: t.surface, borderTopColor: t.border, paddingBottom: Math.max(insets.bottom, 8) }]}>
         {state.routes.map((route, index) => {
           const { options } = descriptors[route.key];

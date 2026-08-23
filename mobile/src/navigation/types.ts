@@ -9,7 +9,13 @@ export type RootStackParamList = {
     coverUrl: string;
     startIndex?: number;
     startChar?: number;
+    /** Resolve lại vị trí theo chapterId sau khi load danh sách (ưu tiên hơn startIndex). */
+    startChapterId?: string;
   };
+  /** Màn danh sách chương của player (đọc trực tiếp trạng thái TTS toàn cục). */
+  PlayerChapters: undefined;
+  /** Màn xem chữ của player. */
+  PlayerText: undefined;
   /** Màn "Tất cả truyện" — sort truyền sẵn từ Bảng xếp hạng / Xem tất cả. */
   Catalog: { sort?: 'new' | 'chapters' | 'title'; title?: string } | undefined;
   /** Màn đọc chương — prev/next trong hệ thống bộ truyện. */

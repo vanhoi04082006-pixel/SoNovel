@@ -148,7 +148,7 @@ export function CatalogScreen() {
         data={items}
         keyExtractor={(item) => item.id}
         numColumns={COLS}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24, gap: 8 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 104, gap: 8 }}
         columnWrapperStyle={{ gap: 8 }}
         refreshControl={
           <RefreshControl refreshing={loading && items.length > 0} onRefresh={onRefresh} colors={[t.primary]} tintColor={t.primary} />

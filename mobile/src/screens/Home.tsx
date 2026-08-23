@@ -22,9 +22,9 @@ import { Chip } from '../components/ui/Chip';
 import { Screen } from '../components/ui/Screen';
 import { Skeleton } from '../components/ui/Skeleton';
 import { Icon } from '../components/ui/Icon';
-import { listSeries, listAllProgress, listChapters, getSeries, SeriesRow, ProgressRow } from '../lib/progress';
+import { listSeries, listAllProgress, listFollowingUpdates, getSeries, SeriesRow, ProgressRow, FollowingUpdateRow } from '../lib/progress';
 import { useAuth } from '../lib/session';
-import { startTts, TtsChapter, listLocalProgress } from '../lib/tts';
+import { listLocalProgress } from '../lib/tts';
 import { RootStackParamList } from '../navigation/types';
 import { useMiniPlayerPad } from '../lib/useMiniPlayerPad';
 
@@ -44,6 +44,7 @@ export function HomeScreen() {
   const [rankLong, setRankLong] = useState<SeriesRow[]>([]);
   const [rankTab, setRankTab] = useState<'new' | 'chapters'>('new');
   const [progressItems, setProgressItems] = useState<(ProgressRow & { series?: SeriesRow })[]>([]);
+  const [followUpdates, setFollowUpdates] = useState<FollowingUpdateRow[]>([]);
   const firstLoadRef = useRef(true);
 
   const load = useCallback(async (silent = false) => {
@@ -81,17 +82,19 @@ export function HomeScreen() {
               })
               .catch(() => []);
 
-      const [r, rankN, rankL, prog] = await Promise.all([
+      const [r, rankN, rankL, prog, follows] = await Promise.all([
         listSeries({ limit: 10, orderBy: 'updated_at' }).catch(() => [] as SeriesRow[]),
         listSeries({ limit: 5, orderBy: 'word_count' }).catch(() => [] as SeriesRow[]),
         listSeries({ limit: 5, orderBy: 'updated_at' }).catch(() => [] as SeriesRow[]),
         progressPromise,
+        listFollowingUpdates().catch(() => [] as FollowingUpdateRow[]),
       ]);
       setRecent(r);
       // Bảng xếp hạng: "Mới cập nhật" theo updated_at, "Nhiều chương" theo word_count.
       setRankNew(rankL.slice(0, 5));
       setRankLong(rankN.slice(0, 5));
       setProgressItems(prog.slice(0, 5));
+      setFollowUpdates(follows);
     } finally {
       if (!silent) setLoading(false);
     }
@@ -111,35 +114,16 @@ export function HomeScreen() {
   const openCatalog = (sort: 'new' | 'chapters') =>
     nav.navigate('Catalog', { sort, title: sort === 'new' ? 'Truyện mới cập nhật' : 'Truyện nhiều chương' });
 
-  const continueListen = async (item: ProgressRow & { series?: SeriesRow }) => {
+  /** Nút ▶ trên thẻ tiếp tục nghe — sang Player NGAY, Player tự resolve vị trí rồi phát. */
+  const resumePlay = (item: ProgressRow & { series?: SeriesRow }) => {
     if (!item.series || !item.listen_chapter_id) return;
-    try {
-      const chs = await listChapters(item.series.id);
-      const idx = Math.max(0, chs.findIndex((c) => c.id === item.listen_chapter_id));
-      const ttsChapters: TtsChapter[] = chs.map((c) => ({
-        id: c.id,
-        title: c.title,
-        content: c.content,
-        order_no: c.order_no,
-        word_count: c.word_count,
-      }));
-      await startTts({
-        seriesId: item.series.id,
-        seriesTitle: item.series.title,
-        coverUrl: item.series.cover_url,
-        chapters: ttsChapters,
-        startIndex: idx,
-        startChar: item.listen_char_index ?? 0,
-        rate: item.playback_speed ?? 1.0,
-      });
-      nav.navigate('Player', {
-        seriesId: item.series.id,
-        seriesTitle: item.series.title,
-        coverUrl: item.series.cover_url,
-        startIndex: idx,
-        startChar: item.listen_char_index ?? 0,
-      });
-    } catch (_e) {}
+    nav.navigate('Player', {
+      seriesId: item.series.id,
+      seriesTitle: item.series.title,
+      coverUrl: item.series.cover_url,
+      startChapterId: item.listen_chapter_id,
+      startChar: item.listen_char_index ?? 0,
+    });
   };
 
   const rankList = rankTab === 'new' ? rankNew : rankLong;
@@ -180,35 +164,76 @@ export function HomeScreen() {
               if (!s) return null;
               const frac = s.word_count > 0 ? Math.min(1, (item.listen_char_index ?? 0) / Math.max(1, s.word_count * 5)) : 0;
               return (
-                <Pressable
+                <View
                   key={i}
-                  onPress={() => continueListen(item)}
-                  style={({ pressed }) => [styles.contCard, { backgroundColor: t.surface, borderColor: t.border }, t.shadowSoft, pressed && { opacity: 0.85 }]}
+                  style={[styles.contCard, { backgroundColor: t.surface, borderColor: t.border }, t.shadowSoft]}
                 >
-                  <CoverImage
-                    title={s.title}
-                    coverUrl={s.cover_url}
-                    width={116}
-                    height={154}
-                    borderRadius={RADIUS.md}
-                    shadow
-                  />
-                  <View style={styles.contPlay}>
+                  {/* Bấm vào thẻ → trang chi tiết truyện */}
+                  <Pressable onPress={() => openSeries(s)} style={({ pressed }) => [{ gap: 4 }, pressed && { opacity: 0.8 }]}>
+                    <CoverImage
+                      title={s.title}
+                      coverUrl={s.cover_url}
+                      width={116}
+                      height={154}
+                      borderRadius={RADIUS.md}
+                      shadow
+                    />
+                    <Text style={[TYPO.bodySm, { color: t.text, fontWeight: '600' }]} numberOfLines={1}>{s.title}</Text>
+                    <View style={[styles.contBar, { backgroundColor: t.bgSubtle }]}>
+                      <View style={[styles.contBarFill, { width: `${Math.round(frac * 100)}%`, backgroundColor: t.primary }]} />
+                    </View>
+                    <Text style={[TYPO.caption, { color: t.textMuted }]} numberOfLines={1}>
+                      {Math.round((1 - frac) * 100)}% còn lại
+                    </Text>
+                  </Pressable>
+                  {/* Nút ▶ riêng — nghe tiếp nhanh ngay từ Home */}
+                  <Pressable
+                    style={styles.contPlay}
+                    onPress={() => resumePlay(item)}
+                    hitSlop={6}
+                    accessibilityRole="button"
+                    accessibilityLabel="Nghe tiếp"
+                  >
                     <Icon name="play" size={14} color={t.primaryText} />
-                  </View>
-                  <Text style={[TYPO.bodySm, { color: t.text, fontWeight: '600' }]} numberOfLines={1}>{s.title}</Text>
-                  <View style={[styles.contBar, { backgroundColor: t.bgSubtle }]}>
-                    <View style={[styles.contBarFill, { width: `${Math.round(frac * 100)}%`, backgroundColor: t.primary }]} />
-                  </View>
-                  <Text style={[TYPO.caption, { color: t.textMuted }]} numberOfLines={1}>
-                    {Math.round((1 - frac) * 100)}% còn lại
-                  </Text>
-                </Pressable>
+                  </Pressable>
+                </View>
               );
             })}
           </ScrollView>
         </View>
       ) : null}
+
+      {/* Có chương mới — truyện đang nghe có chương mới hơn lần nghe cuối */}
+      {!loading && followUpdates.length > 0 && (
+        <View style={styles.section}>
+          <SectionHeader title="Có chương mới" />
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingHorizontal: 16 }}>
+            {followUpdates.map((f) => (
+              <Pressable
+                key={f.seriesId}
+                onPress={() => nav.navigate('Series', { seriesId: f.seriesId })}
+                style={({ pressed }) => [
+                  styles.followCard,
+                  { backgroundColor: t.surface, borderColor: t.border },
+                  t.shadowSoft,
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <View>
+                  <CoverImage title={f.title} coverUrl={f.coverUrl} width={116} height={154} borderRadius={RADIUS.md} shadow />
+                  <View style={[styles.newBadge, { backgroundColor: t.accent }]}>
+                    <Text style={styles.newBadgeText}>+{f.newChapters}</Text>
+                  </View>
+                </View>
+                <Text style={[TYPO.bodySm, { color: t.text, fontWeight: '600' }]} numberOfLines={1}>{f.title}</Text>
+                <Text style={[TYPO.caption, { color: t.textMuted }]} numberOfLines={1}>
+                  Chương mới nhất: {f.lastOrderNo}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      )}
 
       {/* Bảng xếp hạng */}
       <View style={styles.section}>
@@ -346,6 +371,26 @@ const styles = StyleSheet.create({
   },
   contBar: { height: 3, borderRadius: 2, overflow: 'hidden' },
   contBarFill: { height: '100%' },
+  followCard: {
+    width: 132,
+    padding: 8,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    gap: 4,
+  },
+  newBadge: {
+    position: 'absolute',
+    top: -8,
+    right: -6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: RADIUS.pill,
+  },
+  newBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '800',
+  },
 });
 
 function SkeletonListRow() {

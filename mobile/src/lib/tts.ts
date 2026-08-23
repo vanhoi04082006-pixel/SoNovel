@@ -104,6 +104,68 @@ export async function ensureChapterContent(idx: number): Promise<string | null> 
   }
 }
 
+// ---------- Persist now-playing (mini player sống sót qua restart app) ----------
+const NP_KEY = 'sonovel.nowPlaying';
+
+type NowPlayingSnapshot = {
+  seriesId: string;
+  seriesTitle: string;
+  coverUrl: string;
+  chapters: TtsChapter[];
+  currentIndex: number;
+  currentChar: number;
+  rate: number;
+};
+
+/** Lưu snapshot đang phát (chỉ metadata chương, KHÔNG nội dung) vào AsyncStorage. */
+export async function persistNowPlaying(): Promise<void> {
+  if (!seriesId || chapters.length === 0) return;
+  try {
+    const snap: NowPlayingSnapshot = {
+      seriesId,
+      seriesTitle,
+      coverUrl,
+      chapters: chapters.map((c) => ({ id: c.id, title: c.title, order_no: c.order_no, word_count: c.word_count })),
+      currentIndex,
+      currentChar,
+      rate,
+    };
+    await AsyncStorage.setItem(NP_KEY, JSON.stringify(snap));
+  } catch (_e) {}
+}
+
+/**
+ * Khôi phục snapshot sau khi mở lại app — mini player hiện ngay ở trạng thái dừng.
+ * Bấm phát sẽ đi qua resumePlayback → service đã chết → startTts từ đúng vị trí.
+ */
+export async function restoreNowPlaying(): Promise<boolean> {
+  try {
+    const raw = await AsyncStorage.getItem(NP_KEY);
+    if (!raw) return false;
+    const snap = JSON.parse(raw) as NowPlayingSnapshot;
+    if (!snap?.seriesId || !Array.isArray(snap.chapters) || snap.chapters.length === 0) return false;
+    wireNative();
+    seriesId = snap.seriesId;
+    seriesTitle = snap.seriesTitle ?? '';
+    coverUrl = snap.coverUrl ?? '';
+    chapters = snap.chapters.map((c) => ({ ...c }));
+    currentIndex = Math.min(Math.max(0, snap.currentIndex ?? 0), chapters.length - 1);
+    currentChar = Math.max(0, snap.currentChar ?? 0);
+    rate = snap.rate && snap.rate > 0 ? snap.rate : 1.0;
+    isPlaying = false;
+    console.log(`[SoNovel][tts] restoreNowPlaying: "${seriesTitle}" ch${currentIndex + 1}@${currentChar}`);
+    emitLocal('nowPlaying');
+    return true;
+  } catch (_e) {
+    return false;
+  }
+}
+
+/** Xóa snapshot khi người dùng dừng hẳn. */
+export async function clearNowPlayingPersist(): Promise<void> {
+  try { await AsyncStorage.removeItem(NP_KEY); } catch (_e) {}
+}
+
 // ---------- Local event bus ----------
 const listeners = new Map<string, Set<(payload?: any) => void>>();
 
@@ -208,7 +270,9 @@ export async function flushTtsSave(): Promise<void> {
   const chapter = chapters[currentIndex];
   if (!chapter) return;
   await saveLocalProgress(seriesId, chapter.id, currentChar);
+  void persistNowPlaying();
   invalidateCache('continue:'); // Home "Tiếp tục nghe" lấy % mới nhất lần tới
+  invalidateCache('follow:');   // mục "Có chương mới" tính lại theo vị trí vừa lưu
   const userId = getUserId();
   if (!userId) return;
   try {
@@ -503,6 +567,9 @@ export async function startTts(opts: {
   startChar?: number;
   rate?: number;
 }): Promise<void> {
+  // Single-flight: đang khởi động cùng bộ truyện thì bỏ qua lời gọi trùng
+  // (người dùng bấm nút nhiều lần liên tiếp).
+  if (busy && seriesId === opts.seriesId) return;
   wireNative();
   seriesId = opts.seriesId;
   seriesTitle = opts.seriesTitle;
@@ -732,6 +799,7 @@ export async function stopTts(): Promise<void> {
   lastSessionMark = 0;
   endAdvance();
   consecutiveLoadFailures = 0;
+  await clearNowPlayingPersist(); // dừng hẳn → mini player biến mất cả sau restart
   if (busyTimer) {
     clearTimeout(busyTimer);
     busyTimer = null;
@@ -823,5 +891,6 @@ function seekChapterBy(direction: number) {
   seriesEnded = false;
   emitLocal('chapterChange', { chapterIndex: nextIdx });
   emitLocal('nowPlaying');
+  void persistNowPlaying(); // mini player nhớ đúng chương sau restart
   sendPlayChapter(nextIdx, 0);
 }

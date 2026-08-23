@@ -6,7 +6,9 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useTheme, initTheme } from '../theme';
 import { initSession } from '../lib/session';
 import { initReaderSettings } from '../lib/readerSettings';
-import { loadSavedRate } from '../lib/tts';
+import { loadSavedRate, restoreNowPlaying } from '../lib/tts';
+import { syncNavState } from '../lib/navState';
+import { rootNavRef } from '../lib/rootNav';
 
 import { HomeScreen } from '../screens/Home';
 import { SearchScreen } from '../screens/Search';
@@ -21,7 +23,10 @@ import { StatsScreen } from '../screens/Stats';
 import { SettingsScreen } from '../screens/Settings';
 import { CatalogScreen } from '../screens/Catalog';
 import { ReaderScreen } from '../screens/Reader';
+import { PlayerChaptersScreen } from '../screens/PlayerChapters';
+import { PlayerTextScreen } from '../screens/PlayerText';
 import { TabBar } from './TabBar';
+import { FloatingMiniPlayer } from '../components/player/FloatingMiniPlayer';
 import { RootStackParamList, TabsParamList } from './types';
 
 const Tab = createBottomTabNavigator<TabsParamList>();
@@ -65,7 +70,11 @@ export function RootNavigator() {
   };
 
   return (
-    <NavigationContainer theme={navTheme}>
+    <NavigationContainer
+      ref={rootNavRef}
+      theme={navTheme}
+      onStateChange={(state) => syncNavState(state)}
+    >
       <Stack.Navigator
         screenOptions={{
           headerStyle: { backgroundColor: t.surface },
@@ -90,6 +99,16 @@ export function RootNavigator() {
           name="Player"
           component={PlayerScreen}
           options={{ title: 'Trình nghe' }}
+        />
+        <Stack.Screen
+          name="PlayerChapters"
+          component={PlayerChaptersScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="PlayerText"
+          component={PlayerTextScreen}
+          options={{ headerShown: false }}
         />
         <Stack.Screen
           name="Reader"
@@ -117,6 +136,8 @@ export function RootNavigator() {
           options={{ title: 'Cài đặt' }}
         />
       </Stack.Navigator>
+      {/* Mini player toàn cục — đè lên mọi màn hình trừ Player/Reader (tự ẩn) */}
+      <FloatingMiniPlayer />
     </NavigationContainer>
   );
 }
@@ -127,5 +148,7 @@ export function useBootstrap() {
     initTheme().catch(() => {});
     initReaderSettings().catch(() => {});
     loadSavedRate().catch(() => {});
+    // Khôi phục mini player từ phiên trước (trạng thái dừng, đúng chương/vị trí)
+    restoreNowPlaying().catch(() => {});
   }, []);
 }

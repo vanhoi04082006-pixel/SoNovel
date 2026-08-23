@@ -14,8 +14,6 @@ import { useTheme, TYPO, SPACING, RADIUS } from '../theme';
 import { CoverImage } from '../components/ui/CoverImage';
 import { Icon } from '../components/ui/Icon';
 import { PlayerControls } from '../components/player/PlayerControls';
-import { TextSheet } from '../components/player/TextSheet';
-import { ChaptersSheet } from '../components/player/ChaptersSheet';
 import { SleepSheet, SleepOption } from '../components/player/SleepSheet';
 import { SeriesEndOverlay } from '../components/player/SeriesEndOverlay';
 import {
@@ -38,7 +36,6 @@ import {
 import { listChapters, ChapterRow, createBookmark } from '../lib/progress';
 import { nativeTts } from '../lib/nativeTts';
 import { showToast } from '../lib/toast';
-import { useReadMarkers } from '../lib/readMarkers';
 import { RootStackParamList } from '../navigation/types';
 
 type PlayerRouteProp = RouteProp<RootStackParamList, 'Player'>;
@@ -66,8 +63,6 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const params = route.params;
   const [np, setNp] = useState(getNowPlaying());
-  const [showText, setShowText] = useState(false);
-  const [showChapters, setShowChapters] = useState(false);
   const [showSleep, setShowSleep] = useState(false);
   const [sleep, setSleep] = useState<SleepOption>('off');
   const [sleepEnd, setSleepEnd] = useState(0);
@@ -75,7 +70,6 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
   const [error, setError] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(false);
   const sleepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const readSet = useReadMarkers(np.seriesId);
 
   useEffect(() => {
     if (sleepEnd <= 0) return;
@@ -146,6 +140,8 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
     };
   }, [sleep]);
 
+  const startingRef = useRef(false);
+
   const maybeStartTts = useCallback(async () => {
     const cur = getNowPlaying();
     if (cur.seriesId === params.seriesId && (cur.isPlaying || cur.busy)) {
@@ -157,6 +153,9 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
       await resumePlayback();
       return;
     }
+    // Guard chống gọi kép (bấm nút liên tiếp / re-render)
+    if (startingRef.current) return;
+    startingRef.current = true;
     setInitializing(true);
     try {
       // Đảm bảo rate đã load từ AsyncStorage trước khi startTts
@@ -169,21 +168,29 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
         order_no: c.order_no,
         word_count: c.word_count,
       }));
+      // Ưu tiên resolve vị trí theo chapterId (chính xác hơn index truyền qua route)
+      let idx = params.startIndex ?? 0;
+      if (params.startChapterId) {
+        const byId = chs.findIndex((c) => c.id === params.startChapterId);
+        if (byId >= 0) idx = byId;
+      }
+      if (idx >= ttsChapters.length) idx = Math.max(0, ttsChapters.length - 1);
       await startTts({
         seriesId: params.seriesId,
         seriesTitle: params.seriesTitle,
         coverUrl: params.coverUrl,
         chapters: ttsChapters,
-        startIndex: params.startIndex ?? 0,
+        startIndex: idx,
         startChar: params.startChar ?? 0,
         rate: savedRate,
       });
     } catch (e: any) {
       setError(`Không tải được chương: ${e?.message ?? e}`);
     } finally {
+      startingRef.current = false;
       setInitializing(false);
     }
-  }, [params.seriesId, params.seriesTitle, params.coverUrl, params.startIndex, params.startChar]);
+  }, [params.seriesId, params.seriesTitle, params.coverUrl, params.startIndex, params.startChar, params.startChapterId]);
 
   useEffect(() => {
     maybeStartTts();
@@ -224,13 +231,12 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
     showToast(id ? `Đã đánh dấu tại ${cur.currentChar} — Chương ${cur.currentIndex + 1}` : 'Đánh dấu thất bại.');
   };
 
-  const openTextSheet = async () => {
+  // "Xem chữ" và "Danh sách chương" giờ là các MÀN RIÊNG — điều hướng thay vì mở sheet.
+  const openTextScreen = async () => {
     try {
       await ensureChapterContent(np.currentIndex);
-    } catch (_e) {
-      // Đã có content trong cache → vẫn mở sheet được; nếu chưa, sheet trống.
-    }
-    setShowText(true);
+    } catch (_e) {}
+    nav.navigate('PlayerText');
   };
 
   return (
@@ -295,8 +301,8 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
             onNext={() => nextChapterTts()}
             onSeek={onSeek}
             onSeekBySeconds={onSeekBySeconds}
-            onTextSheet={openTextSheet}
-            onChaptersSheet={() => setShowChapters(true)}
+            onTextSheet={openTextScreen}
+            onChaptersSheet={() => nav.navigate('PlayerChapters')}
             onSleepSheet={() => setShowSleep(true)}
             onBookmark={onBookmark}
             onStop={() => { stopTts(); nav.goBack(); }}
@@ -313,26 +319,6 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
         ) : null}
       </View>
 
-      <TextSheet
-        visible={showText}
-        onClose={() => setShowText(false)}
-        chapter={chapter}
-        currentIndex={np.currentIndex}
-        charIndex={np.currentChar}
-        onSeek={onSeek}
-      />
-      <ChaptersSheet
-        visible={showChapters}
-        onClose={() => setShowChapters(false)}
-        chapters={np.chapters.map((c) => ({
-          id: c.id,
-          title: c.title,
-          order_no: c.order_no,
-        }))}
-        currentIndex={np.currentIndex}
-        readIds={readSet}
-        onSelect={(idx) => playChapterTts(idx, 0)}
-      />
       <SleepSheet
         visible={showSleep}
         onClose={() => setShowSleep(false)}

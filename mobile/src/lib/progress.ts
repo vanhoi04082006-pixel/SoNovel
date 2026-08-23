@@ -293,6 +293,40 @@ export async function listAllProgress(): Promise<(ProgressRow & { series?: Serie
   }
 }
 
+// ---------- Following updates (truyện đang nghe có chương mới) ----------
+export type FollowingUpdateRow = {
+  seriesId: string;
+  title: string;
+  coverUrl: string;
+  newChapters: number;
+  lastOrderNo: number;
+  listenedOrderNo: number;
+  lastListenedAt: string | null;
+};
+
+/** Truyện user đang nghe mà có chương mới hơn lần nghe cuối — cho mục "Có chương mới". */
+export async function listFollowingUpdates(): Promise<FollowingUpdateRow[]> {
+  const userId = getUserId();
+  if (!userId) return [];
+  return withCache(`follow:${userId}`, SHORT_TTL_MS, async () => {
+    try {
+      const j: any = await workerJson('/api/following-updates', { method: 'GET' });
+      const rows: FollowingUpdateRow[] = (j.items ?? []).map((it: any) => ({
+        seriesId: it.seriesId,
+        title: it.title ?? '',
+        coverUrl: it.coverUrl ?? '',
+        newChapters: Number(it.newChapters) || 0,
+        lastOrderNo: Number(it.lastOrderNo) || 0,
+        listenedOrderNo: Number(it.listenedOrderNo) || 0,
+        lastListenedAt: it.lastListenedAt ?? null,
+      }));
+      return rows.filter((r) => r.newChapters > 0);
+    } catch {
+      return [];
+    }
+  });
+}
+
 // Ghi giờ nghe thực tế lên Worker (nuôi stats/streak/achievements cho mobile).
 // Endpoint có sẵn: POST /api/stats/session (worker cap 600s/lần).
 export async function saveSession(opts: { seriesId: string; chapterId?: string | null; durationSec: number }): Promise<void> {
