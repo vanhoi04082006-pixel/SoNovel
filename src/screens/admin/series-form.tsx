@@ -73,10 +73,11 @@ export function AdminSeriesForm({ seriesId }: { seriesId?: string }) {
   const onUpload = async (file: File) => {
     setUploading(true)
     try {
-      const r = await api.upload(file)
+      // Toàn bộ up ảnh qua imgBB (theo yêu cầu)
+      const r = await api.uploadIllustration(file)
       if (r.url) {
         setCoverUrl(r.url)
-        toast.success('Đã tải ảnh lên.')
+        toast.success('Đã tải ảnh lên imgBB.')
       } else {
         toast.error(r.error || 'Tải ảnh thất bại.')
       }
@@ -103,9 +104,11 @@ export function AdminSeriesForm({ seriesId }: { seriesId?: string }) {
   const uploadIllust = async (file: File, idx: number) => {
     setIllustUploadingIdx(idx)
     try {
-      const r = await api.upload(file)
-      if (r.url) updateIllust(idx, { imageUrl: r.url })
-      else toast.error(r.error || 'Tải ảnh thất bại.')
+      const r = await api.uploadIllustration(file)
+      if (r.url) {
+        updateIllust(idx, { imageUrl: r.url })
+        toast.success('Đã tải ảnh minh họa lên imgBB.')
+      } else toast.error(r.error || 'Tải ảnh thất bại.')
     } catch (e) {
       toast.error('Tải ảnh thất bại: ' + (e as Error).message)
     } finally {

@@ -216,4 +216,13 @@ export const api = {
       return j
     })
   },
+  uploadIllustration: (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return fetchWithTimeout('/api/illustrations/upload', { method: 'POST', body: fd, credentials: 'include' }).then(async (r) => {
+      const j = await r.json().catch(() => null)
+      if (!r.ok) throw new ApiError((j && j.error) || `Lỗi ${r.status}`, r.status, j)
+      return j
+    })
+  },
 }

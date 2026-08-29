@@ -321,100 +321,125 @@ export function StoryDetailScreen() {
         </div>
       )}
 
-      {/* Chapters */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold">Danh sách chương</h2>
-          <div className="relative w-48">
-            <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={chapterFilter}
-              onChange={(e) => setChapterFilter(e.target.value)}
-              placeholder="Tìm chương…"
-              className="pl-8 h-8 text-sm"
-            />
+      {/* Tabs: Thông Tin | Chương | Minh Họa */}
+      <Tabs defaultValue="chapters" className="w-full">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="info">Thông Tin</TabsTrigger>
+          <TabsTrigger value="chapters">Chương</TabsTrigger>
+          <TabsTrigger value="illustrations">Minh Họa</TabsTrigger>
+        </TabsList>
+        <TabsContent value="info" className="space-y-4 pt-2">
+          <div className="rounded-xl border border-border p-4 space-y-3">
+            <h3 className="font-semibold">Giới thiệu</h3>
+            <p className="text-sm leading-relaxed whitespace-pre-wrap">{detail.description || 'Chưa có mô tả.'}</p>
+            <div className="flex flex-wrap gap-1.5 pt-2">
+              {detail.genres?.map((g) => (
+                <Badge key={g} variant="secondary">{g}</Badge>
+              ))}
+              {detail.tags?.map((t) => (
+                <span key={t} className="text-xs text-primary">#{t}</span>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground pt-2">{detail.chapters.length} chương · ~{totalListenMin} phút nghe</p>
           </div>
-        </div>
-        <div className="rounded-xl border border-border divide-y divide-border overflow-hidden">
-          {shownChapters.map((c) => {
-            const isPlaying = currentPlayingChapterId === c.id
-            const isListened = listenChapterId === c.id
-            const pct = isPlaying && currentPlayingChar
-              ? Math.min(100, (currentPlayingChar / Math.max(1, c.wordCount * 5)) * 100)
-              : isListened ? Math.min(100, (listenCharIndex / Math.max(1, c.wordCount * 5)) * 100) : 0
-            return (
-              <div
-                key={c.id}
-                className="flex w-full items-center gap-3 px-3 py-2.5 hover:bg-accent/50 transition-colors text-left group"
-              >
-                <button
-                  onClick={() => {
-                    const idx = chapters.findIndex((ch) => ch.id === c.id)
-                    startPlay(idx, 0)
-                  }}
-                  className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-muted text-xs font-semibold hover:bg-primary hover:text-primary-foreground transition-colors"
-                  aria-label={`Phát ${c.title}`}
+        </TabsContent>
+        <TabsContent value="chapters" className="space-y-3 pt-2">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold">Danh sách chương</h3>
+            <div className="relative w-48">
+              <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={chapterFilter}
+                onChange={(e) => setChapterFilter(e.target.value)}
+                placeholder="Tìm chương…"
+                className="pl-8 h-8 text-sm"
+              />
+            </div>
+          </div>
+          <div className="rounded-xl border border-border divide-y divide-border overflow-hidden">
+            {shownChapters.map((c) => {
+              const isPlaying = currentPlayingChapterId === c.id
+              const isListened = listenChapterId === c.id
+              const pct = isPlaying && currentPlayingChar
+                ? Math.min(100, (currentPlayingChar / Math.max(1, c.wordCount * 5)) * 100)
+                : isListened ? Math.min(100, (listenCharIndex / Math.max(1, c.wordCount * 5)) * 100) : 0
+              return (
+                <div
+                  key={c.id}
+                  className="flex w-full items-center gap-3 px-3 py-2.5 hover:bg-accent/50 transition-colors text-left group"
                 >
-                  {c.orderNo}
-                </button>
-                <button
-                  onClick={() => {
-                    const idx = chapters.findIndex((ch) => ch.id === c.id)
-                    startPlay(idx, 0)
-                  }}
-                  className="flex-1 min-w-0 text-left"
-                >
-                  <p className={`text-sm font-medium line-clamp-1 ${isPlaying ? 'text-primary' : 'group-hover:text-primary'}`}>{c.title}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatCharCount(c.wordCount * 5)} · ~{estMinutes(c.wordCount * 5)} phút
-                  </p>
-                  {pct > 0 && <Progress value={pct} className="h-1 mt-1" />}
-                </button>
-                {isPlaying && <Volume2 className="h-4 w-4 text-primary shrink-0 animate-pulse" />}
-                {isListened && !isPlaying && <Headphones className="h-4 w-4 text-muted-foreground shrink-0" />}
-                <button
-                  onClick={() => navigate({ view: 'reader', seriesId, chapterId: c.id })}
-                  className="shrink-0 p-1.5 text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 transition-opacity"
-                  aria-label={`Đọc ${c.title}`}
-                  title="Đọc chương này"
-                >
-                  <BookOpen className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={async () => {
-                    if (!user) {
-                      toast.info('Vui lòng đăng nhập để đánh dấu.', { action: { label: 'Đăng nhập', onClick: () => navigate({ view: 'login' }) } })
-                      return
-                    }
-                    try {
-                      await api.createBookmark({ seriesId, chapterId: c.id, charIndex: 0 })
-                      toast.success(`Đã đánh dấu Chương ${c.orderNo}`)
-                    } catch (e) {
-                      toast.error('Đánh dấu thất bại.')
-                    }
-                  }}
-                  className="shrink-0 p-1.5 text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 transition-opacity"
-                  aria-label={`Đánh dấu ${c.title}`}
-                  title="Đánh dấu chương này"
-                >
-                  <Bookmark className="h-4 w-4" />
-                </button>
-              </div>
-            )
-          })}
-          {filteredChapters.length === 0 && (
-            <div className="py-8 text-center text-sm text-muted-foreground">Không có chương phù hợp.</div>
+                  <button
+                    onClick={() => {
+                      const idx = chapters.findIndex((ch) => ch.id === c.id)
+                      startPlay(idx, 0)
+                    }}
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-muted text-xs font-semibold hover:bg-primary hover:text-primary-foreground transition-colors"
+                    aria-label={`Phát ${c.title}`}
+                  >
+                    {c.orderNo}
+                  </button>
+                  <button
+                    onClick={() => {
+                      const idx = chapters.findIndex((ch) => ch.id === c.id)
+                      startPlay(idx, 0)
+                    }}
+                    className="flex-1 min-w-0 text-left"
+                  >
+                    <p className={`text-sm font-medium line-clamp-1 ${isPlaying ? 'text-primary' : 'group-hover:text-primary'}`}>{c.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatCharCount(c.wordCount * 5)} · ~{estMinutes(c.wordCount * 5)} phút
+                    </p>
+                    {pct > 0 && <Progress value={pct} className="h-1 mt-1" />}
+                  </button>
+                  {isPlaying && <Volume2 className="h-4 w-4 text-primary shrink-0 animate-pulse" />}
+                  {isListened && !isPlaying && <Headphones className="h-4 w-4 text-muted-foreground shrink-0" />}
+                  <button
+                    onClick={() => navigate({ view: 'reader', seriesId, chapterId: c.id })}
+                    className="shrink-0 p-1.5 text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 transition-opacity"
+                    aria-label={`Đọc ${c.title}`}
+                    title="Đọc chương này"
+                  >
+                    <BookOpen className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!user) {
+                        toast.info('Vui lòng đăng nhập để đánh dấu.', { action: { label: 'Đăng nhập', onClick: () => navigate({ view: 'login' }) } })
+                        return
+                      }
+                      try {
+                        await api.createBookmark({ seriesId, chapterId: c.id, charIndex: 0 })
+                        toast.success(`Đã đánh dấu Chương ${c.orderNo}`)
+                      } catch (e) {
+                        toast.error('Đánh dấu thất bại.')
+                      }
+                    }}
+                    className="shrink-0 p-1.5 text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 transition-opacity"
+                    aria-label={`Đánh dấu ${c.title}`}
+                    title="Đánh dấu chương này"
+                  >
+                    <Bookmark className="h-4 w-4" />
+                  </button>
+                </div>
+              )
+            })}
+            {filteredChapters.length === 0 && (
+              <div className="py-8 text-center text-sm text-muted-foreground">Không có chương phù hợp.</div>
+            )}
+          </div>
+          {remainingChapters > 0 && (
+            <button
+              onClick={() => setVisibleChapters((v) => v + 200)}
+              className="w-full rounded-lg border border-border py-2.5 text-sm text-primary hover:bg-accent/50 transition-colors"
+            >
+              Tải thêm chương ({remainingChapters} còn lại)
+            </button>
           )}
-        </div>
-        {remainingChapters > 0 && (
-          <button
-            onClick={() => setVisibleChapters((v) => v + 200)}
-            className="w-full rounded-lg border border-border py-2.5 text-sm text-primary hover:bg-accent/50 transition-colors"
-          >
-            Tải thêm chương ({remainingChapters} còn lại)
-          </button>
-        )}
-      </div>
+        </TabsContent>
+        <TabsContent value="illustrations" className="pt-2">
+          <IllustrationsTab seriesId={seriesId} />
+        </TabsContent>
+      </Tabs>
 
       {/* Related stories */}
       {related.length > 0 && (
