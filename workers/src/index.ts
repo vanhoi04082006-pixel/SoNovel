@@ -20,6 +20,7 @@ import {
   type SeriesRow,
   type ChapterRow,
 } from './helpers'
+import { checkRateLimit } from './rate-limit'
 
 const ALLOWED_ORIGINS = [
   'http://localhost:3000',
@@ -98,6 +99,7 @@ app.get('/api/series', async (c) => {
   const tag = url.searchParams.get('tag') || ''
   const status = url.searchParams.get('status') || 'published,completed'
   const sort = url.searchParams.get('sort') || 'new'
+  if (!['new','title','chapters'].includes(sort)) return c.json({ error: 'sort không hợp lệ (new|title|chapters).' }, 400)
   const rawLimit = Number(url.searchParams.get('limit') || 24)
   const rawOffset = Number(url.searchParams.get('offset') || 0)
   const limit = Number.isFinite(rawLimit) ? Math.min(48, Math.max(1, Math.trunc(rawLimit))) : 24
@@ -106,19 +108,41 @@ app.get('/api/series', async (c) => {
   const cacheKey = `series:${q}:${genre}:${tag}:${status}:${sort}:${limit}:${offset}`
   const result = await cachedFetch(cacheKey, 30_000, async () => {
     const db = c.env.DB
+    // sanitize FTS5 query — escape quotes, add prefix wildcard
+    const ftsQuery = q ? q.replace(/"/g, '""').trim().split(/\s+/).map(t => `"${t}"*`).join(' ') : ''
+    const useFts = !!ftsQuery
     const where: string[] = []
     const params: any[] = []
     if (statuses.length) { where.push(`status IN (${statuses.map(()=>'?').join(',')})`); params.push(...statuses) }
-    if (q) { where.push(`(LOWER(title) LIKE ? OR LOWER(author) LIKE ?)`); const pat=`%${q.toLowerCase()}%`; params.push(pat, pat) }
+    if (q && !useFts) { where.push(`(LOWER(title) LIKE ? OR LOWER(author) LIKE ?)`); const pat=`%${q.toLowerCase()}%`; params.push(pat, pat) }
+    if (q && useFts) { where.push(`rowid IN (SELECT rowid FROM series_fts WHERE series_fts MATCH ?)`); params.push(ftsQuery) }
     if (genre) { where.push(`genres LIKE ?`); params.push(`%"${genre}"%`) }
     if (tag) { where.push(`tags LIKE ?`); params.push(`%"${tag}"%`) }
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
     let order = 'updated_at DESC'
     if (sort === 'title') order = 'title ASC'
     else if (sort === 'chapters') order = 'chapter_count DESC'
-    const countRow = await db.prepare(`SELECT COUNT(*) as n FROM series ${whereSql}`).bind(...params).first<any>()
-    const total = countRow?.n ?? 0
-    const rows = await db.prepare(`SELECT *, (SELECT COUNT(*) FROM chapters WHERE chapters.series_id=series.id AND chapters.status='published') as chapter_count FROM series ${whereSql} ORDER BY ${order} LIMIT ? OFFSET ?`).bind(...params, limit, offset).all<SeriesRow & {chapter_count:number}>()
+    let total = 0
+    let rows: any
+    try {
+      const countRow = await db.prepare(`SELECT COUNT(*) as n FROM series ${whereSql}`).bind(...params).first<any>()
+      total = countRow?.n ?? 0
+      rows = await db.prepare(`SELECT *, (SELECT COUNT(*) FROM chapters WHERE chapters.series_id=series.id AND chapters.status='published') as chapter_count FROM series ${whereSql} ORDER BY ${order} LIMIT ? OFFSET ?`).bind(...params, limit, offset).all<SeriesRow & {chapter_count:number}>()
+    } catch (e:any) {
+      // FTS5 failed (e.g. syntax) → fallback LIKE
+      if (useFts && String(e.message||'').includes('fts5')) {
+        const fbWhere: string[] = []
+        const fbParams: any[] = []
+        if (statuses.length) { fbWhere.push(`status IN (${statuses.map(()=>'?').join(',')})`); fbParams.push(...statuses) }
+        fbWhere.push(`(LOWER(title) LIKE ? OR LOWER(author) LIKE ?)`); const pat=`%${q.toLowerCase()}%`; fbParams.push(pat, pat)
+        if (genre) { fbWhere.push(`genres LIKE ?`); fbParams.push(`%"${genre}"%`) }
+        if (tag) { fbWhere.push(`tags LIKE ?`); fbParams.push(`%"${tag}"%`) }
+        const fbSql = fbWhere.length ? `WHERE ${fbWhere.join(' AND ')}` : ''
+        const cRow = await db.prepare(`SELECT COUNT(*) as n FROM series ${fbSql}`).bind(...fbParams).first<any>()
+        total = cRow?.n ?? 0
+        rows = await db.prepare(`SELECT *, (SELECT COUNT(*) FROM chapters WHERE chapters.series_id=series.id AND chapters.status='published') as chapter_count FROM series ${fbSql} ORDER BY ${order} LIMIT ? OFFSET ?`).bind(...fbParams, limit, offset).all<SeriesRow & {chapter_count:number}>()
+      } else throw e
+    }
     const items = (rows.results ?? []).map(s => mapSeries(s as SeriesRow, (s as any).chapter_count ?? 0))
     return { items, total, offset, limit }
   })
@@ -331,6 +355,9 @@ app.delete('/api/chapters/:id', async (c) => {
 })
 
 app.post('/api/series/create', async (c) => {
+  const ip = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || 'anon'
+  const rl = checkRateLimit(`series-create:${ip}`, 30, 60_000)
+  if (!rl.ok) return c.json({ error: 'Tạo truyện quá nhanh, thử lại sau.' }, 429)
   await requireAdmin(c)
   const body:any = await c.req.json()
   if (!body.title || !String(body.title).trim()) return c.json({ error: 'Tên truyện là bắt buộc.' }, 400)
@@ -822,6 +849,9 @@ function sniffImage(buf: Uint8Array): { mime: string; ext: string } | null {
 }
 
 app.post('/api/upload', async (c) => {
+  const ip = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || 'anon'
+  const rl = checkRateLimit(`upload:${ip}`, 20, 60_000)
+  if (!rl.ok) return c.json({ error: 'Quá nhiều yêu cầu upload, thử lại sau.' }, 429)
   await requireAdmin(c)
   if (!c.env.COVERS) return c.json({ error: 'R2 chưa cấu hình. Vui lòng bật R2 tại https://dash.cloudflare.com/3bc7982e8a2f3c210b766b046fd3557c/r2/overview rồi tạo bucket sonovel-covers.' }, 503)
   const lenHeader = c.req.header('content-length')

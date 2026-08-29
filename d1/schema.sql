@@ -129,3 +129,28 @@ CREATE TABLE IF NOT EXISTS tags (
   name TEXT UNIQUE NOT NULL,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
+-- series_illustrations: ?nh minh h?a theo b? truy?n (tab Minh h?a)
+CREATE TABLE IF NOT EXISTS series_illustrations (
+  id TEXT PRIMARY KEY NOT NULL,
+  series_id TEXT NOT NULL REFERENCES series(id) ON DELETE CASCADE,
+  order_no INTEGER NOT NULL DEFAULT 0,
+  image_url TEXT NOT NULL,
+  caption TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+CREATE INDEX IF NOT EXISTS idx_illustrations_series ON series_illustrations(series_id, order_no);
+
+-- FTS5 cho tìm kiếm title/author (mirror workers/migrations/0002_fts5.sql)
+CREATE VIRTUAL TABLE IF NOT EXISTS series_fts USING fts5(
+  title, author, content='series', content_rowid='rowid', tokenize='unicode61 "remove_diacritics 2"'
+);
+CREATE TRIGGER IF NOT EXISTS trg_series_fts_insert AFTER INSERT ON series BEGIN
+  INSERT INTO series_fts(rowid, title, author) VALUES (new.rowid, new.title, new.author);
+END;
+CREATE TRIGGER IF NOT EXISTS trg_series_fts_delete AFTER DELETE ON series BEGIN
+  INSERT INTO series_fts(series_fts, rowid, title, author) VALUES('delete', old.rowid, old.title, old.author);
+END;
+CREATE TRIGGER IF NOT EXISTS trg_series_fts_update AFTER UPDATE ON series BEGIN
+  INSERT INTO series_fts(series_fts, rowid, title, author) VALUES('delete', old.rowid, old.title, old.author);
+  INSERT INTO series_fts(rowid, title, author) VALUES (new.rowid, new.title, new.author);
+END;

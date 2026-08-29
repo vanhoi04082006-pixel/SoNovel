@@ -11,3 +11,6 @@ migrations_dir = "migrations"
 [[r2_buckets]]
 binding = "COVERS"
 bucket_name = "sonovel-covers"
+
+# Rate limiting via in-memory map in workers/src/rate-limit.ts (Phase 2)
+# Cloudflare Rate Limiting Rules (dashboard) recommended for /api/upload + /api/series/create
