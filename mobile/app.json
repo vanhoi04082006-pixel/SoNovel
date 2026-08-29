@@ -38,8 +38,9 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "sonovel-mobile"
+        "projectId": "1030dd78-e78f-4ecb-ac96-2c93d0b2c19f"
       }
-    }
+    },
+    "owner": "vanhoi12"
   }
 }
