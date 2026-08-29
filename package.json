@@ -7,6 +7,8 @@
     "build": "next build && node -e \"try{require('fs').cpSync('.next/static','.next/standalone/.next/static',{recursive:true});require('fs').cpSync('public','.next/standalone/public',{recursive:true})}catch(e){}\"",
     "start": "NODE_ENV=production bun .next/standalone/server.js 2>&1 | tee server.log",
     "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "bun --version > /dev/null && echo \"no unit tests yet - add vitest\" || true",
     "db:seed": "bun run scripts/seed.ts"
   },
   "dependencies": {

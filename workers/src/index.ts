@@ -51,12 +51,21 @@ app.use('*', cors({
   credentials: true,
 }))
 
+app.use('*', async (c, next) => {
+  const rid = c.req.header('x-request-id') || crypto.randomUUID()
+  c.set('requestId' as any, rid)
+  c.header('x-request-id', rid)
+  await next()
+})
+
 app.onError((err, c) => {
+  const rid = (c as any).get?.('requestId') || '-'
+  console.error(JSON.stringify({ rid, path: c.req.path, error: (err as Error).message, stack: (err as Error).stack?.slice(0, 500) }))
   if (err instanceof ApiError) return c.json({ error: err.message }, err.status as any)
   return c.json({ error: (err as Error).message || 'Lỗi server' }, 500)
 })
 
-app.get('/health', (c) => c.json({ ok: true }))
+app.get('/health', (c) => c.json({ ok: true, rid: (c as any).get?.('requestId') }))
 app.get('/api/settings/goal', async (c) => {
   const u = await getAuth(c)
   if (!u) return c.json({ goal: null })
