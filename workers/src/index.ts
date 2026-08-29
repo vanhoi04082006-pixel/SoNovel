@@ -21,9 +21,34 @@ import {
   type ChapterRow,
 } from './helpers'
 
+const ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'http://localhost:8787',
+  'http://127.0.0.1:8787',
+]
+
+function isAllowedOrigin(origin: string | undefined): boolean {
+  if (!origin) return true
+  if (ALLOWED_ORIGINS.includes(origin)) return true
+  try {
+    const u = new URL(origin)
+    if (u.hostname === 'localhost' || u.hostname === '127.0.0.1') return true
+    if (u.hostname.endsWith('.vercel.app')) return true
+    if (u.hostname.endsWith('.workers.dev')) return true
+    if (u.hostname === 'sonovel.app' || u.hostname.endsWith('.sonovel.app')) return true
+  } catch {}
+  return false
+}
+
 const app = new Hono<{ Bindings: Env }>()
 
-app.use('*', cors({ origin: '*', allowMethods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'], allowHeaders: ['Content-Type','Authorization','x-service-token'] }))
+app.use('*', cors({
+  origin: (origin) => isAllowedOrigin(origin) ? origin : undefined,
+  allowMethods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+  allowHeaders: ['Content-Type','Authorization','x-service-token'],
+  credentials: true,
+}))
 
 app.onError((err, c) => {
   if (err instanceof ApiError) return c.json({ error: err.message }, err.status as any)
@@ -133,6 +158,45 @@ app.get('/api/series/:id/related', async (c) => {
   }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score).slice(0, limit)
   const items = scored.map(({ row }) => mapSeries(row as SeriesRow))
   return c.json({ items })
+})
+
+// ---------- ILLUSTRATIONS (ảnh minh họa theo bộ truyện) ----------
+
+// Public — danh sách ảnh minh họa của 1 bộ truyện
+app.get('/api/series/:id/illustrations', async (c) => {
+  const id = c.req.param('id')
+  const result = await cachedFetch(`illust:${id}`, 60_000, async () => {
+    const rows = await c.env.DB.prepare('SELECT id, order_no, image_url, caption FROM series_illustrations WHERE series_id=? ORDER BY order_no ASC').bind(id).all<any>()
+    return { items: (rows.results ?? []).map((r) => ({ id: r.id, imageUrl: r.image_url, caption: r.caption || '', orderNo: r.order_no })) }
+  })
+  return c.json(result)
+})
+
+// Admin — lưu lại TOÀN BỘ danh sách (bulk replace theo thứ tự mảng)
+app.put('/api/series/:id/illustrations', async (c) => {
+  await requireAdmin(c)
+  const id = c.req.param('id')
+  const body: any = await c.req.json()
+  const items: any[] = Array.isArray(body.items) ? body.items : []
+  if (items.length > 100) return c.json({ error: 'Tối đa 100 ảnh minh họa mỗi bộ truyện.' }, 400)
+  const db = c.env.DB
+  const s = await db.prepare('SELECT id FROM series WHERE id=?').bind(id).first<any>()
+  if (!s) return c.json({ error: 'Không tìm thấy truyện.' }, 404)
+  const now = nowIso()
+  const stmts: any[] = [db.prepare('DELETE FROM series_illustrations WHERE series_id=?').bind(id)]
+  let count = 0
+  for (const it of items) {
+    const url = String(it?.imageUrl || '').trim()
+    if (!url) continue
+    stmts.push(
+      db.prepare('INSERT INTO series_illustrations (id, series_id, order_no, image_url, caption, created_at) VALUES (?,?,?,?,?,?)')
+        .bind(uuid(), id, count, url.slice(0, 2000), String(it?.caption || '').slice(0, 500), now)
+    )
+    count++
+  }
+  await db.batch(stmts)
+  invalidateAll()
+  return c.json({ ok: true, count })
 })
 
 app.get('/api/series/:id/chapters', async (c) => {
@@ -760,6 +824,11 @@ function sniffImage(buf: Uint8Array): { mime: string; ext: string } | null {
 app.post('/api/upload', async (c) => {
   await requireAdmin(c)
   if (!c.env.COVERS) return c.json({ error: 'R2 chưa cấu hình. Vui lòng bật R2 tại https://dash.cloudflare.com/3bc7982e8a2f3c210b766b046fd3557c/r2/overview rồi tạo bucket sonovel-covers.' }, 503)
+  const lenHeader = c.req.header('content-length')
+  if (lenHeader) {
+    const len = Number(lenHeader)
+    if (Number.isFinite(len) && len > 6 * 1024 * 1024) return c.json({ error: 'Payload vượt quá 6MB (giới hạn 5MB cho ảnh).' }, 413)
+  }
   const contentType = c.req.header('content-type') || ''
   let file: File | null = null
   if (contentType.includes('multipart/form-data')) {
@@ -799,7 +868,6 @@ app.get('/covers/:key', async (c) => {
   const headers = new Headers()
   headers.set('Content-Type', obj.httpMetadata?.contentType || 'image/jpeg')
   headers.set('Cache-Control', 'public, max-age=31536000, immutable')
-  if (obj.httpMetadata?.contentType) headers.set('Content-Type', obj.httpMetadata.contentType)
   return new Response(obj.body, { headers })
 })
 

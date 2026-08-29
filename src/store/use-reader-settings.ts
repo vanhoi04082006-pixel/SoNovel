@@ -36,7 +36,7 @@ function saveLocal(s: { fontSize: number; fontFamily: FontFamily; lineHeight: nu
 }
 
 // Persist store qua HMR (giống pattern Prisma client)
-const globalForReader = globalThis as unknown as { __readerSettings?: typeof useReaderSettings }
+const globalForReader = globalThis as unknown as { __readerSettings?: any }
 
 // Debounce save server — tránh gọi API mỗi nấc kéo slider (fontSize/lineHeight).
 let serverSaveTimer: ReturnType<typeof setTimeout> | null = null

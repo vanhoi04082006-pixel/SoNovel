@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { Heart, Share2, Play, Headphones, ChevronLeft, BookOpen, Search as SearchIcon, Volume2, Bookmark } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
-import { api, type SeriesDetail, type ChapterItem } from '@/lib/api-client'
+import { api, type SeriesDetail, type ChapterItem, type SeriesItem } from '@/lib/api-client'
 import { CoverImage } from '@/components/sonovel/cover-image'
 import { StoryCard } from '@/components/sonovel/story-card'
 import { EmptyState } from '@/components/sonovel/empty-state'
@@ -12,9 +12,69 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Progress } from '@/components/ui/progress'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import { usePlayerStore, type PlayerChapter } from '@/store/use-player-store'
 import { estMinutes, formatCharCount } from '@/lib/format'
+
+type IllustrationItem = { id: string; imageUrl: string; caption: string; orderNo: number }
+
+/** Tab Minh họa: mục lục chip (từ thông tin ảnh) + danh sách chữ trên / ảnh dưới. */
+function IllustrationsTab({ seriesId }: { seriesId: string }) {
+  const [items, setItems] = useState<IllustrationItem[] | null>(null)
+  const rowRefs = useRef<(HTMLDivElement | null)[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    setItems(null)
+    api.getIllustrations(seriesId)
+      .then((r) => { if (!cancelled) setItems(r.items) })
+      .catch(() => { if (!cancelled) setItems([]) })
+    return () => { cancelled = true }
+  }, [seriesId])
+
+  if (items === null) {
+    return (
+      <div className="space-y-4">
+        {Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="aspect-video w-full rounded-xl" />)}
+      </div>
+    )
+  }
+  if (items.length === 0) {
+    return <EmptyState icon={BookOpen} title="Chưa có ảnh minh họa" description="Bộ truyện này chưa có ảnh minh họa." />
+  }
+
+  const scrollTo = (i: number) => {
+    rowRefs.current[i]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* Mục lục — dựa trên thông tin của từng ảnh */}
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {items.map((it, i) => (
+          <button
+            key={it.id || i}
+            onClick={() => scrollTo(i)}
+            className="shrink-0 rounded-full border border-border px-3 py-1 text-xs hover:border-primary hover:text-primary transition-colors"
+          >
+            {i + 1}. {it.caption || `Ảnh ${i + 1}`}
+          </button>
+        ))}
+      </div>
+      {items.map((it, i) => (
+        <div key={it.id || i} ref={(el) => { rowRefs.current[i] = el }} className="space-y-2 scroll-mt-24">
+          <p className="text-sm font-medium">
+            <span className="text-primary mr-1.5">{i + 1}.</span>
+            {it.caption || `Ảnh ${i + 1}`}
+          </p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={it.imageUrl} alt={it.caption || `Ảnh ${i + 1}`} loading="lazy" className="w-full rounded-xl border border-border bg-muted" />
+        </div>
+      ))}
+    </div>
+  )
+}
 
 export function StoryDetailScreen() {
   const { view, navigate, user, refreshUser, syncVersion } = useAppStore()

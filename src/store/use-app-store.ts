@@ -45,7 +45,7 @@ interface AppState {
   bumpSync: () => void
 }
 
-const globalForApp = globalThis as unknown as { __appStore?: typeof useAppStore }
+const globalForApp = globalThis as unknown as { __appStore?: any }
 
 export const useAppStore = globalForApp.__appStore ?? create<AppState>((set, _get) => ({
   user: null,

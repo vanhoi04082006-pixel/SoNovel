@@ -48,8 +48,11 @@ async function fetchSupabaseUser(env: Env, token: string): Promise<{ id: string;
 
 export async function getAuth(c: Context<{ Bindings: Env }>): Promise<AuthUser | null> {
   const svc = c.req.header('x-service-token')
-  if (svc && c.env.SERVICE_TOKEN && svc === c.env.SERVICE_TOKEN) {
-    return { id: '', email: '', role: 'admin', service: true }
+  if (svc) {
+    if (!c.env.SERVICE_TOKEN) throw new ApiError(500, 'SERVICE_TOKEN chưa cấu hình trên Worker.')
+    if (svc === c.env.SERVICE_TOKEN) {
+      return { id: '', email: '', role: 'admin', service: true }
+    }
   }
 
   const authz = c.req.header('Authorization') || ''
