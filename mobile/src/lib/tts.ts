@@ -171,11 +171,25 @@ const listeners = new Map<string, Set<(payload?: any) => void>>();
 
 function emitLocal(type: string, payload?: any) {
   const set = listeners.get(type);
-  if (set) set.forEach((cb) => cb(payload));
+  // Mỗi callback bọc riêng — một listener lỗi không được làm sập chuỗi sự kiện
+  // (nguyên nhân tiềm ẩn của crash "thoát app").
+  if (set) {
+    for (const cb of Array.from(set)) {
+      try { cb(payload); } catch (e: any) {
+        console.warn(`[SoNovel][tts] listener '${type}' ném lỗi:`, e?.message ?? e);
+      }
+    }
+  }
   // Always emit `nowPlaying` after any state change
   if (type !== 'nowPlaying') {
     const np = listeners.get('nowPlaying');
-    if (np) np.forEach((cb) => cb(getNowPlaying()));
+    if (np) {
+      for (const cb of Array.from(np)) {
+        try { cb(getNowPlaying()); } catch (e: any) {
+          console.warn('[SoNovel][tts] listener nowPlaying ném lỗi:', e?.message ?? e);
+        }
+      }
+    }
   }
 }
 
@@ -443,12 +457,21 @@ function clearBusy() {
 let wired = false;
 const subs: EventSubscription[] = [];
 
+/** Đăng ký 1 listener có bảo vệ — lỗi đăng ký không được làm sập startTts
+ * (nguồn của lỗi "Exception in HostFunction: native state unsu…"). */
+function safeAddListener(event: string, handler: (payload?: any) => void) {
+  try {
+    subs.push(nativeTts.addListener(event as any, handler));
+  } catch (e: any) {
+    console.warn(`[SoNovel][tts] KHÔNG đăng ký được listener '${event}':`, e?.message ?? e);
+  }
+}
+
 function wireNative() {
   if (wired) return;
   wired = true;
 
-  subs.push(
-    nativeTts.addListener('onStateChange', (event: { state: TtsState }) => {
+  safeAddListener('onStateChange', (event: { state: TtsState }) => {
       isPlaying = event.state === 'playing';
       if (event.state === 'stopped') {
         seriesEnded = false;
@@ -460,67 +483,54 @@ function wireNative() {
       clearBusy();
       emitLocal('stateChange', event);
       if (event.state !== 'playing') scheduleSave();
-    })
-  );
+  });
 
-  subs.push(
-    nativeTts.addListener('onProgress', (event: TtsProgress) => {
-      // Chỉ sync charIndex (progress) — currentIndex do JS điều phối chương.
-      currentChar = event.charIndex;
-      currentCharLength = event.charLength;
-      endAdvance();
-      markChapterLoadedOk();
-      clearBusy();
-      emitLocal('progress', { ...event, chapterIndex: currentIndex });
-      scheduleSave();
-    })
-  );
+  safeAddListener('onProgress', (event: TtsProgress) => {
+    // Chỉ sync charIndex (progress) — currentIndex do JS điều phối chương.
+    currentChar = event.charIndex;
+    currentCharLength = event.charLength;
+    endAdvance();
+    markChapterLoadedOk();
+    clearBusy();
+    emitLocal('progress', { ...event, chapterIndex: currentIndex });
+    scheduleSave();
+  });
 
-  subs.push(
-    nativeTts.addListener('onChunkDone', (event: { chapterIndex: number; chunkIndex: number }) => {
-      // Chunk done = native đang hoạt động → clear busy (tránh nút play xoay)
-      endAdvance();
-      markChapterLoadedOk();
-      clearBusy();
-      emitLocal('chunkDone', event);
-    })
-  );
+  safeAddListener('onChunkDone', (event: { chapterIndex: number; chunkIndex: number }) => {
+    // Chunk done = native đang hoạt động → clear busy (tránh nút play xoay)
+    endAdvance();
+    markChapterLoadedOk();
+    clearBusy();
+    emitLocal('chunkDone', event);
+  });
 
-  subs.push(
-    nativeTts.addListener('onChapterEnd', (event: { chapterIndex: number }) => {
-      console.log('[SoNovel][tts] event onChapterEnd nhận (chapterIndex=' + (event.chapterIndex + 1) + ')');
-      scheduleSave();
-      emitLocal('chapterEnd', event);
-      advanceToNextChapter();
-    })
-  );
+  safeAddListener('onChapterEnd', (event: { chapterIndex: number }) => {
+    console.log('[SoNovel][tts] event onChapterEnd nhận (chapterIndex=' + (event.chapterIndex + 1) + ')');
+    scheduleSave();
+    emitLocal('chapterEnd', event);
+    advanceToNextChapter();
+  });
 
-  subs.push(
-    nativeTts.addListener('onChapterSeek', (event: { direction: number }) => {
-      seekChapterBy(event.direction);
-    })
-  );
+  safeAddListener('onChapterSeek', (event: { direction: number }) => {
+    seekChapterBy(event.direction);
+  });
 
-  subs.push(
-    nativeTts.addListener('onSeriesEnd', () => {
-      isPlaying = false;
-      seriesEnded = true;
-      endAdvance();
-      clearBusy();
-      stopPolling();
-      flushTtsSave().catch(() => {});
-      emitLocal('seriesEnd');
-    })
-  );
+  safeAddListener('onSeriesEnd', () => {
+    isPlaying = false;
+    seriesEnded = true;
+    endAdvance();
+    clearBusy();
+    stopPolling();
+    flushTtsSave().catch(() => {});
+    emitLocal('seriesEnd');
+  });
 
-  subs.push(
-    nativeTts.addListener('onError', (event: { code: number; message: string }) => {
-      isPlaying = false;
-      endAdvance();
-      clearBusy();
-      emitLocal('error', event);
-    })
-  );
+  safeAddListener('onError', (event: { code: number; message: string }) => {
+    isPlaying = false;
+    endAdvance();
+    clearBusy();
+    emitLocal('error', event);
+  });
 }
 
 // ---------- Public API ----------
@@ -755,6 +765,13 @@ export async function resumePlayback(): Promise<void> {
       setBusy(true);
       try {
         await nativeTts.resume();
+        // Optimistic UI: chuyển icon sang "đang phát" NGAY, polling sẽ xác nhận.
+        userPaused = false;
+        isPlaying = true;
+        if (lastSessionMark === 0) lastSessionMark = Date.now();
+        emitLocal('stateChange', { state: 'playing' });
+        emitLocal('nowPlaying');
+        startPolling();
         return;
       } catch (_e) {
         // Resume lỗi → fallback startTts bên dưới

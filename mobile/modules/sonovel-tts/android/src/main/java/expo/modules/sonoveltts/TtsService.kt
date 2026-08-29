@@ -745,12 +745,19 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
             Log.d(TAG, "onStart(title) id=$utteranceId")
             titleStarted = true
             cancelTitleWatchdog()
+            // FIX độ trễ icon pause/play: giọng đã kêu (đang đọc tiêu đề) = ĐANG PHÁT.
+            // Trước đây chỉ báo playing đến khi chunk nội dung đầu tiên onStart
+            // (~1-2s sau khi tiêu đề đọc xong) → icon đứng ở play rất lâu.
+            playing = true
             emit(Events.ON_PROGRESS, mapOf(
                 "chapterIndex" to chapterIndex,
                 "charIndex" to 0,
                 "charLength" to chapterContent.length,
                 "fraction" to 0f
             ))
+            emit(Events.ON_STATE_CHANGE, mapOf("state" to "playing"))
+            updateNotification()
+            updateMediaMetadata()
             return
         }
         retryCount = 0

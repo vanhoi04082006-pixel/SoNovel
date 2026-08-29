@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { Modal, Pressable, StyleSheet, View, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useTheme, RADIUS } from '../../theme';
 
 type Props = {
@@ -20,7 +20,12 @@ export function SheetModal({ visible, onClose, children, heightPct = 0.6 }: Prop
   const progress = useSharedValue(0);
 
   useEffect(() => {
-    progress.value = withSpring(visible ? 1 : 0, { damping: 20, stiffness: 200 });
+    // FIX: dùng timing ease-out thay vì spring — spring damping thấp làm sheet
+    // "nhảy tưng tưng" (overshoot) khi mở.
+    progress.value = withTiming(visible ? 1 : 0, {
+      duration: 240,
+      easing: Easing.out(Easing.cubic),
+    });
   }, [visible, progress]);
 
   const animatedStyle = useAnimatedStyle(() => ({

@@ -140,6 +140,9 @@ export const api = {
   },
   getSeries: (id: string) => json<SeriesDetail>(`/api/series/${id}`),
   getRelated: (id: string, limit = 6) => json<{ items: SeriesItem[] }>(`/api/series/${id}/related?limit=${limit}`),
+  getIllustrations: (seriesId: string) => json<{ items: Array<{ id: string; imageUrl: string; caption: string; orderNo: number }> }>(`/api/series/${seriesId}/illustrations`),
+  saveIllustrations: (seriesId: string, items: Array<{ imageUrl: string; caption: string }>) =>
+    json<{ ok: boolean; count: number }>(`/api/series/${seriesId}/illustrations`, { method: 'PUT', body: JSON.stringify({ items }) }),
   createSeries: (data: any) => json('/api/series/create', { method: 'POST', body: JSON.stringify(data) }),
   updateSeries: (id: string, data: any) => json(`/api/series/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteSeries: (id: string) => json(`/api/series/${id}`, { method: 'DELETE' }),

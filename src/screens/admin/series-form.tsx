@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ChevronLeft, Upload, X, Save } from 'lucide-react'
+import { ChevronLeft, Upload, X, Save, Plus, Trash2 } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import { api } from '@/lib/api-client'
 import { Button } from '@/components/ui/button'
@@ -20,6 +20,8 @@ const STATUSES = [
   { key: 'hidden', label: 'Ẩn' },
 ]
 
+type IllustrationRow = { imageUrl: string; caption: string }
+
 export function AdminSeriesForm({ seriesId }: { seriesId?: string }) {
   const { navigate } = useAppStore()
   const isEdit = !!seriesId
@@ -34,6 +36,8 @@ export function AdminSeriesForm({ seriesId }: { seriesId?: string }) {
   const [allTags, setAllTags] = useState<{ id: string; name: string }[]>([])
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [illustrations, setIllustrations] = useState<IllustrationRow[]>([])
+  const [illustUploadingIdx, setIllustUploadingIdx] = useState<number | null>(null)
 
   useEffect(() => {
     ;(async () => {
@@ -54,6 +58,10 @@ export function AdminSeriesForm({ seriesId }: { seriesId?: string }) {
         } catch {
           toast.error('Không tải được truyện.')
         }
+        try {
+          const ill = await api.getIllustrations(seriesId)
+          setIllustrations(ill.items.map((it) => ({ imageUrl: it.imageUrl, caption: it.caption || '' })))
+        } catch {}
       }
     })()
   }, [seriesId])
@@ -79,21 +87,56 @@ export function AdminSeriesForm({ seriesId }: { seriesId?: string }) {
     }
   }
 
+  // ---- Ảnh minh họa ----
+  const updateIllust = (idx: number, patch: Partial<IllustrationRow>) => {
+    setIllustrations((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)))
+  }
+  const moveIllust = (idx: number, dir: -1 | 1) => {
+    setIllustrations((prev) => {
+      const next = [...prev]
+      const j = idx + dir
+      if (j < 0 || j >= next.length) return prev
+      ;[next[idx], next[j]] = [next[j], next[idx]]
+      return next
+    })
+  }
+  const uploadIllust = async (file: File, idx: number) => {
+    setIllustUploadingIdx(idx)
+    try {
+      const r = await api.upload(file)
+      if (r.url) updateIllust(idx, { imageUrl: r.url })
+      else toast.error(r.error || 'Tải ảnh thất bại.')
+    } catch (e) {
+      toast.error('Tải ảnh thất bại: ' + (e as Error).message)
+    } finally {
+      setIllustUploadingIdx(null)
+    }
+  }
+
   const onSave = async () => {
     if (!title.trim()) { toast.error('Tên truyện là bắt buộc.'); return }
     setSaving(true)
     try {
       const data = { title, author, description, coverUrl, status, genres, tags }
+      let savedId = seriesId
       if (isEdit && seriesId) {
         await api.updateSeries(seriesId, data)
         toast.success('Đã cập nhật truyện.')
       } else {
         const r = await api.createSeries(data)
+        savedId = r.series.id
         toast.success('Đã tạo truyện mới.')
-        navigate({ view: 'admin', tab: 'seriesDetail', seriesId: r.series.id })
-        return
       }
-      navigate({ view: 'admin', tab: 'dashboard' })
+      // Lưu ảnh minh họa (bulk replace). Lỗi minh họa không chặn việc lưu truyện.
+      const cleanItems = illustrations.filter((it) => it.imageUrl.trim())
+      if (savedId && (cleanItems.length > 0 || isEdit)) {
+        try {
+          await api.saveIllustrations(savedId, cleanItems)
+        } catch (e) {
+          toast.warning('Đã lưu truyện nhưng lưu ảnh minh họa thất bại: ' + (e as Error).message)
+        }
+      }
+      navigate({ view: 'admin', tab: 'seriesDetail', seriesId: savedId || undefined })
     } catch (e) {
       toast.error('Lưu thất bại: ' + (e as Error).message)
     } finally {
@@ -199,6 +242,58 @@ export function AdminSeriesForm({ seriesId }: { seriesId?: string }) {
               </div>
             </div>
           </div>
+          {/* Ảnh minh họa */}
+          <Card className="border-dashed">
+            <CardHeader className="pb-2"><CardTitle className="text-base">Ảnh minh họa</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Tab «Minh họa» hiển thị: thông tin ảnh (chữ) phía trên, ảnh phía dưới. Mục lục được tạo tự động từ thông tin các ảnh.
+              </p>
+              {illustrations.map((it, idx) => (
+                <div key={idx} className="rounded-lg border border-border p-3 space-y-2 bg-muted/20">
+                  <div className="flex items-start gap-3">
+                    <div className="w-24 h-16 rounded-md overflow-hidden border border-border bg-muted shrink-0">
+                      {it.imageUrl ? (
+                        <img src={it.imageUrl} alt={it.caption || `Ảnh ${idx + 1}`} className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="h-full w-full grid place-items-center text-[10px] text-muted-foreground">Trống</div>
+                      )}
+                    </div>
+                    <div className="flex-1 space-y-2 min-w-0">
+                      <Input value={it.imageUrl} onChange={(e) => updateIllust(idx, { imageUrl: e.target.value })} placeholder="Link ảnh (https://…)" />
+                      <div className="flex flex-wrap gap-1.5">
+                        <label className="cursor-pointer">
+                          <Button variant="outline" size="sm" disabled={illustUploadingIdx === idx} asChild>
+                            <span><Upload className="h-3.5 w-3.5 mr-1" /> {illustUploadingIdx === idx ? 'Đang tải…' : 'Tải ảnh lên'}</span>
+                          </Button>
+                          <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                            const f = e.target.files?.[0]
+                            if (f) uploadIllust(f, idx)
+                            e.currentTarget.value = ''
+                          }} />
+                        </label>
+                        <Button variant="outline" size="sm" onClick={() => moveIllust(idx, -1)} disabled={idx === 0}>↑</Button>
+                        <Button variant="outline" size="sm" onClick={() => moveIllust(idx, 1)} disabled={idx === illustrations.length - 1}>↓</Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => setIllustrations((prev) => prev.filter((_, i) => i !== idx))}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 mr-1" /> Xóa
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                  <Input value={it.caption} onChange={(e) => updateIllust(idx, { caption: e.target.value })} placeholder={`Thông tin ảnh ${idx + 1} — hiện phía trên ảnh, làm mục lục…`} />
+                </div>
+              ))}
+              <Button variant="outline" size="sm" onClick={() => setIllustrations((prev) => [...prev, { imageUrl: '', caption: '' }])}>
+                <Plus className="h-4 w-4 mr-1" /> Thêm ảnh minh họa
+              </Button>
+            </CardContent>
+          </Card>
+
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="ghost" onClick={() => navigate({ view: 'admin', tab: 'dashboard' })}>Hủy</Button>
             <Button onClick={onSave} disabled={saving || uploading}>

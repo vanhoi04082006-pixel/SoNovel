@@ -71,15 +71,21 @@ export function AdminDashboard() {
       const res = await api.listSeries({ q, status: statusParam, sort: 'new', limit, offset: o })
       let filtered = res.items
       if (tagFilter) filtered = filtered.filter((s) => s.tags?.includes(tagFilter))
-      setItems(resetOffset ? filtered : [...items, ...filtered])
+      // FIX: cập nhật offset sau MỖI lần tải (trước đây offset đứng 0 → "Tải thêm"
+      // luôn fetch lại trang 1 rồi nối vào → danh sách bị nhân đôi).
+      setItems((prev) => {
+        if (resetOffset) return filtered
+        const seen = new Set(prev.map((i) => i.id))
+        return [...prev, ...filtered.filter((s) => !seen.has(s.id))]
+      })
       setTotal(res.total)
-      if (resetOffset) setOffset(0)
+      setOffset(o + res.items.length)
     } catch {
       toast.error('Không tải được danh sách.')
     } finally {
       setLoading(false)
     }
-  }, [q, statusTab, tagFilter, offset, items])
+  }, [q, statusTab, tagFilter, offset])
 
   useEffect(() => { loadStats() }, [loadStats])
   useEffect(() => {

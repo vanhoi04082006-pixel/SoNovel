@@ -52,6 +52,7 @@ export function SearchScreen() {
   const [genres, setGenres] = useState<string[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [filterQ, setFilterQ] = useState('');
 
   useEffect(() => {
     const id = setTimeout(() => setDebounced(q.trim()), 350);
@@ -210,28 +211,60 @@ export function SearchScreen() {
 
       {/* Filter sheet */}
       <SheetModal visible={filterOpen} onClose={() => setFilterOpen(false)} heightPct={0.7}>
+        <Text style={[TYPO.title, { color: t.text }]}>Bộ lọc</Text>
+        {/* Tìm nhanh trong bộ lọc */}
+        <View style={[styles.filterSearch, { backgroundColor: t.bgSubtle }]}>
+          <Icon name="search" size={16} color={t.textMuted} />
+          <TextInput
+            style={[styles.input, { color: t.text }]}
+            placeholder="Tìm thể loại hoặc tag…"
+            placeholderTextColor={t.textMuted}
+            value={filterQ}
+            onChangeText={setFilterQ}
+          />
+          {filterQ.length > 0 ? (
+            <Pressable onPress={() => setFilterQ('')} hitSlop={8}>
+              <Icon name="close-circle" size={16} color={t.textMuted} />
+            </Pressable>
+          ) : null}
+        </View>
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
-          <Text style={[TYPO.title, { color: t.text }]}>Bộ lọc</Text>
-          {genres.length > 0 ? (
-            <>
-              <Text style={[TYPO.label, { color: t.textMuted, marginTop: SPACING.md, marginBottom: 8 }]}>Thể loại</Text>
-              <View style={styles.chipsRow}>
-                {genres.map((g) => (
-                  <Chip key={g} label={g} icon="pricetag-outline" iconSize={12} selected={genre === g} onPress={() => setGenre(genre === g ? null : g)} />
-                ))}
-              </View>
-            </>
-          ) : null}
-          {tags.length > 0 ? (
-            <>
-              <Text style={[TYPO.label, { color: t.textMuted, marginTop: SPACING.md, marginBottom: 8 }]}>Tag</Text>
-              <View style={styles.chipsRow}>
-                {tags.map((tg) => (
-                  <Chip key={tg} label={tg} prefix="#" selected={tag === tg} onPress={() => setTag(tag === tg ? null : tg)} />
-                ))}
-              </View>
-            </>
-          ) : null}
+          {(() => {
+            const needle = filterQ.trim().toLowerCase();
+            const fg = needle ? genres.filter((g) => g.toLowerCase().includes(needle)) : genres;
+            const ft = needle ? tags.filter((tg) => tg.toLowerCase().includes(needle)) : tags;
+            if (fg.length === 0 && ft.length === 0 && needle) {
+              return (
+                <Text style={[TYPO.bodySm, { color: t.textMuted, textAlign: 'center', paddingVertical: 24 }]}>
+                  Không có thể loại/tag nào khớp "{filterQ.trim()}".
+                </Text>
+              );
+            }
+            return (
+              <>
+                {fg.length > 0 ? (
+                  <>
+                    <Text style={[TYPO.label, { color: t.textMuted, marginTop: SPACING.md, marginBottom: 8 }]}>Thể loại</Text>
+                    <View style={styles.chipsRow}>
+                      {fg.map((g) => (
+                        <Chip key={g} label={g} icon="pricetag-outline" iconSize={12} selected={genre === g} onPress={() => setGenre(genre === g ? null : g)} />
+                      ))}
+                    </View>
+                  </>
+                ) : null}
+                {ft.length > 0 ? (
+                  <>
+                    <Text style={[TYPO.label, { color: t.textMuted, marginTop: SPACING.md, marginBottom: 8 }]}>Tag</Text>
+                    <View style={styles.chipsRow}>
+                      {ft.map((tg) => (
+                        <Chip key={tg} label={tg} prefix="#" selected={tag === tg} onPress={() => setTag(tag === tg ? null : tg)} />
+                      ))}
+                    </View>
+                  </>
+                ) : null}
+              </>
+            );
+          })()}
         </ScrollView>
       </SheetModal>
 
@@ -296,6 +329,16 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     paddingVertical: 0,
+  },
+  filterSearch: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    height: 40,
+    borderRadius: RADIUS.pill,
+    paddingHorizontal: 12,
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.xs,
   },
   activeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16, paddingVertical: 8 },
   section: { paddingHorizontal: 16, paddingTop: 12, gap: 8 },

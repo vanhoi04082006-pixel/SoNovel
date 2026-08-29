@@ -142,7 +142,7 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
 
   const startingRef = useRef(false);
 
-  const maybeStartTts = useCallback(async () => {
+  const maybeStartTts = useCallback(async (isRetry = false) => {
     const cur = getNowPlaying();
     if (cur.seriesId === params.seriesId && (cur.isPlaying || cur.busy)) {
       setNp(cur);
@@ -185,7 +185,16 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
         rate: savedRate,
       });
     } catch (e: any) {
-      setError(`Không tải được chương: ${e?.message ?? e}`);
+      const msg = String(e?.message ?? e);
+      console.warn('[SoNovel][Player] maybeStartTts lỗi:', msg);
+      // Lỗi native tạm thời ("Exception in HostFunction…") → tự thử lại đúng 1 lần
+      if (!isRetry && /HostFunction|native state|TurboModule/i.test(msg)) {
+        startingRef.current = false;
+        setInitializing(false);
+        setTimeout(() => { maybeStartTts(true); }, 400);
+        return;
+      }
+      setError(`Không tải được chương: ${msg}`);
     } finally {
       startingRef.current = false;
       setInitializing(false);
@@ -305,7 +314,12 @@ export function PlayerScreen({ route }: { route: PlayerRouteProp }) {
             onChaptersSheet={() => nav.navigate('PlayerChapters')}
             onSleepSheet={() => setShowSleep(true)}
             onBookmark={onBookmark}
-            onStop={() => { stopTts(); nav.goBack(); }}
+            onStop={() => {
+              stopTts();
+              // FIX "thoát app": chỉ goBack khi còn màn phía dưới, không thì về Tabs
+              if (nav.canGoBack()) nav.goBack();
+              else nav.navigate('Tabs' as any);
+            }}
             onSetRate={onSetRate}
           />
         )}
