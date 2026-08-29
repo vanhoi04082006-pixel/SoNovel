@@ -73,11 +73,12 @@ test
 prompt
 
 server.log
+.omo/
 # Skills directory
 /skills/qa-*.png
 screenshot-*.png
 
-# repo hygiene — template/QA rac da don (2026-08-22)
+# repo hygiene ï¿½ template/QA rac da don (2026-08-22)
 /skills/
 /mini-services/
 /tool-results/
