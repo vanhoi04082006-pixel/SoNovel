@@ -385,13 +385,14 @@ function stopPolling() {
   }
 }
 
-// ---------- Busy safety net (20s timeout) ----------
-const BUSY_TIMEOUT_MS = 20000;
+// ---------- Busy safety net (tắt màn hình: giảm 20s → 12s để báo lỗi nhanh, tránh xoay mãi) ----------
+const BUSY_TIMEOUT_MS = 12000;
 let busyTimer: ReturnType<typeof setTimeout> | null = null;
 
 // ---------- Auto-next hardening ----------
 // Guard chống advance kép: onChapterEnd đôi khi bị emit 2 lần liên tiếp
 // (native retry/callback race) → nếu không chặn sẽ nhảy cóc 2 chương.
+// Fix tắt màn hình: giảm guard 15s → 7s để auto-next nhanh hơn khi JS bị throttle.
 let advanceInFlight = false;
 let advanceGuardTimer: ReturnType<typeof setTimeout> | null = null;
 // Đếm số chương tải nội dung thất bại liên tiếp — tránh lặp vô hạn khi mất mạng.
@@ -400,8 +401,8 @@ let consecutiveLoadFailures = 0;
 function beginAdvance() {
   advanceInFlight = true;
   if (advanceGuardTimer) clearTimeout(advanceGuardTimer);
-  // Safety: tối đa 15s sau advance phải được giải phóng bởi tín hiệu phát/ lỗi.
-  advanceGuardTimer = setTimeout(() => { advanceInFlight = false; }, 15000);
+  // Safety: tối đa 7s sau advance phải được giải phóng bởi tín hiệu phát/ lỗi.
+  advanceGuardTimer = setTimeout(() => { advanceInFlight = false; }, 7000);
 }
 
 function endAdvance() {
@@ -433,7 +434,7 @@ function setBusy(value: boolean) {
         try { nativeTts.stop(); } catch (_e) {}
         emitLocal('error', {
           code: 504,
-          message: 'TTS không phản hồi sau 20 giây — đã dừng.',
+          message: 'TTS không phản hồi sau 12 giây — đã dừng.',
         });
       }
     }, BUSY_TIMEOUT_MS);
@@ -692,19 +693,19 @@ async function sendPlayChapter(idx: number, startChar: number) {
   try {
     await nativeTts.playChapter(idx + 1, ch.title, content, startChar);
     console.log(`[SoNovel][tts] playChapter(${idx + 1}) đã gửi native (${content.length} ký tự)`);
-    // Watchdog chuyển chương: nếu sau 6s vẫn không phát được (im lặng giữa 2 chương
-    // quá lâu) → gửi lại playChapter đúng 1 lần để tự phục hồi.
+    // Watchdog chuyển chương: nếu sau 4s vẫn không phát được (im lặng giữa 2 chương
+    // quá lâu) → gửi lại playChapter đúng 1 lần để tự phục hồi. Giảm 6s→4s cho tắt màn hình.
     setTimeout(async () => {
       try {
         const st = await nativeTts.getState();
         if (st?.playing || !busy || isPlaying) return; // đã phát hoặc đã dừng/hủy
         const st2 = await nativeTts.getState();
         if (!st2?.playing && busy && !isPlaying) {
-          console.warn('[SoNovel][tts] watchdog 6s: chưa phát → gửi lại playChapter');
+          console.warn('[SoNovel][tts] watchdog 4s: chưa phát → gửi lại playChapter');
           try { await nativeTts.playChapter(idx + 1, ch.title, content!, startChar); } catch (_e2) {}
         }
       } catch (_e) {}
-    }, 6000);
+    }, 4000);
   } catch (e: any) {
     setBusy(false);
     endAdvance();

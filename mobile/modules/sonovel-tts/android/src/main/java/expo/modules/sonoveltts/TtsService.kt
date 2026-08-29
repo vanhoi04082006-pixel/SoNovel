@@ -15,6 +15,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
@@ -126,6 +127,7 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
     private var audioFocusRequest: AudioFocusRequest? = null
     private var afChangeListener: AudioManager.OnAudioFocusChangeListener? = null
     private var channelCreated = false
+    private var wakeLock: PowerManager.WakeLock? = null
 
     // -------------------------------------------------------------------
     // Lifecycle
@@ -136,6 +138,11 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         instance = this
         notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
+        try {
+            val pm = getSystemService(POWER_SERVICE) as PowerManager
+            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SoNovel::TtsWakeLock")
+            wakeLock?.setReferenceCounted(false)
+        } catch (_: Throwable) {}
         ensureChannel()
         setupMediaSession()
     }
@@ -169,6 +176,7 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         cancelWatchdog()
         cancelInitTimeout()
         cancelSleepTimer()
+        try { wakeLock?.let { if (it.isHeld) it.release() } } catch (_: Throwable) {}
         try { tts?.stop() } catch (_: Throwable) {}
         try { tts?.shutdown() } catch (_: Throwable) {}
         tts = null
@@ -443,6 +451,17 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         } catch (_: Throwable) {}
     }
 
+    private fun acquireWakeLock() {
+        try {
+            if (wakeLock?.isHeld == false) wakeLock?.acquire(10*60*60*1000L)
+        } catch (_: Throwable) {}
+    }
+    private fun releaseWakeLock() {
+        try {
+            if (wakeLock?.isHeld == true) wakeLock?.release()
+        } catch (_: Throwable) {}
+    }
+
     // -------------------------------------------------------------------
     // TTS init
     // -------------------------------------------------------------------
@@ -532,6 +551,7 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
             ensureTts { playFrom(targetChar) }
             return
         }
+        acquireWakeLock()
         cancelWatchdog()
         val engine = tts ?: return
         if (chapterContent.isBlank()) {
@@ -861,6 +881,7 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         playing = false
         engineStarted = false
         cancelWatchdog()
+        releaseWakeLock()
         try { tts?.stop() } catch (_: Throwable) {}
         emit(Events.ON_STATE_CHANGE, mapOf("state" to "paused"))
         updateNotification()
@@ -883,6 +904,7 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         engineStarted = false
         cancelWatchdog()
         cancelSleepTimer()
+        releaseWakeLock()
         try { tts?.stop() } catch (_: Throwable) {}
         emit(Events.ON_STATE_CHANGE, mapOf("state" to "stopped"))
         updateMediaMetadata()
