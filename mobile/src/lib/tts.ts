@@ -509,7 +509,40 @@ function wireNative() {
     console.log('[SoNovel][tts] event onChapterEnd nhận (chapterIndex=' + (event.chapterIndex + 1) + ')');
     scheduleSave();
     emitLocal('chapterEnd', event);
-    advanceToNextChapter();
+    // Delay 600ms để native kịp auto-next (preload) khi tắt màn hình — nếu đã auto thì bỏ qua JS.
+    setTimeout(() => {
+      // Nếu trong 600ms native đã tự chuyển (onChapterChange đã đổi currentIndex), bỏ qua
+      if (currentIndex !== event.chapterIndex) {
+        console.log('[SoNovel][tts] onChapterEnd: native đã auto-next → JS bỏ qua');
+        return;
+      }
+      advanceToNextChapter(event.chapterIndex);
+    }, 600);
+  });
+
+  safeAddListener('onChapterChange', (event: { chapterIndex: number }) => {
+    const newIdx = event.chapterIndex
+    if (newIdx >= 0 && newIdx < chapters.length && newIdx !== currentIndex) {
+      console.log('[SoNovel][tts] onChapterChange native auto-next → JS sync idx=' + (newIdx + 1))
+      currentIndex = newIdx
+      currentChar = 0
+      currentCharLength = 0
+      seriesEnded = false
+      endAdvance()
+      markChapterLoadedOk()
+      clearBusy()
+      emitLocal('chapterChange', event)
+      emitLocal('nowPlaying')
+      // Preload tiếp chương sau native auto-next
+      if (currentIndex + 1 < chapters.length) {
+        ensureChapterContent(currentIndex + 1).then((nc) => {
+          const nxt = chapters[currentIndex + 1]
+          if (nc && nxt) { try { (nativeTts as any).preloadNext(currentIndex + 2, nxt.title, nc); } catch {} }
+        }).catch(() => {});
+      }
+    } else {
+      emitLocal('chapterChange', event)
+    }
   });
 
   safeAddListener('onChapterSeek', (event: { direction: number }) => {
@@ -630,8 +663,14 @@ export async function startTts(opts: {
     // Đánh dấu mốc đếm giờ nghe
     lastSessionMark = Date.now();
     // Prefetch chương kế tiếp vào cache để chuyển chương không bị lag
+    // + preloadNative để tự chuyển khi tắt màn hình (JS ngủ native vẫn tự phát)
     if (currentIndex + 1 < chapters.length) {
-      ensureChapterContent(currentIndex + 1).catch(() => {});
+      ensureChapterContent(currentIndex + 1).then((c) => {
+        const nxt = chapters[currentIndex + 1]
+        if (c && nxt) {
+          try { (nativeTts as any).preloadNext(currentIndex + 2, nxt.title, c); } catch {}
+        }
+      }).catch(() => {});
     }
     // busy + UI sẽ được sync bởi polling (getState mỗi 1s)
   } catch (e: any) {
@@ -693,6 +732,13 @@ async function sendPlayChapter(idx: number, startChar: number) {
   try {
     await nativeTts.playChapter(idx + 1, ch.title, content, startChar);
     console.log(`[SoNovel][tts] playChapter(${idx + 1}) đã gửi native (${content.length} ký tự)`);
+    // Preload chương kế tiếp cho native auto-next khi tắt màn hình
+    if (idx + 1 < chapters.length) {
+      ensureChapterContent(idx + 1).then((nc) => {
+        const nxt = chapters[idx + 1]
+        if (nc && nxt) { try { (nativeTts as any).preloadNext(idx + 2, nxt.title, nc); } catch {} }
+      }).catch(() => {});
+    }
     // Watchdog chuyển chương: nếu sau 4s vẫn không phát được (im lặng giữa 2 chương
     // quá lâu) → gửi lại playChapter đúng 1 lần để tự phục hồi. Giảm 6s→4s cho tắt màn hình.
     setTimeout(async () => {
@@ -874,9 +920,14 @@ export async function prevChapterTts(): Promise<void> {
 // ---------- Điều phối chương (JS là nguồn duy nhất của danh sách chương) ----------
 
 /** Native báo hết 1 chương → tiến sang chương kế, hoặc kết thúc series nếu hết. */
-function advanceToNextChapter() {
+function advanceToNextChapter(endedIdx?: number) {
   // Guard: onChapterEnd có thể emit 2 lần liên tiếp — bỏ qua lần trùng.
   if (advanceInFlight) return;
+  // Nếu đã auto-next bởi native (preload), currentIndex đã khác endedIdx → bỏ qua
+  if (endedIdx !== undefined && currentIndex !== endedIdx) {
+    console.log(`[SoNovel][tts] advanceToNextChapter skip: đã auto (current=${currentIndex}, ended=${endedIdx})`);
+    return;
+  }
   beginAdvance();
   console.log(`[SoNovel][tts] advanceToNextChapter: từ chương ${currentIndex + 1}`);
 

@@ -103,6 +103,15 @@ class SonovelTtsModule : Module() {
             "ok"
         }
 
+        AsyncFunction("preloadNext") { chapterNumber: Int, chapterTitle: String, chapterContent: String ->
+            sendAction(TtsService.ACTION_PRELOAD_NEXT, mapOf(
+                TtsService.EXTRA_CHAPTER_NUMBER to chapterNumber,
+                TtsService.EXTRA_CHAPTER_TITLE to chapterTitle,
+                TtsService.EXTRA_CHAPTER_CONTENT to chapterContent
+            ))
+            "ok"
+        }
+
         AsyncFunction("pause") {
             sendAction(TtsService.ACTION_PAUSE)
             "ok"

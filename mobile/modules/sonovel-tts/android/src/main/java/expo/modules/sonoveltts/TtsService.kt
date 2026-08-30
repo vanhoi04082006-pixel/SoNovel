@@ -51,6 +51,7 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         const val ACTION_PREV = "com.sonovel.app.action.PREV"
         const val ACTION_SEEK = "com.sonovel.app.action.SEEK"
         const val ACTION_PLAY_CHAPTER = "com.sonovel.app.action.PLAY_CHAPTER"
+        const val ACTION_PRELOAD_NEXT = "com.sonovel.app.action.PRELOAD_NEXT"
         const val ACTION_SET_RATE = "com.sonovel.app.action.SET_RATE"
 
         const val EXTRA_SERIES_TITLE = "seriesTitle"
@@ -101,6 +102,10 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
     private var seriesTitle = ""
     private var coverUrl = ""
     private var announceTitle = false
+    // Preload next chapter để tự chuyển khi tắt màn hình (JS ngủ)
+    private var nextChapterTitle: String? = null
+    private var nextChapterContent: String? = null
+    private var nextChapterNumber: Int = -1
 
     // --- Utterance tracking ---
     @Volatile private var currentUtteranceId: String? = null
@@ -157,6 +162,7 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
             ACTION_STOP -> onStop(true)
             ACTION_NEXT -> emitChapterSeek(1)
             ACTION_PREV -> emitChapterSeek(-1)
+            ACTION_PRELOAD_NEXT -> handlePreloadNext(intent)
             ACTION_SEEK -> {
                 val ch = intent?.getIntExtra(EXTRA_CHAR_INDEX, 0) ?: 0
                 ensureTts { playFrom(ch) }
@@ -234,11 +240,33 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         this.retryCount = 0
         this.titleRetry = 0
         this.finished = false
+        // Đã có PLAY_CHAPTER tường minh từ JS → xóa preload của chương này nếu trùng
+        if (nextChapterNumber == chapterNumber) {
+            nextChapterTitle = null
+            nextChapterContent = null
+            nextChapterNumber = -1
+        }
         Log.d(TAG, "PLAY_CHAPTER nhận: chapter=${chapterIndex + 1}, chars=${content.length}, startChar=$ch")
         updateMediaMetadata()
         // FIX auto-next: trễ SETTLE_MS trước khi speak — engine OEM hay nuốt
         // speak(QUEUE_FLUSH) gọi ngay sau khi utterance chương trước vừa kết thúc.
         main.postDelayed({ ensureTts { playFrom(ch) } }, SETTLE_MS)
+    }
+
+    private fun handlePreloadNext(intent: Intent) {
+        val chapterNumber = intent.getIntExtra(EXTRA_CHAPTER_NUMBER, -1)
+        val title = intent.getStringExtra(EXTRA_CHAPTER_TITLE) ?: ""
+        val content = intent.getStringExtra(EXTRA_CHAPTER_CONTENT) ?: ""
+        if (chapterNumber < 0 || content.isBlank()) {
+            nextChapterTitle = null
+            nextChapterContent = null
+            nextChapterNumber = -1
+            return
+        }
+        nextChapterTitle = title
+        nextChapterContent = content
+        nextChapterNumber = chapterNumber
+        Log.d(TAG, "PRELOAD_NEXT nhận: chapter=$chapterNumber, chars=${content.length}")
     }
 
     // -------------------------------------------------------------------
@@ -844,11 +872,12 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
     // -------------------------------------------------------------------
 
     /**
-     * Hết chương — emit ON_CHAPTER_END rồi DỪNG (không tự nhảy chương).
-     * JS (tts.ts) là nơi điều phối: lắng nghe chapterEnd → tăng index →
-     * gửi lại nội dung chương kế tiếp qua ACTION_PLAY_CHAPTER.
-     */
+      * Hết chương — emit ON_CHAPTER_END, nếu đã preload chương kế (tắt màn hình, JS ngủ)
+      * thì TỰ ĐỘNG phát chương kế sau 400ms mà không đợi JS.
+      * JS vẫn nhận ON_CHAPTER_END để sync UI khi tỉnh lại.
+      */
     private fun finishChapter() {
+        val endedIdx = chapterIndex
         playing = false
         cancelWatchdog()
         announceTitle = true
@@ -857,8 +886,36 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         finished = true
         updateNotification()
         updateMediaMetadata()
-        Log.d(TAG, "finishChapter: chương ${chapterIndex + 1} kết thúc → emit ON_CHAPTER_END")
-        emit(Events.ON_CHAPTER_END, mapOf("chapterIndex" to chapterIndex))
+        Log.d(TAG, "finishChapter: chương ${endedIdx + 1} kết thúc → emit ON_CHAPTER_END")
+        emit(Events.ON_CHAPTER_END, mapOf("chapterIndex" to endedIdx))
+        // Auto-next nếu đã preload (fix tắt màn hình): JS preloadNext gửi trước khi hết chương
+        val nextContent = nextChapterContent
+        val nextTitle = nextChapterTitle
+        val nextNum = nextChapterNumber
+        if (nextContent != null && nextTitle != null && nextNum == endedIdx + 2) {
+            Log.d(TAG, "finishChapter: có preload chương $nextNum → tự phát sau 400ms (không đợi JS)")
+            nextChapterTitle = null
+            nextChapterContent = null
+            nextChapterNumber = -1
+            finished = false
+            main.postDelayed({
+                // Kiểm tra JS chưa kịp gửi PLAY_CHAPTER (charIndex vẫn 0 và chưa playing)
+                if (!playing && chapterIndex == endedIdx) {
+                    chapterTitle = nextTitle
+                    chapterContent = nextContent
+                    chapterIndex = nextNum - 1
+                    charIndex = 0
+                    announceTitle = true
+                    retryCount = 0
+                    titleRetry = 0
+                    finished = false
+                    Log.d(TAG, "auto-next native: phát chương $nextNum")
+                    updateMediaMetadata()
+                    emit(Events.ON_CHAPTER_CHANGE, mapOf("chapterIndex" to chapterIndex))
+                    ensureTts { playFrom(0) }
+                }
+            }, 400)
+        }
     }
 
     /**

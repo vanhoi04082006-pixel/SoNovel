@@ -62,6 +62,11 @@ export interface SonovelTtsApi {
     chapterContent: string,
     startChar: number
   ): Promise<string>;
+  preloadNext(
+    chapterNumber: number,
+    chapterTitle: string,
+    chapterContent: string
+  ): Promise<string>;
   pause(): Promise<string>;
   resume(): Promise<string>;
   stop(): Promise<string>;
