@@ -1,13 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/session'
 
-const IMGBB_API_KEY = process.env.IMGBB_API_KEY || '778ccfcea4d829817b3350a9e484083a'
+function sniffImage(buf: Uint8Array): boolean {
+  if (buf.length < 12) return false
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return true
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return true
+  if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x38) return true
+  if (buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 && buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50) return true
+  if (buf[0] === 0x42 && buf[1] === 0x4d) return true
+  return false
+}
+
+const rateMap = new Map<string, { c: number; reset: number }>()
+function checkRate(ip: string): boolean {
+  const now = Date.now()
+  const e = rateMap.get(ip)
+  if (!e || e.reset <= now) { rateMap.set(ip, { c: 1, reset: now + 60_000 }); return true }
+  if (e.c >= 20) return false
+  e.c++; return true
+}
 
 // POST /api/illustrations/upload — admin upload ảnh minh họa qua imgBB
 // nhận multipart file, forward sang https://api.imgbb.com/1/upload
 export async function POST(req: NextRequest) {
   try {
     await requireAdmin()
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'anon'
+    if (!checkRate(ip)) return NextResponse.json({ error: 'Quá nhiều yêu cầu, thử lại sau 1 phút.' }, { status: 429 })
+    const key = process.env.IMGBB_API_KEY
+    if (!key) return NextResponse.json({ error: 'IMGBB_API_KEY chưa cấu hình (Vercel env).' }, { status: 500 })
     const formData = await req.formData()
     const file = (formData as any).get('file') as File | null
     if (!file) return NextResponse.json({ error: 'Không tìm thấy file.' }, { status: 400 })
@@ -15,12 +36,13 @@ export async function POST(req: NextRequest) {
     if (file.size > 5 * 1024 * 1024) return NextResponse.json({ error: 'Ảnh vượt quá 5MB.' }, { status: 400 })
 
     const buf = Buffer.from(await file.arrayBuffer())
+    if (!sniffImage(new Uint8Array(buf))) return NextResponse.json({ error: 'File không phải ảnh hợp lệ (PNG/JPEG/GIF/WEBP/BMP).' }, { status: 400 })
     const b64 = buf.toString('base64')
 
     const fd = new FormData()
     fd.append('image', b64)
 
-    const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
+    const res = await fetch(`https://api.imgbb.com/1/upload?key=${key}`, {
       method: 'POST',
       body: fd,
     })

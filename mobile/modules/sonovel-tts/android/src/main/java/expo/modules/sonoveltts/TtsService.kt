@@ -182,6 +182,9 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         cancelWatchdog()
         cancelInitTimeout()
         cancelSleepTimer()
+        nextChapterTitle = null
+        nextChapterContent = null
+        nextChapterNumber = -1
         try { wakeLock?.let { if (it.isHeld) it.release() } } catch (_: Throwable) {}
         try { tts?.stop() } catch (_: Throwable) {}
         try { tts?.shutdown() } catch (_: Throwable) {}
@@ -220,6 +223,10 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         this.retryCount = 0
         this.titleRetry = 0
         this.finished = false
+        // Series mới → xóa preload cũ
+        nextChapterTitle = null
+        nextChapterContent = null
+        nextChapterNumber = -1
 
         startForegroundNow()
         requestAudioFocus()
