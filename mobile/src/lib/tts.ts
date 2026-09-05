@@ -27,10 +27,28 @@ async function preloadNextSafe(chapterNumber: number, title: string, content: st
     return false;
   }
 }
-import { workerJson } from './worker';
+import { workerJson, WORKER_URL } from './worker';
 import { saveSession } from './progress';
 import { invalidateCache } from './dataCache';
 import { markChapterRead } from './readMarkers';
+
+// Playlist cho native tự fetch khi thiếu preload (Wave B1): chỉ id, nhẹ, cap 3000.
+const PLAYLIST_MAX_IDS = 3000;
+async function sendPlaylistSafe(): Promise<boolean> {
+  try {
+    if (!seriesId || chapters.length === 0) return false;
+    if (!hasNativeFn('setPlaylist')) {
+      console.warn('[SoNovel][tts] native thiếu setPlaylist — cần APK mới, bỏ qua playlist');
+      return false;
+    }
+    const ids = chapters.slice(0, PLAYLIST_MAX_IDS).map((c) => c.id);
+    await nativeTts.setPlaylist(JSON.stringify(ids), WORKER_URL);
+    return true;
+  } catch (e: any) {
+    console.warn('[SoNovel][tts] setPlaylist thất bại:', e?.message ?? e);
+    return false;
+  }
+}
 
 /**
  * JS state manager cho native TTS module (theo §8.5).
@@ -360,6 +378,12 @@ function adoptNativeChapter(newIdx: number, source: string): boolean {
   // native kịp chuyển) → không revert, tránh nhảy tới lui.
   if (advanceInFlight || busy) return false;
   console.log(`[SoNovel][tts] reconcile (${source}): chương ${currentIndex + 1} → ${newIdx + 1}`);
+  // Đi tới (+1) = chương cũ coi như đã nghe xong → ghi dấu đã đọc (giữ badge ✓ đúng
+  // cho chương native tự qua mà JS ngủ, bù cho chapterEnd event bị drop).
+  if (newIdx === currentIndex + 1 && seriesId) {
+    const prevCh = chapters[currentIndex];
+    if (prevCh) markChapterRead(seriesId, prevCh.id).catch(() => {});
+  }
   currentIndex = newIdx;
   currentChar = 0;
   currentCharLength = 0;
@@ -770,6 +794,8 @@ export async function startTts(opts: {
     );
     // Đánh dấu mốc đếm giờ nghe
     lastSessionMark = Date.now();
+    // Gửi playlist id để native tự fetch khi thiếu preload (Wave B1, JS chết/ngủ sâu)
+    void sendPlaylistSafe();
     // Prefetch chương kế tiếp vào cache để chuyển chương không bị lag
     // + preloadNative để tự chuyển khi tắt màn hình (JS ngủ native vẫn tự phát)
     if (currentIndex + 1 < chapters.length) {
@@ -839,6 +865,8 @@ async function sendPlayChapter(idx: number, startChar: number) {
   try {
     await nativeTts.playChapter(idx + 1, ch.title, content, startChar);
     console.log(`[SoNovel][tts] playChapter(${idx + 1}) đã gửi native (${content.length} ký tự)`);
+    // Đồng bộ lại playlist (phòng list chương thay đổi) để native tự fetch khi thiếu preload
+    void sendPlaylistSafe();
     // Preload chương kế tiếp cho native auto-next khi tắt màn hình
     if (idx + 1 < chapters.length) {
       const nextIdx = idx + 1;

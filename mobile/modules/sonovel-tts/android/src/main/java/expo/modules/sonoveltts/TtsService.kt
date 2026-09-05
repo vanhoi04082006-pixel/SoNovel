@@ -52,6 +52,7 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         const val ACTION_SEEK = "com.sonovel.app.action.SEEK"
         const val ACTION_PLAY_CHAPTER = "com.sonovel.app.action.PLAY_CHAPTER"
         const val ACTION_PRELOAD_NEXT = "com.sonovel.app.action.PRELOAD_NEXT"
+        const val ACTION_SET_PLAYLIST = "com.sonovel.app.action.SET_PLAYLIST"
         const val ACTION_SET_RATE = "com.sonovel.app.action.SET_RATE"
 
         const val EXTRA_SERIES_TITLE = "seriesTitle"
@@ -62,6 +63,8 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         const val EXTRA_START_CHAR = "startCharIndex"
         const val EXTRA_RATE = "rate"
         const val EXTRA_CHAR_INDEX = "charIndex"
+        const val EXTRA_PLAYLIST_JSON = "playlistJson"
+        const val EXTRA_WORKER_URL = "workerUrl"
 
         const val SETTLE_MS = 200L
         const val WATCHDOG_MS = 2000L
@@ -95,6 +98,7 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
     private var chunks: List<String> = emptyList()
     @Volatile private var rate = 1.0f
     @Volatile private var playing = false
+    @Volatile private var pausedByUser = false
     @Volatile private var engineStarted = false
     // Bật true ngay sau khi 1 chương phát xong (finishChapter) — JS dùng polling
     // getState() để nhận diện "hết chương" kể cả khi event ON_CHAPTER_END bị drop.
@@ -106,6 +110,13 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
     private var nextChapterTitle: String? = null
     private var nextChapterContent: String? = null
     private var nextChapterNumber: Int = -1
+    // Playlist id các chương (đúng thứ tự JS) để tự fetch khi thiếu preload (Wave B1)
+    private var playlistIds: List<String> = emptyList()
+    private var workerBaseUrl: String = ""
+    @Volatile private var fetchToken: Long = 0
+    private val FETCH_TIMEOUT_MS = 12000
+    private val FETCH_MAX_BYTES = 300 * 1024
+    private val PLAYLIST_MAX_IDS = 3000
     // Single-flight token chống đua auto-next (native timer vs JS PLAY_CHAPTER tay)
     @Volatile private var autoToken: Long = 0
     private var autoRunnable: Runnable? = null
@@ -168,6 +179,7 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
             ACTION_NEXT -> emitChapterSeek(1)
             ACTION_PREV -> emitChapterSeek(-1)
             ACTION_PRELOAD_NEXT -> handlePreloadNext(intent)
+            ACTION_SET_PLAYLIST -> handleSetPlaylist(intent)
             ACTION_SEEK -> {
                 val ch = intent?.getIntExtra(EXTRA_CHAR_INDEX, 0) ?: 0
                 ensureTts { playFrom(ch) }
@@ -187,9 +199,12 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         cancelWatchdog()
         cancelInitTimeout()
         cancelSleepTimer()
+        cancelFetch()
         nextChapterTitle = null
         nextChapterContent = null
         nextChapterNumber = -1
+        playlistIds = emptyList()
+        workerBaseUrl = ""
         try { wakeLock?.let { if (it.isHeld) it.release() } } catch (_: Throwable) {}
         try { tts?.stop() } catch (_: Throwable) {}
         try { tts?.shutdown() } catch (_: Throwable) {}
@@ -228,10 +243,13 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         this.retryCount = 0
         this.titleRetry = 0
         this.finished = false
-        // Series mới → xóa preload cũ
+        this.pausedByUser = false
+        cancelFetch()
+        // Series mới → xóa preload + playlist cũ
         nextChapterTitle = null
         nextChapterContent = null
         nextChapterNumber = -1
+        playlistIds = emptyList()
 
         startForegroundNow()
         requestAudioFocus()
@@ -251,6 +269,7 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         val content = intent.getStringExtra(EXTRA_CHAPTER_CONTENT) ?: ""
         val ch = intent.getIntExtra(EXTRA_CHAR_INDEX, 0)
         cancelAutoNext()
+        cancelFetch()
         this.chapterTitle = title
         this.chapterContent = content
         this.chapterIndex = maxOf(chapterNumber - 1, 0)
@@ -259,6 +278,7 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         this.retryCount = 0
         this.titleRetry = 0
         this.finished = false
+        this.pausedByUser = false
         // Đã có PLAY_CHAPTER tường minh từ JS → xóa preload của chương này nếu trùng
         if (nextChapterNumber == chapterNumber) {
             nextChapterTitle = null
@@ -270,6 +290,109 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         // FIX auto-next: trễ SETTLE_MS trước khi speak — engine OEM hay nuốt
         // speak(QUEUE_FLUSH) gọi ngay sau khi utterance chương trước vừa kết thúc.
         main.postDelayed({ ensureTts { playFrom(ch) } }, SETTLE_MS)
+    }
+
+    private fun cancelFetch() {
+        fetchToken++
+    }
+
+    private fun handleSetPlaylist(intent: Intent) {
+        val json = intent.getStringExtra(EXTRA_PLAYLIST_JSON) ?: ""
+        val base = (intent.getStringExtra(EXTRA_WORKER_URL) ?: "").trim().trimEnd('/')
+        if (json.isBlank()) {
+            playlistIds = emptyList()
+            workerBaseUrl = ""
+            return
+        }
+        try {
+            val arr = org.json.JSONArray(json)
+            val n = minOf(arr.length(), PLAYLIST_MAX_IDS)
+            val ids = ArrayList<String>(n)
+            for (i in 0 until n) {
+                val id = arr.optString(i, "")
+                if (id.isNotBlank()) ids.add(id)
+            }
+            playlistIds = ids
+            workerBaseUrl = base
+            Log.d(TAG, "SET_PLAYLIST nhận: ${ids.size} ids")
+        } catch (t: Throwable) {
+            Log.w(TAG, "SET_PLAYLIST parse lỗi: ${t.message}")
+            playlistIds = emptyList()
+            workerBaseUrl = ""
+        }
+    }
+
+    // Fetch nội dung chương kế qua Worker (public, không cần auth) trên background thread.
+    // Dùng khi hết chương mà không có preload (JS chết/ngủ sâu, preload fail).
+    private fun fetchNextChapterAndPlay(expectedIdx: Int, chapterId: String, token: Long) {
+        Thread {
+            try {
+                val base = workerBaseUrl
+                if (base.isBlank()) return@Thread
+                val url = java.net.URL("$base/api/chapters/$chapterId")
+                val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = FETCH_TIMEOUT_MS
+                    readTimeout = FETCH_TIMEOUT_MS
+                    setRequestProperty("Accept", "application/json")
+                }
+                try {
+                    val code = conn.responseCode
+                    if (code != 200) {
+                        Log.w(TAG, "fetch chương kế HTTP $code")
+                        main.post { if (token == fetchToken) onFetchNextFailed("Không tải được chương kế (HTTP $code)") }
+                        return@Thread
+                    }
+                    val bytes = conn.inputStream.use { it.readBytes() }
+                    if (bytes.size > FETCH_MAX_BYTES) {
+                        Log.w(TAG, "fetch chương kế quá lớn (${bytes.size} bytes)")
+                        main.post { if (token == fetchToken) onFetchNextFailed("Chương kế quá lớn") }
+                        return@Thread
+                    }
+                    val obj = org.json.JSONObject(String(bytes, Charsets.UTF_8))
+                    val content = obj.optString("content", "")
+                    val title = obj.optString("title", "")
+                    if (content.isBlank()) {
+                        main.post { if (token == fetchToken) onFetchNextFailed("Chương kế không có nội dung") }
+                        return@Thread
+                    }
+                    main.post {
+                        if (token != fetchToken) return@post
+                        if (!playing && !pausedByUser && chapterIndex == expectedIdx) {
+                            chapterTitle = title
+                            chapterContent = content
+                            chapterIndex = expectedIdx + 1
+                            charIndex = 0
+                            announceTitle = true
+                            retryCount = 0
+                            titleRetry = 0
+                            finished = false
+                            nextChapterTitle = null
+                            nextChapterContent = null
+                            nextChapterNumber = -1
+                            Log.d(TAG, "fetch-next: phát chương ${chapterIndex + 1} (${content.length} chars)")
+                            updateMediaMetadata()
+                            emit(Events.ON_CHAPTER_CHANGE, mapOf("chapterIndex" to chapterIndex))
+                            ensureTts { playFrom(0) }
+                        }
+                    }
+                } finally {
+                    try { conn.disconnect() } catch (_: Throwable) {}
+                }
+            } catch (t: Throwable) {
+                Log.w(TAG, "fetch chương kế lỗi: ${t.message}")
+                main.post { if (token == fetchToken) onFetchNextFailed("Không tải được chương kế (mất mạng?)") }
+            }
+        }.start()
+    }
+
+    private fun onFetchNextFailed(message: String) {
+        // Giữ finished=true để poll JS advance khi tỉnh lại — không duplicate vì JS
+        // đối chiếu chapterIndex trước khi advance (Wave A).
+        finished = true
+        updateNotification()
+        updateMediaMetadata()
+        emitError(60, message)
     }
 
     private fun handlePreloadNext(intent: Intent) {
@@ -900,8 +1023,9 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
     // -------------------------------------------------------------------
 
     /**
-      * Hết chương — emit ON_CHAPTER_END, nếu đã preload chương kế (tắt màn hình, JS ngủ)
-      * thì TỰ ĐỘNG phát chương kế sau 400ms mà không đợi JS.
+      * Hết chương — emit ON_CHAPTER_END rồi tự tiếp tục nếu có thể, không đợi JS:
+      * 1. Có preload (JS gửi trước) → phát sau 400ms.
+      * 2. Không preload nhưng có playlist + workerUrl → tự fetch nội dung qua Worker.
       * JS vẫn nhận ON_CHAPTER_END để sync UI khi tỉnh lại.
       */
     private fun finishChapter() {
@@ -921,35 +1045,54 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         val nextTitle = nextChapterTitle
         val nextNum = nextChapterNumber
         if (nextContent != null && nextTitle != null && nextNum == endedIdx + 2) {
-            Log.d(TAG, "finishChapter: có preload chương $nextNum → tự phát sau 400ms (không đợi JS)")
-            nextChapterTitle = null
-            nextChapterContent = null
-            nextChapterNumber = -1
-            finished = false
-            cancelAutoNext()
-            val token = ++autoToken
-            val r = Runnable {
-                // Single-flight: token đổi nghĩa đã có lệnh mới → bỏ qua
-                if (token != autoToken) return@Runnable
-                // Kiểm tra JS chưa kịp gửi PLAY_CHAPTER (charIndex vẫn 0 và chưa playing)
-                if (!playing && chapterIndex == endedIdx && token == autoToken) {
-                    chapterTitle = nextTitle
-                    chapterContent = nextContent
-                    chapterIndex = nextNum - 1
-                    charIndex = 0
-                    announceTitle = true
-                    retryCount = 0
-                    titleRetry = 0
-                    finished = false
-                    Log.d(TAG, "auto-next native: phát chương $nextNum")
-                    updateMediaMetadata()
-                    emit(Events.ON_CHAPTER_CHANGE, mapOf("chapterIndex" to chapterIndex))
-                    ensureTts { playFrom(0) }
-                }
-            }
-            autoRunnable = r
-            main.postDelayed(r, 400)
+            startPreloadedNext(endedIdx, nextNum, nextTitle, nextContent)
+            return
         }
+        // Fallback Wave B1: không preload (JS chết/ngủ sâu, preload fail) → tự fetch qua Worker
+        val nextId = playlistIds.getOrNull(endedIdx + 1)
+        if (nextId != null && workerBaseUrl.isNotBlank()) {
+            Log.d(TAG, "finishChapter: thiếu preload → tự fetch chương ${endedIdx + 2} qua Worker")
+            cancelFetch()
+            val token = ++fetchToken
+            fetchNextChapterAndPlay(endedIdx, nextId, token)
+            return
+        }
+        if (nextId == null) {
+            Log.d(TAG, "finishChapter: hết playlist (chương cuối hoặc chưa có playlist)")
+        } else {
+            Log.d(TAG, "finishChapter: thiếu workerUrl, đợi JS")
+        }
+    }
+
+    private fun startPreloadedNext(endedIdx: Int, nextNum: Int, nextTitle: String, nextContent: String) {
+        Log.d(TAG, "finishChapter: có preload chương $nextNum → tự phát sau 400ms (không đợi JS)")
+        nextChapterTitle = null
+        nextChapterContent = null
+        nextChapterNumber = -1
+        finished = false
+        cancelAutoNext()
+        val token = ++autoToken
+        val r = Runnable {
+            // Single-flight: token đổi nghĩa đã có lệnh mới → bỏ qua
+            if (token != autoToken) return@Runnable
+            // Kiểm tra JS chưa kịp gửi PLAY_CHAPTER (charIndex vẫn 0 và chưa playing)
+            if (!playing && !pausedByUser && chapterIndex == endedIdx && token == autoToken) {
+                chapterTitle = nextTitle
+                chapterContent = nextContent
+                chapterIndex = nextNum - 1
+                charIndex = 0
+                announceTitle = true
+                retryCount = 0
+                titleRetry = 0
+                finished = false
+                Log.d(TAG, "auto-next native: phát chương $nextNum")
+                updateMediaMetadata()
+                emit(Events.ON_CHAPTER_CHANGE, mapOf("chapterIndex" to chapterIndex))
+                ensureTts { playFrom(0) }
+            }
+        }
+        autoRunnable = r
+        main.postDelayed(r, 400)
     }
 
     /**
@@ -961,6 +1104,7 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         playing = false
         engineStarted = false
         cancelWatchdog()
+        cancelFetch()
         emit(Events.ON_CHAPTER_SEEK, mapOf("direction" to direction))
     }
 
@@ -970,9 +1114,11 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
 
     fun onPause() {
         playing = false
+        pausedByUser = true
         engineStarted = false
         cancelWatchdog()
         cancelAutoNext()
+        cancelFetch()
         releaseWakeLock()
         try { tts?.stop() } catch (_: Throwable) {}
         emit(Events.ON_STATE_CHANGE, mapOf("state" to "paused"))
@@ -983,6 +1129,7 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
     fun onResume() {
         // SETTLE_MS=200 trễ sau stop() — Android TTS hay "nuốt" speak() ngay sau stop().
         settleRunnable?.let { main.removeCallbacks(it) }
+        pausedByUser = false
         settleRunnable = Runnable {
             if (!playing) {
                 ensureTts { playFrom(charIndex) }
@@ -993,9 +1140,11 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
 
     fun onStop(stopService: Boolean) {
         playing = false
+        pausedByUser = true
         engineStarted = false
         cancelWatchdog()
         cancelAutoNext()
+        cancelFetch()
         nextChapterTitle = null
         nextChapterContent = null
         nextChapterNumber = -1

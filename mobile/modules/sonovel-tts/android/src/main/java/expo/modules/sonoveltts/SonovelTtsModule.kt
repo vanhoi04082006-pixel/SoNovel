@@ -112,6 +112,14 @@ class SonovelTtsModule : Module() {
             "ok"
         }
 
+        AsyncFunction("setPlaylist") { chapterIdsJson: String, workerUrl: String ->
+            sendAction(TtsService.ACTION_SET_PLAYLIST, mapOf(
+                TtsService.EXTRA_PLAYLIST_JSON to chapterIdsJson,
+                TtsService.EXTRA_WORKER_URL to workerUrl
+            ))
+            "ok"
+        }
+
         AsyncFunction("pause") {
             sendAction(TtsService.ACTION_PAUSE)
             "ok"

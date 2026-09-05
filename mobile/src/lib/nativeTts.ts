@@ -67,6 +67,10 @@ export interface SonovelTtsApi {
     chapterTitle: string,
     chapterContent: string
   ): Promise<string>;
+  setPlaylist(
+    chapterIdsJson: string,
+    workerUrl: string
+  ): Promise<string>;
   pause(): Promise<string>;
   resume(): Promise<string>;
   stop(): Promise<string>;
