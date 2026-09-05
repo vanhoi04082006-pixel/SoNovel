@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppState } from 'react-native';
 import { EventSubscription } from 'expo-modules-core';
 import { supabase } from './supabase';
 import { getUserId } from './session';
@@ -303,6 +304,13 @@ function scheduleSave() {
 
 export async function flushTtsSave(): Promise<void> {
   if (!seriesId) return;
+  // Lưu đúng chương đang phát thật: đối chiếu snapshot native mới nhất trước khi lưu
+  // (JS có thể lệch khi event bị drop lúc nền/tắt màn hình).
+  const snap = lastNativeSnapshot;
+  if (snap && Date.now() - snap.at < SNAPSHOT_FRESH_MS) {
+    adoptNativeChapter(snap.chapterIndex, 'save');
+    if (typeof snap.charIndex === 'number' && snap.charIndex >= 0) currentChar = snap.charIndex;
+  }
   const chapter = chapters[currentIndex];
   if (!chapter) return;
   await saveLocalProgress(seriesId, chapter.id, currentChar);
@@ -336,6 +344,43 @@ export async function flushTtsSave(): Promise<void> {
   } catch {}
 }
 
+// ---------- Reconcile JS ↔ native (fix lệch chương khi tắt màn hình / chạy nền) ----------
+// Native tự đổi chương (auto-next preload) trong khi event onChapterChange có thể bị drop
+// (bridge ngủ, timer Doze). getState() là nguồn sự thật dự phòng — poll + foreground + save
+// đều đối chiếu qua đây để JS không kẹt ở chương cũ.
+type NativeSnapshot = { chapterIndex: number; charIndex: number; playing: boolean; finished?: boolean; at: number };
+let lastNativeSnapshot: NativeSnapshot | null = null;
+const SNAPSHOT_FRESH_MS = 5000;
+
+function adoptNativeChapter(newIdx: number, source: string): boolean {
+  if (!seriesId || chapters.length === 0) return false;
+  if (typeof newIdx !== 'number' || newIdx < 0 || newIdx >= chapters.length) return false;
+  if (newIdx === currentIndex) return false;
+  // JS đang tự điều phối chuyển chương (seekChapterBy đã đổi currentIndex trước khi
+  // native kịp chuyển) → không revert, tránh nhảy tới lui.
+  if (advanceInFlight || busy) return false;
+  console.log(`[SoNovel][tts] reconcile (${source}): chương ${currentIndex + 1} → ${newIdx + 1}`);
+  currentIndex = newIdx;
+  currentChar = 0;
+  currentCharLength = 0;
+  seriesEnded = false;
+  endAdvance();
+  markChapterLoadedOk();
+  clearBusy();
+  emitLocal('chapterChange', { chapterIndex: newIdx });
+  emitLocal('nowPlaying');
+  scheduleSave();
+  // Preload tiếp chương sau để chuỗi auto-next không đứt
+  if (newIdx + 1 < chapters.length) {
+    const nxtIdx = newIdx + 1;
+    ensureChapterContent(nxtIdx).then((nc) => {
+      const nxt = chapters[nxtIdx];
+      if (nc && nxt) void preloadNextSafe(nxtIdx + 1, nxt.title, nc);
+    }).catch(() => {});
+  }
+  return true;
+}
+
 // ---------- State polling (sync UI với native) ----------
 // Poll native state mỗi 1s KHI đang playing — sync chapterIndex/charIndex/isPlaying.
 // Safety net cho sendEvent bị drop (expo-modules-core yêu cầu listener active trước).
@@ -349,12 +394,25 @@ function startPolling() {
       const state = await nativeTts.getState();
       if (!state) return;
 
+      lastNativeSnapshot = {
+        chapterIndex: state.chapterIndex,
+        charIndex: state.charIndex,
+        playing: state.playing,
+        finished: (state as any).finished,
+        at: Date.now(),
+      };
+
+      // Reconcile: native tự chuyển chương (auto-next) mà event bị drop → JS adopt theo native.
+      // adoptNativeChapter tự bỏ qua khi JS đang tự điều phối (advanceInFlight/busy).
+      if (state.playing && typeof state.chapterIndex === 'number') {
+        adoptNativeChapter(state.chapterIndex, 'poll');
+      }
+
       // Sync playing state
       const wasPlaying = isPlaying;
       isPlaying = state.playing;
 
-      // Chỉ sync charIndex (progress) — currentIndex do JS điều phối chương
-      // (native không còn giữ list chương).
+      // Sync charIndex (progress) theo native.
       if (state.charIndex !== currentChar) {
         currentChar = state.charIndex;
         if (state.charLength) currentCharLength = state.charLength;
@@ -383,10 +441,16 @@ function startPolling() {
       // (bật trong finishChapter, tắt khi ACTION_START/PLAY_CHAPTER xử lý xong).
       // Đường này hoạt động kể cả khi event ON_CHAPTER_END bị drop.
       if ((state as any).finished && !userPaused && !advanceInFlight && seriesId && chapters.length > 0) {
-        console.log('[SoNovel][tts] poll: finished=true → advance sang chương kế');
-        scheduleSave();
-        emitLocal('chapterEnd', { chapterIndex: currentIndex });
-        advanceToNextChapter();
+        // Native có thể đã tự auto-next (preload) mà JS chưa biết → adopt trước,
+        // tránh advance kép (vừa auto native vừa advance JS).
+        if (typeof state.chapterIndex === 'number' && adoptNativeChapter(state.chapterIndex, 'poll-finished')) {
+          // đã đồng bộ theo native, không advance thêm
+        } else {
+          console.log('[SoNovel][tts] poll: finished=true → advance sang chương kế');
+          scheduleSave();
+          emitLocal('chapterEnd', { chapterIndex: currentIndex });
+          advanceToNextChapter(currentIndex);
+        }
       }
 
       // Emit stateChange nếu trạng thái playing thay đổi
@@ -533,6 +597,12 @@ function wireNative() {
     emitLocal('chapterEnd', event);
     // Delay 600ms để native kịp auto-next (preload) khi tắt màn hình — nếu đã auto thì bỏ qua JS.
     setTimeout(() => {
+      // Ưu tiên snapshot poll mới nhất (kể cả khi event onChapterChange bị drop khi nền/tắt màn hình)
+      const snap = lastNativeSnapshot;
+      if (snap && Date.now() - snap.at < SNAPSHOT_FRESH_MS
+        && adoptNativeChapter(snap.chapterIndex, 'chapterEnd')) {
+        return;
+      }
       // Nếu trong 600ms native đã tự chuyển (onChapterChange đã đổi currentIndex), bỏ qua
       if (currentIndex !== event.chapterIndex) {
         console.log('[SoNovel][tts] onChapterEnd: native đã auto-next → JS bỏ qua');
@@ -543,27 +613,8 @@ function wireNative() {
   });
 
   safeAddListener('onChapterChange', (event: { chapterIndex: number }) => {
-    const newIdx = event.chapterIndex
-    if (newIdx >= 0 && newIdx < chapters.length && newIdx !== currentIndex) {
-      console.log('[SoNovel][tts] onChapterChange native auto-next → JS sync idx=' + (newIdx + 1))
-      currentIndex = newIdx
-      currentChar = 0
-      currentCharLength = 0
-      seriesEnded = false
-      endAdvance()
-      markChapterLoadedOk()
-      clearBusy()
-      emitLocal('chapterChange', event)
-      emitLocal('nowPlaying')
-      // Preload tiếp chương sau native auto-next
-      if (currentIndex + 1 < chapters.length) {
-        const nextIdx = currentIndex + 1;
-        ensureChapterContent(nextIdx).then((nc) => {
-          const nxt = chapters[nextIdx]
-          if (nc && nxt) void preloadNextSafe(nextIdx + 1, nxt.title, nc);
-        }).catch(() => {});
-      }
-    } else {
+    // Dùng chung adoptNativeChapter để đồng nhất với đường poll/foreground.
+    if (!adoptNativeChapter(event.chapterIndex, 'event')) {
       emitLocal('chapterChange', event)
     }
   });
@@ -588,6 +639,40 @@ function wireNative() {
     clearBusy();
     emitLocal('error', event);
   });
+
+  // Foreground sync: mở app lại sau khi chạy nền/tắt màn hình → đối chiếu native ngay
+  // (không đợi poll 1s) để UI hiện đúng chương đang phát thật.
+  try {
+    const appStateSub = AppState.addEventListener('change', (st) => {
+      if (st !== 'active' || !seriesId || chapters.length === 0) return;
+      nativeTts.getState().then((s) => {
+        if (!s) return;
+        lastNativeSnapshot = {
+          chapterIndex: s.chapterIndex,
+          charIndex: s.charIndex,
+          playing: s.playing,
+          finished: (s as any).finished,
+          at: Date.now(),
+        };
+        const wasPlaying = isPlaying;
+        isPlaying = s.playing;
+        if (s.playing && typeof s.chapterIndex === 'number') {
+          adoptNativeChapter(s.chapterIndex, 'foreground');
+        }
+        if (typeof s.charIndex === 'number' && s.charIndex !== currentChar) {
+          currentChar = s.charIndex;
+          if (s.charLength) currentCharLength = s.charLength;
+        }
+        if (isPlaying !== wasPlaying) {
+          emitLocal('stateChange', { state: isPlaying ? 'playing' as TtsState : 'paused' as TtsState });
+        }
+        emitLocal('nowPlaying');
+      }).catch(() => {});
+    });
+    subs.push(appStateSub as unknown as EventSubscription);
+  } catch (e: any) {
+    console.warn('[SoNovel][tts] KHÔNG đăng ký được AppState listener:', e?.message ?? e);
+  }
 }
 
 // ---------- Public API ----------
