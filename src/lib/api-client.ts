@@ -143,6 +143,9 @@ export const api = {
   getIllustrations: (seriesId: string) => json<{ items: Array<{ id: string; imageUrl: string; caption: string; orderNo: number }> }>(`/api/series/${seriesId}/illustrations`),
   saveIllustrations: (seriesId: string, items: Array<{ imageUrl: string; caption: string }>) =>
     json<{ ok: boolean; count: number }>(`/api/series/${seriesId}/illustrations`, { method: 'PUT', body: JSON.stringify({ items }) }),
+  getSiteSetting: (key: string) => json<{ key: string; value: string }>(`/api/site-settings/${encodeURIComponent(key)}`),
+  saveSiteSetting: (key: string, value: string) =>
+    json<{ ok: boolean; key: string; value: string }>(`/api/site-settings/${encodeURIComponent(key)}`, { method: 'PUT', body: JSON.stringify({ value }) }),
   createSeries: (data: any) => json('/api/series/create', { method: 'POST', body: JSON.stringify(data) }),
   updateSeries: (id: string, data: any) => json(`/api/series/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteSeries: (id: string) => json(`/api/series/${id}`, { method: 'DELETE' }),

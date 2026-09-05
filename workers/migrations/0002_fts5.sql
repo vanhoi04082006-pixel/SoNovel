@@ -1,7 +1,8 @@
 -- 0002_fts5 — FTS5 cho series.title/author (PERF-FTS-01)
 -- D1 SQLite FTS5 với unicode61 + remove_diacritics để tìm không dấu
+-- NOTE: D1 không hỗ trợ tokenize remove_diacritics → dùng unicode61 thuần (tìm có dấu).
 CREATE VIRTUAL TABLE IF NOT EXISTS series_fts USING fts5(
-  title, author, content='series', content_rowid='rowid', tokenize='unicode61 "remove_diacritics 2"'
+  title, author, content='series', content_rowid='rowid', tokenize='unicode61'
 );
 
 -- Backfill existing rows

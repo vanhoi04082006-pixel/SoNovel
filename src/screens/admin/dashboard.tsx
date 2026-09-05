@@ -43,6 +43,8 @@ export function AdminDashboard() {
   const [allTags, setAllTags] = useState<{ id: string; name: string }[]>([])
   const [tagFilter, setTagFilter] = useState<string>('')
   const [tagOpen, setTagOpen] = useState(false)
+  const [apkUrl, setApkUrl] = useState('')
+  const [apkSaving, setApkSaving] = useState(false)
   const limit = 12
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -60,8 +62,25 @@ export function AdminDashboard() {
         const r = await api.listTags()
         setAllTags(r.items)
       } catch {}
+      try {
+        const s = await api.getSiteSetting('android_apk_url')
+        setApkUrl(s.value || '')
+      } catch {}
     })()
   }, [])
+
+  const saveApkUrl = async () => {
+    setApkSaving(true)
+    try {
+      const r = await api.saveSiteSetting('android_apk_url', apkUrl.trim())
+      setApkUrl(r.value || '')
+      toast.success('Đã lưu liên kết tải Android.')
+    } catch (e) {
+      toast.error('Lưu thất bại: ' + (e as Error).message)
+    } finally {
+      setApkSaving(false)
+    }
+  }
 
   const loadList = useCallback(async (resetOffset = true) => {
     setLoading(true)
@@ -192,6 +211,22 @@ export function AdminDashboard() {
         </CardHeader>
         <CardContent>
           <StatusChart data={counts} />
+        </CardContent>
+      </Card>
+
+      {/* Liên kết tải app Android (hiện ở trang Tải ứng dụng) */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Liên kết tải Android</CardTitle>
+          <CardDescription>Link Drive file APK — người dùng bấm nút Android ở trang Tải ứng dụng sẽ mở link này.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Input value={apkUrl} onChange={(e) => setApkUrl(e.target.value)} placeholder="https://drive.google.com/…" className="flex-1" />
+            <Button size="sm" onClick={saveApkUrl} disabled={apkSaving} className="shrink-0">
+              {apkSaving ? 'Đang lưu…' : 'Lưu link'}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

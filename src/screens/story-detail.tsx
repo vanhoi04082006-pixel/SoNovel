@@ -19,15 +19,17 @@ import { estMinutes, formatCharCount } from '@/lib/format'
 
 type IllustrationItem = { id: string; imageUrl: string; caption: string; orderNo: number }
 
-/** Tab Minh họa: mục lục chip (từ thông tin ảnh) + danh sách chữ trên / ảnh dưới. */
+/** Tab Minh họa: mục lục sticky cột trái (desktop) + danh sách chữ trên / ảnh dưới giữ tỉ lệ gốc. */
 function IllustrationsTab({ seriesId }: { seriesId: string }) {
   const [items, setItems] = useState<IllustrationItem[] | null>(null)
   const [lightbox, setLightbox] = useState<string | null>(null)
+  const [activeIdx, setActiveIdx] = useState(0)
   const rowRefs = useRef<(HTMLDivElement | null)[]>([])
 
   useEffect(() => {
     let cancelled = false
     setItems(null)
+    setActiveIdx(0)
     rowRefs.current = []
     api.getIllustrations(seriesId)
       .then((r) => { if (!cancelled) setItems(r.items) })
@@ -45,7 +47,7 @@ function IllustrationsTab({ seriesId }: { seriesId: string }) {
   if (items === null) {
     return (
       <div className="space-y-4">
-        {Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="aspect-video w-full rounded-xl" />)}
+        {Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="min-h-64 w-full rounded-xl" />)}
       </div>
     )
   }
@@ -54,35 +56,53 @@ function IllustrationsTab({ seriesId }: { seriesId: string }) {
   }
 
   const scrollTo = (i: number) => {
+    setActiveIdx(i)
     rowRefs.current[i]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
+  const indexList = (vertical: boolean) => (
+    <>
+      {items.map((it, i) => (
+        <button
+          key={it.id || i}
+          onClick={() => scrollTo(i)}
+          className={
+            vertical
+              ? `block w-full truncate rounded-lg border px-3 py-2 text-left text-xs transition-colors ${i === activeIdx ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:border-primary hover:text-primary'}`
+              : `shrink-0 rounded-full border border-border px-3 py-1 text-xs hover:border-primary hover:text-primary transition-colors ${i === activeIdx ? 'border-primary text-primary' : ''}`
+          }
+        >
+          {i + 1}. {it.caption || `Ảnh ${i + 1}`}
+        </button>
+      ))}
+    </>
+  )
+
   return (
-    <div className="space-y-5">
-      {/* Mục lục — dựa trên thông tin của từng ảnh */}
-      <div className="flex gap-2 overflow-x-auto pb-1">
+    <div className="md:grid md:grid-cols-[220px_1fr] md:gap-5">
+      {/* Mục lục: mobile chips ngang phía trên, desktop sticky cột trái */}
+      <div className="mb-3 md:mb-0">
+        <div className="flex gap-2 overflow-x-auto pb-1 md:hidden">{indexList(false)}</div>
+        <div className="hidden md:block md:sticky md:top-20 max-h-[70vh] overflow-y-auto rounded-xl border border-border p-2">
+          <p className="px-2 pb-2 pt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Mục lục ({items.length})</p>
+          <div className="space-y-1">{indexList(true)}</div>
+        </div>
+      </div>
+      {/* Cột ảnh: giữ nguyên tỉ lệ gốc, không crop */}
+      <div className="space-y-5 min-w-0">
         {items.map((it, i) => (
-          <button
-            key={it.id || i}
-            onClick={() => scrollTo(i)}
-            className="shrink-0 rounded-full border border-border px-3 py-1 text-xs hover:border-primary hover:text-primary transition-colors"
-          >
-            {i + 1}. {it.caption || `Ảnh ${i + 1}`}
-          </button>
+          <div key={it.id || i} ref={(el) => { rowRefs.current[i] = el }} className="space-y-2 scroll-mt-24">
+            <p className="text-sm font-medium">
+              <span className="text-primary mr-1.5">{i + 1}.</span>
+              {it.caption || `Ảnh ${i + 1}`}
+            </p>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <button type="button" onClick={() => setLightbox(it.imageUrl)} className="block w-full cursor-zoom-in" aria-label={`Phóng to ${it.caption || `ảnh ${i + 1}`}`}>
+              <img src={it.imageUrl} alt={it.caption || `Ảnh ${i + 1}`} loading="lazy" className="h-auto w-full rounded-xl border border-border bg-muted" />
+            </button>
+          </div>
         ))}
       </div>
-      {items.map((it, i) => (
-        <div key={it.id || i} ref={(el) => { rowRefs.current[i] = el }} className="space-y-2 scroll-mt-24">
-          <p className="text-sm font-medium">
-            <span className="text-primary mr-1.5">{i + 1}.</span>
-            {it.caption || `Ảnh ${i + 1}`}
-          </p>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <button type="button" onClick={() => setLightbox(it.imageUrl)} className="block w-full cursor-zoom-in" aria-label={`Phóng to ${it.caption || `ảnh ${i + 1}`}`}>
-            <img src={it.imageUrl} alt={it.caption || `Ảnh ${i + 1}`} loading="lazy" width={800} height={450} className="w-full rounded-xl border border-border bg-muted aspect-video object-cover" />
-          </button>
-        </div>
-      ))}
       {lightbox && (
         <button type="button" onClick={() => setLightbox(null)} className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4 cursor-zoom-out" aria-label="Đóng ảnh phóng to">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -338,28 +358,12 @@ export function StoryDetailScreen() {
         </div>
       )}
 
-      {/* Tabs: Thông Tin | Chương | Minh Họa */}
+      {/* Tabs: Chương | Minh Họa (thông tin đã có ở header phía trên) */}
       <Tabs defaultValue="chapters" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="info">Thông Tin</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="chapters">Chương</TabsTrigger>
           <TabsTrigger value="illustrations">Minh Họa</TabsTrigger>
         </TabsList>
-        <TabsContent value="info" className="space-y-4 pt-2">
-          <div className="rounded-xl border border-border p-4 space-y-3">
-            <h3 className="font-semibold">Giới thiệu</h3>
-            <p className="text-sm leading-relaxed whitespace-pre-wrap">{detail.description || 'Chưa có mô tả.'}</p>
-            <div className="flex flex-wrap gap-1.5 pt-2">
-              {detail.genres?.map((g) => (
-                <Badge key={g} variant="secondary">{g}</Badge>
-              ))}
-              {detail.tags?.map((t) => (
-                <span key={t} className="text-xs text-primary">#{t}</span>
-              ))}
-            </div>
-            <p className="text-xs text-muted-foreground pt-2">{detail.chapters.length} chương · ~{totalListenMin} phút nghe</p>
-          </div>
-        </TabsContent>
         <TabsContent value="chapters" className="space-y-3 pt-2">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-sm font-semibold">Danh sách chương</h3>

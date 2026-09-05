@@ -142,9 +142,16 @@ CREATE TABLE IF NOT EXISTS series_illustrations (
 );
 CREATE INDEX IF NOT EXISTS idx_illustrations_series ON series_illustrations(series_id, order_no);
 
+-- site_settings: cài đặt chung (link tải app Android...), mirror workers/migrations/0004_site_settings.sql
+CREATE TABLE IF NOT EXISTS site_settings (
+  key TEXT PRIMARY KEY NOT NULL,
+  value TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
 -- FTS5 cho tìm kiếm title/author (mirror workers/migrations/0002_fts5.sql)
 CREATE VIRTUAL TABLE IF NOT EXISTS series_fts USING fts5(
-  title, author, content='series', content_rowid='rowid', tokenize='unicode61 "remove_diacritics 2"'
+  title, author, content='series', content_rowid='rowid', tokenize='unicode61'
 );
 CREATE TRIGGER IF NOT EXISTS trg_series_fts_insert AFTER INSERT ON series BEGIN
   INSERT INTO series_fts(rowid, title, author) VALUES (new.rowid, new.title, new.author);

@@ -233,6 +233,31 @@ app.put('/api/series/:id/illustrations', async (c) => {
   return c.json({ ok: true, count })
 })
 
+// ---------- SITE SETTINGS (cài đặt chung: link tải app...) ----------
+
+const SITE_SETTING_KEYS = ['android_apk_url'] as const
+
+// Public — đọc 1 key site setting (dùng cho trang Tải ứng dụng)
+app.get('/api/site-settings/:key', async (c) => {
+  const key = c.req.param('key')
+  if (!(SITE_SETTING_KEYS as readonly string[]).includes(key)) return c.json({ error: 'Key không hợp lệ.' }, 400)
+  const row = await c.env.DB.prepare('SELECT value FROM site_settings WHERE key=?').bind(key).first<any>()
+  return c.json({ key, value: row?.value ?? '' })
+})
+
+// Admin — lưu 1 key site setting
+app.put('/api/site-settings/:key', async (c) => {
+  await requireAdmin(c)
+  const key = c.req.param('key')
+  if (!(SITE_SETTING_KEYS as readonly string[]).includes(key)) return c.json({ error: 'Key không hợp lệ.' }, 400)
+  const body: any = await c.req.json().catch(() => null)
+  const value = String(body?.value || '').trim().slice(0, 2000)
+  const now = nowIso()
+  await c.env.DB.prepare('INSERT INTO site_settings (key, value, updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at')
+    .bind(key, value, now).run()
+  return c.json({ ok: true, key, value })
+})
+
 app.get('/api/series/:id/chapters', async (c) => {
   const id = c.req.param('id')
   const url = new URL(c.req.url)

@@ -32,6 +32,8 @@ export function InstallPrompt() {
     const handler = (e: Event) => {
       e.preventDefault()
       setDeferredPrompt(e)
+      // Móc toàn cục để trang Tải ứng dụng (About) cũng kích hoạt cài PWA được
+      try { (window as any).__sonovelInstallPrompt = e } catch {}
       setShow(true)
     }
     window.addEventListener('beforeinstallprompt', handler)

@@ -36,6 +36,7 @@ import { getChapterContent } from '../lib/chapters';
 import { invalidateCache } from '../lib/dataCache';
 import { useReadMarkers } from '../lib/readMarkers';
 import { useMiniPlayerPad } from '../lib/useMiniPlayerPad';
+import { IllustrationsTab } from '../components/series/IllustrationsTab';
 
 type SeriesRouteProp = RouteProp<RootStackParamList, 'Series'>;
 
@@ -52,7 +53,7 @@ export function SeriesScreen({ route }: { route: SeriesRouteProp }) {
   const [loading, setLoading] = useState(true);
   const [fav, setFav] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<'info' | 'chapters'>('info');
+  const [tab, setTab] = useState<'info' | 'chapters' | 'illustrations'>('info');
   const [search, setSearch] = useState('');
   const [visibleChapters, setVisibleChapters] = useState(100);
   const np = getNowPlaying();
@@ -258,10 +259,11 @@ export function SeriesScreen({ route }: { route: SeriesRouteProp }) {
           </Pressable>
         </View>
 
-        {/* Tabs: Info | Chapters */}
+        {/* Tabs: Info | Chapters | Minh họa */}
         <View style={[styles.tabBar, { borderBottomColor: t.border }]}>
           <TabButton label="Thông tin" active={tab === 'info'} onPress={() => setTab('info')} t={t} />
           <TabButton label={`Chương (${chapters.length})`} active={tab === 'chapters'} onPress={() => setTab('chapters')} t={t} />
+          <TabButton label="Minh họa" active={tab === 'illustrations'} onPress={() => setTab('illustrations')} t={t} />
         </View>
 
         {tab === 'info' ? (
@@ -279,6 +281,10 @@ export function SeriesScreen({ route }: { route: SeriesRouteProp }) {
             <Text style={[TYPO.bodySm, { color: t.textMuted, lineHeight: 21 }]}>
               {series.description || 'Chưa có mô tả.'}
             </Text>
+          </View>
+        ) : tab === 'illustrations' ? (
+          <View style={styles.section}>
+            {seriesId ? <IllustrationsTab seriesId={seriesId} /> : null}
           </View>
         ) : (
           <View style={styles.section}>

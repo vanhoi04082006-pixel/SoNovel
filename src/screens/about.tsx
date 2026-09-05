@@ -1,10 +1,99 @@
 'use client'
 
-import { Headphones, BookOpen, Github, Heart, ChevronLeft, Sparkles, Shield, Zap } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Headphones, BookOpen, Github, Heart, ChevronLeft, Sparkles, Shield, Zap, Smartphone, Apple, MonitorDown } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
+import { api } from '@/lib/api-client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { toast } from 'sonner'
+
+function DownloadAppCard() {
+  const [apkUrl, setApkUrl] = useState('')
+  const [showIosHelp, setShowIosHelp] = useState(false)
+  const [showPcHelp, setShowPcHelp] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    api.getSiteSetting('android_apk_url')
+      .then((r) => { if (!cancelled && r.value) setApkUrl(r.value) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+
+  const installPwa = async () => {
+    try {
+      const dp = (window as any).__sonovelInstallPrompt
+      if (dp) {
+        dp.prompt()
+        const { outcome } = await dp.userChoice
+        if (outcome === 'accepted') toast.success('Đang cài SoNovel...')
+        ;(window as any).__sonovelInstallPrompt = null
+        return true
+      }
+    } catch {}
+    return false
+  }
+
+  return (
+    <Card>
+      <CardHeader><CardTitle className="text-base">Tải ứng dụng</CardTitle></CardHeader>
+      <CardContent className="space-y-2.5">
+        <div className="flex items-center gap-3 rounded-lg border border-border p-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><Smartphone className="h-5 w-5" /></span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold">Android (APK riêng)</p>
+            <p className="text-xs text-muted-foreground">Nghe nền, điều khiển từ màn hình khóa</p>
+          </div>
+          {apkUrl ? (
+            <a href={apkUrl} target="_blank" rel="noopener noreferrer">
+              <Button size="sm">Tải về</Button>
+            </a>
+          ) : (
+            <Button size="sm" disabled>Chưa có link</Button>
+          )}
+        </div>
+        <div className="rounded-lg border border-border p-3">
+          <div className="flex items-center gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><Apple className="h-5 w-5" /></span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold">iPhone (PWA)</p>
+              <p className="text-xs text-muted-foreground">Cài từ trình duyệt, không cần App Store</p>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => setShowIosHelp((v) => !v)}>Cách cài</Button>
+          </div>
+          {showIosHelp && (
+            <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs text-muted-foreground">
+              <li>Mở trang này bằng <b>Safari</b>.</li>
+              <li>Bấm nút <b>Chia sẻ</b> (hình vuông có mũi tên) ở thanh công cụ.</li>
+              <li>Chọn <b>“Thêm vào Màn hình chính”</b> → <b>Thêm</b>.</li>
+            </ol>
+          )}
+        </div>
+        <div className="rounded-lg border border-border p-3">
+          <div className="flex items-center gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><MonitorDown className="h-5 w-5" /></span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold">Máy tính (PWA)</p>
+              <p className="text-xs text-muted-foreground">Cài từ Chrome/Edge, chạy như app desktop</p>
+            </div>
+            <Button size="sm" variant="outline" onClick={async () => {
+              const ok = await installPwa()
+              if (!ok) setShowPcHelp((v) => !v)
+            }}>Cài ngay</Button>
+          </div>
+          {showPcHelp && (
+            <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs text-muted-foreground">
+              <li>Mở trang này bằng <b>Chrome</b> hoặc <b>Edge</b> trên máy tính.</li>
+              <li>Bấm biểu tượng <b>Cài đặt</b> trên thanh địa chỉ, hoặc menu ⋮ → <b>“Cài đặt SoNovel…”</b>.</li>
+            </ol>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
 
 export function AboutScreen() {
   const { navigate } = useAppStore()
@@ -33,6 +122,9 @@ export function AboutScreen() {
           </div>
         </div>
       </Card>
+
+      {/* Tải ứng dụng */}
+      <DownloadAppCard />
 
       {/* Features */}
       <div className="grid sm:grid-cols-2 gap-3">

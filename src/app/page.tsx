@@ -94,6 +94,7 @@ export default function Home() {
           <span>SoNovel — Ứng dụng nghe truyện chữ tiếng Việt</span>
           <div className="flex items-center gap-3">
             <button onClick={() => useAppStore.getState().navigate({ view: 'about' })} className="hover:text-primary">Giới thiệu</button>
+            <button onClick={() => useAppStore.getState().navigate({ view: 'about' })} className="hover:text-primary">Tải app</button>
             <button onClick={() => useAppStore.getState().navigate({ view: 'settings' })} className="hover:text-primary">Cài đặt</button>
             <span className="opacity-60">Web Speech API · v1.0</span>
           </div>
