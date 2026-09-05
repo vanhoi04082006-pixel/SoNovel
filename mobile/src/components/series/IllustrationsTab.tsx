@@ -68,8 +68,8 @@ export const IllustrationsTab = forwardRef<IllustIndexHandle, Props>(function Il
       .then((rows) => {
         if (cancelled) return;
         setItems(rows);
-        // Prefetch thumb đợt đầu để lướt mượt
-        rows.slice(0, BATCH).forEach((r) => Image.prefetch(r.imageUrl).catch(() => {}));
+        // KHÔNG prefetch nền: mỗi ảnh chỉ tải khi hiện trong đợt của nó,
+        // tránh chục link nặng song song gây nghẽn.
       })
       .catch((e: any) => { if (!cancelled) setError(e?.message ?? 'Không tải được ảnh minh họa'); });
     return () => { cancelled = true; };
@@ -147,9 +147,7 @@ export const IllustrationsTab = forwardRef<IllustIndexHandle, Props>(function Il
   const shown = items.slice(0, visibleCount);
 
   const showMore = () => {
-    const next = Math.min(items.length, visibleCount + BATCH);
-    items.slice(visibleCount, next).forEach((r) => Image.prefetch(r.imageUrl).catch(() => {}));
-    setVisibleCount(next);
+    setVisibleCount(Math.min(items.length, visibleCount + BATCH));
   };
 
   return (
@@ -270,16 +268,18 @@ export const IllustrationsTab = forwardRef<IllustIndexHandle, Props>(function Il
   );
 });
 
-/** Ảnh thumb nhẹ, giữ nguyên tỉ lệ gốc (contain) + nút thử lại khi lỗi. */
+/** Ảnh gốc full + vòng xoay "đang tải" rõ ràng + nút thử lại khi lỗi. */
 function IllustrationImage({ uri }: { uri: string }) {
   const t = useTheme();
   const [ratio, setRatio] = useState<number | null>(null);
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
   useEffect(() => {
     let cancelled = false;
     setRatio(null);
     setFailed(false);
+    setLoaded(false);
     RNImage.getSize(
       uri,
       (w, h) => { if (!cancelled && w > 0 && h > 0) setRatio(h / w); },
@@ -311,8 +311,15 @@ function IllustrationImage({ uri }: { uri: string }) {
         contentFit="contain"
         cachePolicy="memory-disk"
         transition={150}
+        onLoad={() => setLoaded(true)}
         onError={() => setFailed(true)}
       />
+      {!loaded && (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', gap: 8 }}>
+          <ActivityIndicator size="large" color={t.primary} />
+          <Text style={[TYPO.caption, { color: t.textMuted }]}>Đang tải ảnh…</Text>
+        </View>
+      )}
     </View>
   );
 }
