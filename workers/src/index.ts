@@ -139,8 +139,9 @@ app.get('/api/series', async (c) => {
       total = countRow?.n ?? 0
       rows = await db.prepare(`SELECT *, (SELECT COUNT(*) FROM chapters WHERE chapters.series_id=series.id AND chapters.status='published') as chapter_count FROM series ${whereSql} ORDER BY ${order} LIMIT ? OFFSET ?`).bind(...params, limit, offset).all<SeriesRow & {chapter_count:number}>()
     } catch (e:any) {
-      // FTS5 failed (e.g. syntax) → fallback LIKE
-      if (useFts && String(e.message||'').includes('fts5')) {
+      // FTS5 failed (syntax) hoặc bảng series_fts không tồn tại (đã drop do corrupt) → fallback LIKE
+      const msg = String(e.message || '')
+      if (useFts && (msg.includes('fts5') || msg.includes('no such table'))) {
         const fbWhere: string[] = []
         const fbParams: any[] = []
         if (statuses.length) { fbWhere.push(`status IN (${statuses.map(()=>'?').join(',')})`); fbParams.push(...statuses) }

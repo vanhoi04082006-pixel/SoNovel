@@ -150,17 +150,5 @@ CREATE TABLE IF NOT EXISTS site_settings (
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
--- FTS5 cho tìm kiếm title/author (mirror workers/migrations/0002_fts5.sql)
-CREATE VIRTUAL TABLE IF NOT EXISTS series_fts USING fts5(
-  title, author, content='series', content_rowid='rowid', tokenize='unicode61'
-);
-CREATE TRIGGER IF NOT EXISTS trg_series_fts_insert AFTER INSERT ON series BEGIN
-  INSERT INTO series_fts(rowid, title, author) VALUES (new.rowid, new.title, new.author);
-END;
-CREATE TRIGGER IF NOT EXISTS trg_series_fts_delete AFTER DELETE ON series BEGIN
-  INSERT INTO series_fts(series_fts, rowid, title, author) VALUES('delete', old.rowid, old.title, old.author);
-END;
-CREATE TRIGGER IF NOT EXISTS trg_series_fts_update AFTER UPDATE ON series BEGIN
-  INSERT INTO series_fts(series_fts, rowid, title, author) VALUES('delete', old.rowid, old.title, old.author);
-  INSERT INTO series_fts(rowid, title, author) VALUES (new.rowid, new.title, new.author);
-END;
+-- FTS5 ĐÃ BỎ (2026-09-05): series_fts gây SQLITE_CORRUPT_VTAB, đã drop production.
+-- Search dùng LIKE (xem workers/src/index.ts). Không tạo lại ở đây.
