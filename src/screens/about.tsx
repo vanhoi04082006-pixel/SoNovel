@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Headphones, BookOpen, Github, Heart, ChevronLeft, Sparkles, Shield, Zap, Smartphone, Apple, MonitorDown } from 'lucide-react'
+import { Headphones, BookOpen, Github, Heart, ChevronLeft, Sparkles, Shield, Zap, Smartphone, Download } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import { api } from '@/lib/api-client'
 import { Button } from '@/components/ui/button'
@@ -9,20 +9,30 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 
+function isIos(): boolean {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false
+  const ua = navigator.userAgent || ''
+  return /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && (navigator as any).maxTouchPoints > 1)
+}
+
 function DownloadAppCard() {
   const [apkUrl, setApkUrl] = useState('')
-  const [showIosHelp, setShowIosHelp] = useState(false)
-  const [showPcHelp, setShowPcHelp] = useState(false)
+  const [showHelp, setShowHelp] = useState(false)
+  const [ios, setIos] = useState(false)
 
   useEffect(() => {
     let cancelled = false
+    setIos(isIos())
     api.getSiteSetting('android_apk_url')
       .then((r) => { if (!cancelled && r.value) setApkUrl(r.value) })
       .catch(() => {})
     return () => { cancelled = true }
   }, [])
 
-  const installPwa = async () => {
+  // Một chạm cài PWA khi trình duyệt cho phép (Android/PC Chrome-Edge).
+  // iPhone không hỗ trợ cài tự động — luôn hiện hướng dẫn tay.
+  const installNow = async () => {
+    if (isIos()) { setShowHelp(true); return }
     try {
       const dp = (window as any).__sonovelInstallPrompt
       if (dp) {
@@ -30,10 +40,10 @@ function DownloadAppCard() {
         const { outcome } = await dp.userChoice
         if (outcome === 'accepted') toast.success('Đang cài SoNovel...')
         ;(window as any).__sonovelInstallPrompt = null
-        return true
+        return
       }
     } catch {}
-    return false
+    setShowHelp(true)
   }
 
   return (
@@ -56,38 +66,26 @@ function DownloadAppCard() {
         </div>
         <div className="rounded-lg border border-border p-3">
           <div className="flex items-center gap-3">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><Apple className="h-5 w-5" /></span>
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><Download className="h-5 w-5" /></span>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold">iPhone (PWA)</p>
-              <p className="text-xs text-muted-foreground">Cài từ trình duyệt, không cần App Store</p>
+              <p className="text-sm font-semibold">{ios ? 'iPhone (PWA)' : 'iPhone & Máy tính (PWA)'}</p>
+              <p className="text-xs text-muted-foreground">{ios ? 'Cài từ Safari, không cần App Store' : 'Bấm là cài, không cần cửa hàng ứng dụng'}</p>
             </div>
-            <Button size="sm" variant="outline" onClick={() => setShowIosHelp((v) => !v)}>Cách cài</Button>
+            <Button size="sm" onClick={installNow}>Cài ngay</Button>
           </div>
-          {showIosHelp && (
-            <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs text-muted-foreground">
-              <li>Mở trang này bằng <b>Safari</b>.</li>
-              <li>Bấm nút <b>Chia sẻ</b> (hình vuông có mũi tên) ở thanh công cụ.</li>
-              <li>Chọn <b>“Thêm vào Màn hình chính”</b> → <b>Thêm</b>.</li>
-            </ol>
-          )}
-        </div>
-        <div className="rounded-lg border border-border p-3">
-          <div className="flex items-center gap-3">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><MonitorDown className="h-5 w-5" /></span>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold">Máy tính (PWA)</p>
-              <p className="text-xs text-muted-foreground">Cài từ Chrome/Edge, chạy như app desktop</p>
-            </div>
-            <Button size="sm" variant="outline" onClick={async () => {
-              const ok = await installPwa()
-              if (!ok) setShowPcHelp((v) => !v)
-            }}>Cài ngay</Button>
-          </div>
-          {showPcHelp && (
-            <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs text-muted-foreground">
-              <li>Mở trang này bằng <b>Chrome</b> hoặc <b>Edge</b> trên máy tính.</li>
-              <li>Bấm biểu tượng <b>Cài đặt</b> trên thanh địa chỉ, hoặc menu ⋮ → <b>“Cài đặt SoNovel…”</b>.</li>
-            </ol>
+          {showHelp && (
+            ios ? (
+              <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs text-muted-foreground">
+                <li>Mở trang này bằng <b>Safari</b>.</li>
+                <li>Bấm nút <b>Chia sẻ</b> (hình vuông có mũi tên) ở thanh công cụ.</li>
+                <li>Chọn <b>“Thêm vào Màn hình chính”</b> → <b>Thêm</b>.</li>
+              </ol>
+            ) : (
+              <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs text-muted-foreground">
+                <li>Mở trang này bằng <b>Chrome</b> hoặc <b>Edge</b>.</li>
+                <li>Bấm biểu tượng <b>Cài đặt</b> trên thanh địa chỉ, hoặc menu ⋮ → <b>“Cài đặt SoNovel…”</b>.</li>
+              </ol>
+            )
           )}
         </div>
       </CardContent>

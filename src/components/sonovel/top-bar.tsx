@@ -55,6 +55,9 @@ export function TopBar() {
           <Button variant={view.view === 'about' ? 'secondary' : 'ghost'} size="sm" onClick={() => navigate({ view: 'about' })}>
             Giới thiệu
           </Button>
+          <Button variant={view.view === 'about' ? 'secondary' : 'ghost'} size="sm" onClick={() => navigate({ view: 'about' })}>
+            Tải app
+          </Button>
           {user?.role === 'admin' && (
             <Button variant={view.view === 'admin' ? 'secondary' : 'ghost'} size="sm" onClick={() => navigate({ view: 'admin', tab: 'dashboard' })}>
               <Shield className="h-4 w-4 mr-1" /> Quản trị

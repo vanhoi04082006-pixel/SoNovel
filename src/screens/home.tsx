@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Headphones, ChevronRight, ChevronLeft, Sparkles, TrendingUp, Play, Star, BookOpen, BarChart3 } from 'lucide-react'
+import { Headphones, ChevronRight, ChevronLeft, Sparkles, TrendingUp, Play, Star, BookOpen, BarChart3, Download } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import { api, type SeriesItem } from '@/lib/api-client'
 import { StoryCard } from '@/components/sonovel/story-card'
@@ -87,6 +87,9 @@ export function HomeScreen() {
             <div className="mt-4 flex flex-wrap gap-2">
               <Button onClick={() => navigate({ view: 'search' })} size="sm">
                 <Sparkles className="h-4 w-4 mr-1" /> Khám phá truyện
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => navigate({ view: 'about' })}>
+                <Download className="h-4 w-4 mr-1" /> Tải app
               </Button>
               {user && (
                 <Button variant="outline" size="sm" onClick={() => navigate({ view: 'stats' })}>
