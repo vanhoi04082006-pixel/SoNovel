@@ -22,7 +22,7 @@ type IllustrationItem = { id: string; imageUrl: string; thumbUrl?: string; capti
 function IllustImage({ it, index, onOpen }: { it: IllustrationItem; index: number; onOpen: () => void }) {
   const [failed, setFailed] = useState(false)
   const [retryKey, setRetryKey] = useState(0)
-  const src = it.thumbUrl || it.imageUrl
+  const src = it.imageUrl // luôn full gốc, giữ chất lượng cao nhất
   if (failed) {
     return (
       <div className="flex flex-col items-center gap-2 rounded-xl border border-border bg-muted py-10 text-center">

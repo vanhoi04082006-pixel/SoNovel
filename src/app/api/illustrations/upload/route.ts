@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/session'
-import sharp from 'sharp'
 
 async function uploadToImgBB(key: string, b64: string): Promise<any> {
   const fd = new FormData()
@@ -63,23 +62,11 @@ export async function POST(req: NextRequest) {
     const buf = Buffer.from(await file.arrayBuffer())
     if (!sniffImage(new Uint8Array(buf))) return NextResponse.json({ error: 'File không phải ảnh hợp lệ (PNG/JPEG/GIF/WEBP/BMP).' }, { status: 400 })
 
-    // Bản gốc up nguyên vẹn; đồng thời sinh bản preview ~800px (vài chục KB)
-    // để app hiện ngay khi mạng yếu, bấm vào mới tải full.
-    let previewBuf: Buffer
-    try {
-      previewBuf = await sharp(buf).rotate().resize({ width: 800, withoutEnlargement: true }).jpeg({ quality: 70 }).toBuffer()
-    } catch {
-      return NextResponse.json({ error: 'Không đọc được file ảnh.' }, { status: 400 })
-    }
-
-    const [full, preview] = await Promise.all([
-      uploadToImgBB(key, buf.toString('base64')),
-      uploadToImgBB(key, previewBuf.toString('base64')),
-    ])
+    // Giữ nguyên chất lượng gốc cao nhất — up bản gốc, không nén (ảnh chỉ là link).
+    const full = await uploadToImgBB(key, buf.toString('base64'))
     const url = full?.url || full?.display_url || full?.image?.url
-    const thumbUrl = preview?.url || preview?.display_url || preview?.image?.url
-    if (!url || !thumbUrl) return NextResponse.json({ error: 'imgBB không trả về URL.' }, { status: 500 })
-    return NextResponse.json({ ok: true, url, thumbUrl, thumb: preview?.thumb?.url || thumbUrl })
+    if (!url) return NextResponse.json({ error: 'imgBB không trả về URL.' }, { status: 500 })
+    return NextResponse.json({ ok: true, url, thumbUrl: url, thumb: full?.thumb?.url || url })
   } catch (e) {
     const msg = (e as Error).message
     if (msg === 'UNAUTHORIZED' || msg === 'FORBIDDEN') {

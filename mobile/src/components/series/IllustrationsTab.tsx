@@ -1,4 +1,4 @@
-import React, {
+﻿import React, {
   forwardRef,
   useEffect,
   useImperativeHandle,
@@ -36,7 +36,7 @@ type Props = {
 };
 
 /**
- * Tab Minh họa (mobile): ảnh thumb nhẹ theo đợt + lightbox full.
+ * Tab Minh họa (mobile): ảnh gốc full chất lượng theo đợt + lightbox.
  * Mục lục mở qua ref (nút nổi do màn Series render ngoài ScrollView nên không trôi).
  * Cuộn bằng Y cộng dồn từ onLayout — xác định, không phụ thuộc native measure.
  */
@@ -69,7 +69,7 @@ export const IllustrationsTab = forwardRef<IllustIndexHandle, Props>(function Il
         if (cancelled) return;
         setItems(rows);
         // Prefetch thumb đợt đầu để lướt mượt
-        rows.slice(0, BATCH).forEach((r) => Image.prefetch(r.thumbUrl).catch(() => {}));
+        rows.slice(0, BATCH).forEach((r) => Image.prefetch(r.imageUrl).catch(() => {}));
       })
       .catch((e: any) => { if (!cancelled) setError(e?.message ?? 'Không tải được ảnh minh họa'); });
     return () => { cancelled = true; };
@@ -148,7 +148,7 @@ export const IllustrationsTab = forwardRef<IllustIndexHandle, Props>(function Il
 
   const showMore = () => {
     const next = Math.min(items.length, visibleCount + BATCH);
-    items.slice(visibleCount, next).forEach((r) => Image.prefetch(r.thumbUrl).catch(() => {}));
+    items.slice(visibleCount, next).forEach((r) => Image.prefetch(r.imageUrl).catch(() => {}));
     setVisibleCount(next);
   };
 
@@ -173,11 +173,11 @@ export const IllustrationsTab = forwardRef<IllustIndexHandle, Props>(function Il
               {it.caption || `Ảnh ${i + 1}`}
             </Text>
             <Pressable
-              onPress={() => { setFullUri(it.imageUrl); setLightbox(it.thumbUrl); }}
+              onPress={() => { setFullUri(null); setLightbox(it.imageUrl); }}
               accessibilityRole="imagebutton"
               accessibilityLabel={`Phóng to ${it.caption || `ảnh ${i + 1}`}`}
             >
-              <IllustrationImage uri={it.thumbUrl} />
+              <IllustrationImage uri={it.imageUrl} />
             </Pressable>
           </View>
         ))}
