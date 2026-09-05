@@ -338,10 +338,10 @@ export function AdminDashboard() {
         </div>
       )}
 
-      {offset + limit < total && (
+      {offset < total && (
         <div className="text-center pt-2">
           <Button variant="outline" onClick={() => loadList(false)} disabled={loading}>
-            Tải thêm ({total - offset - limit} còn lại)
+            Tải thêm ({total - offset} còn lại)
           </Button>
         </div>
       )}
