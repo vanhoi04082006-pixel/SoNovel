@@ -50,7 +50,7 @@ function SeekSlider({ value, onCommit, formatLabel }: { value: number; onCommit:
           {formatLabel ? formatLabel(hover) : `${Math.round(hover * 100)}%`}
         </div>
       )}
-      <Slider value={[value * 100]} max={100} step={0.1} onValueChange={(v) => onCommit(v[0] / 100)} className="flex-1" aria-label="Thanh tiến trình" />
+      <Slider value={[value * 100]} max={100} step={0.1} onValueCommit={(v) => onCommit(v[0] / 100)} className="flex-1" aria-label="Thanh tiến trình" />
     </div>
   )
 }

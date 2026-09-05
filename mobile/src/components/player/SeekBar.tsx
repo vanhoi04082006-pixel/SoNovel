@@ -18,39 +18,75 @@ function fmt(sec: number): string {
   return `${m}:${String(s % 60).padStart(2, '0')}`;
 }
 
+function clamp01(v: number): number {
+  return Math.min(1, Math.max(0, v));
+}
+
 export function SeekBar({ charIndex, charLength, rate, onSeek }: Props) {
   const t = useTheme();
   const [width, setWidth] = useState(1);
   const [drag, setDrag] = useState<number | null>(null); // 0..1 khi đang kéo
 
+  // Refs mirror để PanResponder (tạo 1 lần) luôn đọc giá trị mới nhất —
+  // fix bug stale closure: trước đây computeFrac giữ width=1 của lần render đầu
+  // nên kéo đâu cũng ra frac=1 → nhảy 100%.
+  const widthRef = useRef(1);
+  const originXRef = useRef(0);
+  const lenRef = useRef(1);
+  const onSeekRef = useRef(onSeek);
+  const trackRef = useRef<View | null>(null);
+
   const len = Math.max(1, charLength);
+  lenRef.current = len;
+  onSeekRef.current = onSeek;
   const charsPerSec = Math.max(0.5, CHARS_PER_SEC * (rate || 1));
   const totalSec = charLength / charsPerSec;
-  const frac = Math.min(1, Math.max(0, (drag ?? charIndex) / len));
+  const frac = clamp01((drag ?? charIndex) / len);
   const posSec = frac * totalSec;
 
-  const computeFrac = (x: number) => Math.min(1, Math.max(0, x / Math.max(1, width)));
+  const fracFromPageX = (pageX: number) => {
+    const w = Math.max(1, widthRef.current);
+    return clamp01((pageX - originXRef.current) / w);
+  };
 
   const pan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (e) => setDrag(computeFrac(e.nativeEvent.locationX)),
-      onPanResponderMove: (e) => setDrag(computeFrac(e.nativeEvent.locationX)),
-      onPanResponderRelease: (e) => {
-        const f = computeFrac(e.nativeEvent.locationX);
-        setDrag(null);
-        onSeek(Math.floor(f * charLength));
+      onPanResponderGrant: (e) => {
+        // Đo tọa độ tuyệt đối của track — không dùng locationX (tương đối theo
+        // view con được chạm, cho giá trị rác khi chạm trúng thumb/fill).
+        trackRef.current?.measure((_x, _y, _w, _h, pageX) => {
+          originXRef.current = pageX;
+          setDrag(fracFromPageX(e.nativeEvent.pageX));
+        });
       },
+      onPanResponderMove: (e) => setDrag(fracFromPageX(e.nativeEvent.pageX)),
+      onPanResponderRelease: (e) => {
+        const f = fracFromPageX(e.nativeEvent.pageX);
+        setDrag(null);
+        onSeekRef.current(Math.floor(f * lenRef.current));
+      },
+      onPanResponderTerminationRequest: () => false,
       onPanResponderTerminate: () => setDrag(null),
     })
   ).current;
 
-  const onLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width);
+  const onLayout = (e: LayoutChangeEvent) => {
+    const w = e.nativeEvent.layout.width;
+    widthRef.current = Math.max(1, w);
+    setWidth(widthRef.current);
+  };
 
   return (
     <View style={styles.wrap}>
-      <View {...pan.panHandlers} onLayout={onLayout} style={styles.hitArea} collapsable={false}>
+      <View
+        ref={trackRef}
+        {...pan.panHandlers}
+        onLayout={onLayout}
+        style={styles.hitArea}
+        collapsable={false}
+      >
         <View style={[styles.track, { backgroundColor: t.bgSubtle }]}>
           <View style={[styles.fill, { width: `${frac * 100}%`, backgroundColor: t.primary }]} />
           <View style={[styles.thumb, { backgroundColor: t.primary, left: `${Math.min(97, frac * 100)}%` }]} />
