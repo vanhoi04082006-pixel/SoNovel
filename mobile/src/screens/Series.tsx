@@ -36,7 +36,7 @@ import { getChapterContent } from '../lib/chapters';
 import { invalidateCache } from '../lib/dataCache';
 import { useReadMarkers } from '../lib/readMarkers';
 import { useMiniPlayerPad } from '../lib/useMiniPlayerPad';
-import { IllustrationsTab } from '../components/series/IllustrationsTab';
+import { IllustrationsTab, type IllustIndexHandle } from '../components/series/IllustrationsTab';
 
 type SeriesRouteProp = RouteProp<RootStackParamList, 'Series'>;
 
@@ -55,6 +55,7 @@ export function SeriesScreen({ route }: { route: SeriesRouteProp }) {
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<'info' | 'chapters' | 'illustrations'>('info');
   const seriesScrollRef = useRef<ScrollView | null>(null);
+  const illustIndexRef = useRef<IllustIndexHandle | null>(null);
   const [search, setSearch] = useState('');
   const [visibleChapters, setVisibleChapters] = useState(100);
   const np = getNowPlaying();
@@ -285,7 +286,7 @@ export function SeriesScreen({ route }: { route: SeriesRouteProp }) {
           </View>
         ) : tab === 'illustrations' ? (
           <View style={styles.section}>
-            {seriesId ? <IllustrationsTab seriesId={seriesId} parentScrollRef={seriesScrollRef} /> : null}
+            {seriesId ? <IllustrationsTab ref={illustIndexRef} seriesId={seriesId} parentScrollRef={seriesScrollRef} /> : null}
           </View>
         ) : (
           <View style={styles.section}>
@@ -384,6 +385,35 @@ export function SeriesScreen({ route }: { route: SeriesRouteProp }) {
           </View>
         )}
       </ScrollView>
+      {/* Nút mục lục sát rìa trái — nằm ngoài ScrollView nên không trôi khi cuộn */}
+      {tab === 'illustrations' && seriesId ? (
+        <Pressable
+          onPress={() => illustIndexRef.current?.openIndex()}
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: '42%',
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            backgroundColor: t.primary,
+            borderTopRightRadius: 999,
+            borderBottomRightRadius: 999,
+            paddingLeft: 8,
+            paddingRight: 12,
+            paddingVertical: 12,
+            elevation: 6,
+            shadowColor: '#000',
+            shadowOpacity: 0.25,
+            shadowRadius: 6,
+            shadowOffset: { width: 0, height: 2 },
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Mở mục lục minh họa"
+        >
+          <Icon name="list" size={20} color="#fff" />
+        </Pressable>
+      ) : null}
     </SafeAreaView>
   );
 }

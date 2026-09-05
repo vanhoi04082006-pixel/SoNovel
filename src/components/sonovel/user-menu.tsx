@@ -1,6 +1,6 @@
 'use client'
 
-import { LogOut, Shield, User as UserIcon, Settings as SettingsIcon, Bookmark, Info, BarChart3 } from 'lucide-react'
+import { LogOut, Shield, User as UserIcon, Settings as SettingsIcon, Bookmark, Info, BarChart3, Download } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import {
   DropdownMenu,
@@ -63,6 +63,9 @@ export function UserMenu() {
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => navigate({ view: 'settings' })} className="cursor-pointer">
           <SettingsIcon className="h-4 w-4 mr-2" /> Cài đặt
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => navigate({ view: 'about' })} className="cursor-pointer">
+          <Download className="h-4 w-4 mr-2" /> Tải app
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => navigate({ view: 'about' })} className="cursor-pointer">
           <Info className="h-4 w-4 mr-2" /> Giới thiệu

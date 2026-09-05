@@ -1,35 +1,49 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react';
 import {
   ActivityIndicator,
   Animated,
   Dimensions,
-  findNodeHandle,
-  Image,
+  Image as RNImage,
   Modal,
   Pressable,
   ScrollView,
   Text,
   View,
 } from 'react-native';
-import type { RefObject } from 'react';
+import { Image } from 'expo-image';
 import { useTheme, TYPO } from '../../theme';
 import { Icon } from '../ui/Icon';
 import type { IllustrationRow } from '../../lib/illustrations';
 import { getIllustrations } from '../../lib/illustrations';
 
 const DRAWER_WIDTH = Math.min(300, Dimensions.get('window').width * 0.78);
+const BATCH = 6;
+
+export type IllustIndexHandle = {
+  openIndex: () => void;
+};
 
 type Props = {
   seriesId: string;
-  /** ScrollView ngoài của màn Series — dùng để cuộn 1 luồng (không ScrollView lồng). */
-  parentScrollRef: RefObject<ScrollView | null>;
+  /** ScrollView ngoài của màn Series — cuộn 1 luồng duy nhất. */
+  parentScrollRef: React.RefObject<ScrollView | null>;
 };
 
 /**
- * Tab Minh họa (mobile): nút mục lục sát rìa trái + ảnh thumb nhẹ (giữ tỉ lệ),
- * bấm mới tải full. Khớp web: chữ (thông tin ảnh) trên, ảnh dưới, đúng thứ tự.
+ * Tab Minh họa (mobile): ảnh thumb nhẹ theo đợt + lightbox full.
+ * Mục lục mở qua ref (nút nổi do màn Series render ngoài ScrollView nên không trôi).
+ * Cuộn bằng Y cộng dồn từ onLayout — xác định, không phụ thuộc native measure.
  */
-export function IllustrationsTab({ seriesId, parentScrollRef }: Props) {
+export const IllustrationsTab = forwardRef<IllustIndexHandle, Props>(function IllustrationsTab(
+  { seriesId, parentScrollRef },
+  ref
+) {
   const t = useTheme();
   const [items, setItems] = useState<IllustrationRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +51,9 @@ export function IllustrationsTab({ seriesId, parentScrollRef }: Props) {
   const [fullUri, setFullUri] = useState<string | null>(null);
   const [activeIdx, setActiveIdx] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const rowRefs = useRef<Record<number, View | null>>({});
+  const [visibleCount, setVisibleCount] = useState(BATCH);
+  const heights = useRef<Record<number, number>>({});
+  const containerY = useRef(0);
   const slideX = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
 
   useEffect(() => {
@@ -46,8 +62,15 @@ export function IllustrationsTab({ seriesId, parentScrollRef }: Props) {
     setError(null);
     setActiveIdx(0);
     setDrawerOpen(false);
+    setVisibleCount(BATCH);
+    heights.current = {};
     getIllustrations(seriesId)
-      .then((rows) => { if (!cancelled) setItems(rows); })
+      .then((rows) => {
+        if (cancelled) return;
+        setItems(rows);
+        // Prefetch thumb đợt đầu để lướt mượt
+        rows.slice(0, BATCH).forEach((r) => Image.prefetch(r.thumbUrl).catch(() => {}));
+      })
       .catch((e: any) => { if (!cancelled) setError(e?.message ?? 'Không tải được ảnh minh họa'); });
     return () => { cancelled = true; };
   }, [seriesId]);
@@ -61,18 +84,26 @@ export function IllustrationsTab({ seriesId, parentScrollRef }: Props) {
     }).start();
   };
 
-  // Cuộn bằng ScrollView NGOÀI (1 luồng cuộn duy nhất) — bấm mục nào tới ảnh đó.
+  useImperativeHandle(ref, () => ({ openIndex: () => setDrawer(true) }), []);
+
+  const yOf = (i: number): number | null => {
+    if (!items) return null;
+    let y = containerY.current;
+    for (let k = 0; k < i; k++) {
+      const h = heights.current[k];
+      if (typeof h !== 'number') return null; // chưa đo xong → không đoán
+      y += h + 16; // gap 16 giữa các ảnh
+    }
+    return Math.max(0, y - 12);
+  };
+
   const scrollTo = (i: number, closeDrawer = true) => {
     setActiveIdx(i);
-    const parent = parentScrollRef.current;
-    const row = rowRefs.current[i];
-    if (parent && row) {
-      const node = findNodeHandle(parent);
-      if (node) {
-        row.measureLayout(node, (_x, y) => {
-          parent.scrollTo({ y: Math.max(0, y - 12), animated: true });
-        }, () => {});
-      }
+    const y = yOf(i);
+    if (y !== null) {
+      parentScrollRef.current?.scrollTo({ y, animated: true });
+    } else {
+      console.warn(`[SoNovel][illust] chưa đo được Y của ảnh ${i + 1}, bỏ qua cuộn`);
     }
     if (closeDrawer) setDrawer(false);
   };
@@ -113,22 +144,28 @@ export function IllustrationsTab({ seriesId, parentScrollRef }: Props) {
     );
   }
 
-  const cur = items[activeIdx];
+  const shown = items.slice(0, visibleCount);
+
+  const showMore = () => {
+    const next = Math.min(items.length, visibleCount + BATCH);
+    items.slice(visibleCount, next).forEach((r) => Image.prefetch(r.thumbUrl).catch(() => {}));
+    setVisibleCount(next);
+  };
 
   return (
-    <View>
-      {/* Vị trí đang xem */}
+    <View
+      onLayout={(e) => { containerY.current = e.nativeEvent.layout.y; }}
+    >
       <Text style={[TYPO.caption, { color: t.textMuted, marginBottom: 8 }]}>
-        {items.length} ảnh{cur ? ` · Đang xem ${activeIdx + 1}` : ''}
+        {items.length} ảnh · Đang xem {Math.min(activeIdx + 1, shown.length)}/{shown.length}
       </Text>
 
-      {/* Cột ảnh: thumb nhẹ trước, giữ nguyên tỉ lệ */}
-      <View style={{ gap: 16, paddingBottom: 24 }}>
-        {items.map((it, i) => (
+      {/* Ảnh theo đợt 6 — thumb nhẹ trước, giữ nguyên tỉ lệ */}
+      <View style={{ gap: 16, paddingBottom: 8 }}>
+        {shown.map((it, i) => (
           <View
             key={it.id || i}
-            ref={(el) => { rowRefs.current[i] = el; }}
-            collapsable={false}
+            onLayout={(e) => { heights.current[i] = e.nativeEvent.layout.height; }}
             style={{ gap: 6 }}
           >
             <Text style={[TYPO.bodySm, { color: t.text, fontWeight: '600' }]}>
@@ -145,35 +182,18 @@ export function IllustrationsTab({ seriesId, parentScrollRef }: Props) {
           </View>
         ))}
       </View>
-
-      {/* Nút mục lục sát rìa trái màn hình */}
-      <Pressable
-        onPress={() => setDrawer(!drawerOpen)}
-        style={{
-          position: 'absolute',
-          left: 0,
-          top: 120,
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 4,
-          backgroundColor: t.primary,
-          borderTopRightRadius: 999,
-          borderBottomRightRadius: 999,
-          paddingLeft: 8,
-          paddingRight: 12,
-          paddingVertical: 12,
-          elevation: 6,
-          shadowColor: '#000',
-          shadowOpacity: 0.25,
-          shadowRadius: 6,
-          shadowOffset: { width: 0, height: 2 },
-        }}
-        accessibilityRole="button"
-        accessibilityLabel={drawerOpen ? 'Thu mục lục' : 'Mở mục lục minh họa'}
-      >
-        <Icon name="list" size={20} color="#fff" />
-        <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{items.length}</Text>
-      </Pressable>
+      {visibleCount < items.length && (
+        <Pressable
+          onPress={showMore}
+          style={{ borderWidth: 1, borderColor: t.border, borderRadius: 12, paddingVertical: 12, alignItems: 'center', marginBottom: 24 }}
+          accessibilityRole="button"
+          accessibilityLabel={`Xem thêm ảnh, còn ${items.length - visibleCount}`}
+        >
+          <Text style={[TYPO.bodySm, { color: t.primary, fontWeight: '700' }]}>
+            Xem thêm ({items.length - visibleCount} ảnh còn lại)
+          </Text>
+        </Pressable>
+      )}
 
       {/* Ngăn kéo mục lục trái */}
       <Modal visible={drawerOpen} transparent animationType="none" onRequestClose={() => setDrawer(false)}>
@@ -199,7 +219,11 @@ export function IllustrationsTab({ seriesId, parentScrollRef }: Props) {
               {items.map((it, i) => (
                 <Pressable
                   key={it.id || i}
-                  onPress={() => scrollTo(i)}
+                  onPress={() => {
+                    if (i >= visibleCount) setVisibleCount(i + 1);
+                    // Đợi render xong đợt mới rồi mới cuộn
+                    setTimeout(() => scrollTo(i), 60);
+                  }}
                   style={{
                     borderWidth: 1,
                     borderColor: i === activeIdx ? t.primary : 'transparent',
@@ -229,21 +253,22 @@ export function IllustrationsTab({ seriesId, parentScrollRef }: Props) {
           style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center', padding: 16 }}
         >
           {lightbox ? (
-            <Image source={{ uri: lightbox }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+            <Image source={{ uri: lightbox }} style={{ width: '100%', height: '100%' }} contentFit="contain" cachePolicy="memory-disk" />
           ) : null}
           {fullUri && fullUri !== lightbox ? (
             <Image
               source={{ uri: fullUri }}
               style={{ position: 'absolute', width: '100%', height: '100%' }}
-              resizeMode="contain"
-              onLoad={() => setLightbox(fullUri)}
+              contentFit="contain"
+              cachePolicy="memory-disk"
+              onLoad={() => setLightbox((prev) => (prev ? fullUri : prev))}
             />
           ) : null}
         </Pressable>
       </Modal>
     </View>
   );
-}
+});
 
 /** Ảnh thumb nhẹ, giữ nguyên tỉ lệ gốc (contain) + nút thử lại khi lỗi. */
 function IllustrationImage({ uri }: { uri: string }) {
@@ -255,7 +280,7 @@ function IllustrationImage({ uri }: { uri: string }) {
     let cancelled = false;
     setRatio(null);
     setFailed(false);
-    Image.getSize(
+    RNImage.getSize(
       uri,
       (w, h) => { if (!cancelled && w > 0 && h > 0) setRatio(h / w); },
       () => { if (!cancelled) setRatio(9 / 16); }
@@ -283,9 +308,9 @@ function IllustrationImage({ uri }: { uri: string }) {
         key={retryKey}
         source={{ uri }}
         style={{ width: '100%', height: '100%' }}
-        resizeMode="contain"
-        resizeMethod="resize"
-        progressiveRenderingEnabled
+        contentFit="contain"
+        cachePolicy="memory-disk"
+        transition={150}
         onError={() => setFailed(true)}
       />
     </View>

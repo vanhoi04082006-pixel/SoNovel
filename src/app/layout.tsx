@@ -16,6 +16,10 @@ export const metadata: Metadata = {
   keywords: ["SoNovel", "nghe truyện", "truyện chữ", "TTS tiếng Việt", "audiobook Việt"],
   authors: [{ name: "SoNovel" }],
   manifest: "/manifest.json",
+  icons: {
+    icon: "/icon-192.png",
+    apple: "/icon-192.png",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
