@@ -3,7 +3,29 @@ import { EventSubscription } from 'expo-modules-core';
 import { supabase } from './supabase';
 import { getUserId } from './session';
 import { getChapterContent } from './chapters';
-import { nativeTts, TtsState, TtsProgress } from './nativeTts';
+import { nativeTts, hasNativeFn, TtsState, TtsProgress } from './nativeTts';
+
+// Preload an toàn: giới hạn size chống TransactionTooLarge, await + warn rõ
+const PRELOAD_MAX_CHARS = 60000;
+async function preloadNextSafe(chapterNumber: number, title: string, content: string): Promise<boolean> {
+  try {
+    if (!content || content.length > PRELOAD_MAX_CHARS) {
+      if (content && content.length > PRELOAD_MAX_CHARS) {
+        console.warn(`[SoNovel][tts] bỏ preload chương ${chapterNumber}: quá dài (${content.length} chars)`);
+      }
+      return false;
+    }
+    if (!hasNativeFn('preloadNext')) {
+      console.warn('[SoNovel][tts] native thiếu preloadNext — cần APK mới, bỏ qua preload');
+      return false;
+    }
+    await nativeTts.preloadNext(chapterNumber, title, content);
+    return true;
+  } catch (e: any) {
+    console.warn('[SoNovel][tts] preloadNext thất bại:', e?.message ?? e);
+    return false;
+  }
+}
 import { workerJson } from './worker';
 import { saveSession } from './progress';
 import { invalidateCache } from './dataCache';
@@ -535,9 +557,10 @@ function wireNative() {
       emitLocal('nowPlaying')
       // Preload tiếp chương sau native auto-next
       if (currentIndex + 1 < chapters.length) {
-        ensureChapterContent(currentIndex + 1).then((nc) => {
-          const nxt = chapters[currentIndex + 1]
-          if (nc && nxt) { try { (nativeTts as any).preloadNext(currentIndex + 2, nxt.title, nc); } catch {} }
+        const nextIdx = currentIndex + 1;
+        ensureChapterContent(nextIdx).then((nc) => {
+          const nxt = chapters[nextIdx]
+          if (nc && nxt) void preloadNextSafe(nextIdx + 1, nxt.title, nc);
         }).catch(() => {});
       }
     } else {
@@ -665,11 +688,10 @@ export async function startTts(opts: {
     // Prefetch chương kế tiếp vào cache để chuyển chương không bị lag
     // + preloadNative để tự chuyển khi tắt màn hình (JS ngủ native vẫn tự phát)
     if (currentIndex + 1 < chapters.length) {
-      ensureChapterContent(currentIndex + 1).then((c) => {
-        const nxt = chapters[currentIndex + 1]
-        if (c && nxt) {
-          try { (nativeTts as any).preloadNext(currentIndex + 2, nxt.title, c); } catch {}
-        }
+      const nextIdx = currentIndex + 1;
+      ensureChapterContent(nextIdx).then((c) => {
+        const nxt = chapters[nextIdx]
+        if (c && nxt) void preloadNextSafe(nextIdx + 1, nxt.title, c);
       }).catch(() => {});
     }
     // busy + UI sẽ được sync bởi polling (getState mỗi 1s)
@@ -734,9 +756,10 @@ async function sendPlayChapter(idx: number, startChar: number) {
     console.log(`[SoNovel][tts] playChapter(${idx + 1}) đã gửi native (${content.length} ký tự)`);
     // Preload chương kế tiếp cho native auto-next khi tắt màn hình
     if (idx + 1 < chapters.length) {
-      ensureChapterContent(idx + 1).then((nc) => {
-        const nxt = chapters[idx + 1]
-        if (nc && nxt) { try { (nativeTts as any).preloadNext(idx + 2, nxt.title, nc); } catch {} }
+      const nextIdx = idx + 1;
+      ensureChapterContent(nextIdx).then((nc) => {
+        const nxt = chapters[nextIdx]
+        if (nc && nxt) void preloadNextSafe(nextIdx + 1, nxt.title, nc);
       }).catch(() => {});
     }
     // Watchdog chuyển chương: nếu sau 4s vẫn không phát được (im lặng giữa 2 chương

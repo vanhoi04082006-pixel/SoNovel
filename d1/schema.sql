@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS series (
   genres TEXT NOT NULL DEFAULT '[]',       -- JSON array ["a","b"]
   tags TEXT NOT NULL DEFAULT '[]',         -- JSON array ["a","b"]
   word_count INTEGER NOT NULL DEFAULT 0,
+  view_count INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
@@ -36,6 +37,7 @@ CREATE TABLE IF NOT EXISTS series (
 CREATE INDEX IF NOT EXISTS idx_series_status_updated ON series(status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_series_title ON series(title);
 CREATE INDEX IF NOT EXISTS idx_series_author ON series(author);
+CREATE INDEX IF NOT EXISTS idx_series_view_count ON series(view_count DESC);
 
 -- chapters: chương truyện — CHỈ draft/published
 CREATE TABLE IF NOT EXISTS chapters (

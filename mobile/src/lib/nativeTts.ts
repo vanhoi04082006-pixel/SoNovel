@@ -107,7 +107,12 @@ const noopAsync = () => Promise.reject(new Error('Native module SonovelTts khôn
 export const nativeTts: SonovelTtsModule = new Proxy({} as SonovelTtsModule, {
   get(_target, prop) {
     if (_nativeModule) {
-      return (prop in _nativeModule) ? (_nativeModule as any)[prop] : undefined;
+      if ((prop as string) in _nativeModule) return (_nativeModule as any)[prop as string];
+      // APK cũ thiếu hàm mới (vd preloadNext) → reject rõ thay vì TypeError undefined
+      if (typeof prop === 'string') {
+        return () => Promise.reject(new Error(`Native SonovelTts thiếu hàm ${prop} — cần build APK mới.`));
+      }
+      return undefined;
     }
     // Fallback khi module không có
     if (typeof prop === 'string') {
@@ -116,6 +121,12 @@ export const nativeTts: SonovelTtsModule = new Proxy({} as SonovelTtsModule, {
     return undefined;
   },
 });
+
+export const hasNativeFn = (name: keyof SonovelTtsApi): boolean => {
+  try {
+    return !!_nativeModule && typeof (_nativeModule as any)[name] === 'function';
+  } catch { return false }
+};
 
 // Export flag để UI check
 export const isNativeTtsAvailable = () => _nativeModule !== null;

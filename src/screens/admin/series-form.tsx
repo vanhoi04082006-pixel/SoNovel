@@ -288,7 +288,7 @@ export function AdminSeriesForm({ seriesId }: { seriesId?: string }) {
                       </div>
                     </div>
                   </div>
-                  <Input value={it.caption} onChange={(e) => updateIllust(idx, { caption: e.target.value })} placeholder={`Thông tin ảnh ${idx + 1} — hiện phía trên ảnh, làm mục lục…`} />
+                  <Input value={it.caption} maxLength={500} onChange={(e) => updateIllust(idx, { caption: e.target.value.slice(0, 500) })} placeholder={`Thông tin ảnh ${idx + 1} — hiện phía trên ảnh, làm mục lục… (tối đa 500 ký tự)`} />
                 </div>
               ))}
               <Button variant="outline" size="sm" onClick={() => setIllustrations((prev) => [...prev, { imageUrl: '', caption: '' }])}>

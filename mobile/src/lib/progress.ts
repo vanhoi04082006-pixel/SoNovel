@@ -14,6 +14,7 @@ export type SeriesRow = {
   genres: string[];
   tags: string[];
   word_count: number;
+  view_count?: number;
   updated_at: string;
   created_at: string;
 };
@@ -68,6 +69,7 @@ function mapSeries(w: any): SeriesRow {
     genres: w.genres ?? [],
     tags: w.tags ?? [],
     word_count: w.wordCount ?? w.word_count ?? 0,
+    view_count: w.viewCount ?? w.view_count ?? 0,
     updated_at: w.updatedAt ?? w.updated_at ?? '',
     created_at: w.createdAt ?? w.created_at ?? '',
   };
@@ -107,7 +109,7 @@ export async function listSeries(opts?: {
   limit?: number;
   offset?: number;
   status?: string[];
-  orderBy?: 'updated_at' | 'title' | 'word_count';
+  orderBy?: 'updated_at' | 'title' | 'word_count' | 'view_count';
   ascending?: boolean;
   search?: string;
   genre?: string;
@@ -122,7 +124,7 @@ export async function listSeries(opts?: {
     genre,
     tag,
   } = opts ?? {};
-  const sort = orderBy === 'title' ? 'title' : orderBy === 'word_count' ? 'chapters' : 'new';
+  const sort = orderBy === 'title' ? 'title' : orderBy === 'word_count' ? 'chapters' : orderBy === 'view_count' ? 'views' : 'new';
   const sp = new URLSearchParams({
     limit: String(limit),
     offset: String(offset),

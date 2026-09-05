@@ -22,16 +22,25 @@ type IllustrationItem = { id: string; imageUrl: string; caption: string; orderNo
 /** Tab Minh họa: mục lục chip (từ thông tin ảnh) + danh sách chữ trên / ảnh dưới. */
 function IllustrationsTab({ seriesId }: { seriesId: string }) {
   const [items, setItems] = useState<IllustrationItem[] | null>(null)
+  const [lightbox, setLightbox] = useState<string | null>(null)
   const rowRefs = useRef<(HTMLDivElement | null)[]>([])
 
   useEffect(() => {
     let cancelled = false
     setItems(null)
+    rowRefs.current = []
     api.getIllustrations(seriesId)
       .then((r) => { if (!cancelled) setItems(r.items) })
       .catch(() => { if (!cancelled) setItems([]) })
     return () => { cancelled = true }
   }, [seriesId])
+
+  useEffect(() => {
+    if (!lightbox) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setLightbox(null) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [lightbox])
 
   if (items === null) {
     return (
@@ -69,9 +78,17 @@ function IllustrationsTab({ seriesId }: { seriesId: string }) {
             {it.caption || `Ảnh ${i + 1}`}
           </p>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={it.imageUrl} alt={it.caption || `Ảnh ${i + 1}`} loading="lazy" className="w-full rounded-xl border border-border bg-muted" />
+          <button type="button" onClick={() => setLightbox(it.imageUrl)} className="block w-full cursor-zoom-in" aria-label={`Phóng to ${it.caption || `ảnh ${i + 1}`}`}>
+            <img src={it.imageUrl} alt={it.caption || `Ảnh ${i + 1}`} loading="lazy" width={800} height={450} className="w-full rounded-xl border border-border bg-muted aspect-video object-cover" />
+          </button>
         </div>
       ))}
+      {lightbox && (
+        <button type="button" onClick={() => setLightbox(null)} className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4 cursor-zoom-out" aria-label="Đóng ảnh phóng to">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={lightbox} alt="Ảnh minh họa phóng to" className="max-h-full max-w-full rounded-lg object-contain" />
+        </button>
+      )}
     </div>
   )
 }

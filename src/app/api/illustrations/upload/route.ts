@@ -12,12 +12,27 @@ function sniffImage(buf: Uint8Array): boolean {
 }
 
 const rateMap = new Map<string, { c: number; reset: number }>()
+const RATE_CLEANUP_MS = 5 * 60 * 1000
+let lastRateCleanup = 0
 function checkRate(ip: string): boolean {
   const now = Date.now()
+  if (now - lastRateCleanup > RATE_CLEANUP_MS) {
+    lastRateCleanup = now
+    for (const [k, v] of rateMap) if (v.reset <= now) rateMap.delete(k)
+    if (rateMap.size > 2000) {
+      const keys = Array.from(rateMap.keys()).slice(0, rateMap.size - 2000)
+      for (const k of keys) rateMap.delete(k)
+    }
+  }
   const e = rateMap.get(ip)
   if (!e || e.reset <= now) { rateMap.set(ip, { c: 1, reset: now + 60_000 }); return true }
   if (e.c >= 20) return false
   e.c++; return true
+}
+function clientIp(req: NextRequest): string {
+  return req.headers.get('x-real-ip')?.split(',')[0]?.trim()
+    || req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+    || 'anon'
 }
 
 // POST /api/illustrations/upload — admin upload ảnh minh họa qua imgBB
@@ -25,7 +40,7 @@ function checkRate(ip: string): boolean {
 export async function POST(req: NextRequest) {
   try {
     await requireAdmin()
-    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'anon'
+    const ip = clientIp(req)
     if (!checkRate(ip)) return NextResponse.json({ error: 'Quá nhiều yêu cầu, thử lại sau 1 phút.' }, { status: 429 })
     const key = process.env.IMGBB_API_KEY
     if (!key) return NextResponse.json({ error: 'IMGBB_API_KEY chưa cấu hình (Vercel env).' }, { status: 500 })

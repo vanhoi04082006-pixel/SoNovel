@@ -106,6 +106,11 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
     private var nextChapterTitle: String? = null
     private var nextChapterContent: String? = null
     private var nextChapterNumber: Int = -1
+    // Single-flight token chống đua auto-next (native timer vs JS PLAY_CHAPTER tay)
+    @Volatile private var autoToken: Long = 0
+    private var autoRunnable: Runnable? = null
+    // Binder Intent giới hạn ~1MB — preload chương quá dài dễ TransactionTooLarge
+    private val PRELOAD_MAX_CHARS = 60000
 
     // --- Utterance tracking ---
     @Volatile private var currentUtteranceId: String? = null
@@ -234,11 +239,18 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         ensureTts { playFrom(charIndex) }
     }
 
+    private fun cancelAutoNext() {
+        autoToken++
+        autoRunnable?.let { try { main.removeCallbacks(it) } catch (_: Throwable) {} }
+        autoRunnable = null
+    }
+
     private fun handlePlayChapterAction(intent: Intent) {
         val chapterNumber = intent.getIntExtra(EXTRA_CHAPTER_NUMBER, 1)
         val title = intent.getStringExtra(EXTRA_CHAPTER_TITLE) ?: ""
         val content = intent.getStringExtra(EXTRA_CHAPTER_CONTENT) ?: ""
         val ch = intent.getIntExtra(EXTRA_CHAR_INDEX, 0)
+        cancelAutoNext()
         this.chapterTitle = title
         this.chapterContent = content
         this.chapterIndex = maxOf(chapterNumber - 1, 0)
@@ -268,6 +280,15 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
             nextChapterTitle = null
             nextChapterContent = null
             nextChapterNumber = -1
+            return
+        }
+        if (content.length > PRELOAD_MAX_CHARS) {
+            Log.w(TAG, "PRELOAD_NEXT bỏ qua: chương $chapterNumber quá dài (${content.length} chars > $PRELOAD_MAX_CHARS)")
+            return
+        }
+        // Chỉ nhận preload cho chương kế tiếp, tránh preload cũ phát sai
+        if (chapterNumber != chapterIndex + 2) {
+            Log.w(TAG, "PRELOAD_NEXT bỏ qua: chapter=$chapterNumber không phải kế tiếp (đang ${chapterIndex + 1})")
             return
         }
         nextChapterTitle = title
@@ -905,9 +926,13 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
             nextChapterContent = null
             nextChapterNumber = -1
             finished = false
-            main.postDelayed({
+            cancelAutoNext()
+            val token = ++autoToken
+            val r = Runnable {
+                // Single-flight: token đổi nghĩa đã có lệnh mới → bỏ qua
+                if (token != autoToken) return@Runnable
                 // Kiểm tra JS chưa kịp gửi PLAY_CHAPTER (charIndex vẫn 0 và chưa playing)
-                if (!playing && chapterIndex == endedIdx) {
+                if (!playing && chapterIndex == endedIdx && token == autoToken) {
                     chapterTitle = nextTitle
                     chapterContent = nextContent
                     chapterIndex = nextNum - 1
@@ -921,7 +946,9 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
                     emit(Events.ON_CHAPTER_CHANGE, mapOf("chapterIndex" to chapterIndex))
                     ensureTts { playFrom(0) }
                 }
-            }, 400)
+            }
+            autoRunnable = r
+            main.postDelayed(r, 400)
         }
     }
 
@@ -945,6 +972,7 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         playing = false
         engineStarted = false
         cancelWatchdog()
+        cancelAutoNext()
         releaseWakeLock()
         try { tts?.stop() } catch (_: Throwable) {}
         emit(Events.ON_STATE_CHANGE, mapOf("state" to "paused"))
@@ -967,6 +995,10 @@ class TtsService : Service(), TextToSpeech.OnInitListener {
         playing = false
         engineStarted = false
         cancelWatchdog()
+        cancelAutoNext()
+        nextChapterTitle = null
+        nextChapterContent = null
+        nextChapterNumber = -1
         cancelSleepTimer()
         releaseWakeLock()
         try { tts?.stop() } catch (_: Throwable) {}

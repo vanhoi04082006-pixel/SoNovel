@@ -108,7 +108,7 @@ app.get('/api/series', async (c) => {
   const tag = url.searchParams.get('tag') || ''
   const status = url.searchParams.get('status') || 'published,completed'
   const sort = url.searchParams.get('sort') || 'new'
-  if (!['new','title','chapters'].includes(sort)) return c.json({ error: 'sort không hợp lệ (new|title|chapters).' }, 400)
+  if (!['new','title','chapters','views'].includes(sort)) return c.json({ error: 'sort không hợp lệ (new|title|chapters|views).' }, 400)
   const rawLimit = Number(url.searchParams.get('limit') || 24)
   const rawOffset = Number(url.searchParams.get('offset') || 0)
   const limit = Number.isFinite(rawLimit) ? Math.min(48, Math.max(1, Math.trunc(rawLimit))) : 24
@@ -131,6 +131,7 @@ app.get('/api/series', async (c) => {
     let order = 'updated_at DESC'
     if (sort === 'title') order = 'title ASC'
     else if (sort === 'chapters') order = 'chapter_count DESC'
+    else if (sort === 'views') order = 'view_count DESC'
     let total = 0
     let rows: any
     try {
