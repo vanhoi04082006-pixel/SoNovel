@@ -1,5 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Dimensions, Image, Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Animated,
+  Dimensions,
+  findNodeHandle,
+  Image,
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from 'react-native';
+import type { RefObject } from 'react';
 import { useTheme, TYPO } from '../../theme';
 import { Icon } from '../ui/Icon';
 import type { IllustrationRow } from '../../lib/illustrations';
@@ -7,19 +19,25 @@ import { getIllustrations } from '../../lib/illustrations';
 
 const DRAWER_WIDTH = Math.min(300, Dimensions.get('window').width * 0.78);
 
+type Props = {
+  seriesId: string;
+  /** ScrollView ngoài của màn Series — dùng để cuộn 1 luồng (không ScrollView lồng). */
+  parentScrollRef: RefObject<ScrollView | null>;
+};
+
 /**
- * Tab Minh họa (mobile): mục lục ngăn kéo trái (đẩy ra/thu vào) + ảnh giữ nguyên tỉ lệ.
- * Khớp web: chữ (thông tin ảnh) trên, ảnh dưới, theo đúng thứ tự.
+ * Tab Minh họa (mobile): nút mục lục sát rìa trái + ảnh thumb nhẹ (giữ tỉ lệ),
+ * bấm mới tải full. Khớp web: chữ (thông tin ảnh) trên, ảnh dưới, đúng thứ tự.
  */
-export function IllustrationsTab({ seriesId }: { seriesId: string }) {
+export function IllustrationsTab({ seriesId, parentScrollRef }: Props) {
   const t = useTheme();
   const [items, setItems] = useState<IllustrationRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<string | null>(null);
+  const [fullUri, setFullUri] = useState<string | null>(null);
   const [activeIdx, setActiveIdx] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const rowY = useRef<Record<number, number>>({});
-  const listRef = useRef<ScrollView | null>(null);
+  const rowRefs = useRef<Record<number, View | null>>({});
   const slideX = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
 
   useEffect(() => {
@@ -43,6 +61,22 @@ export function IllustrationsTab({ seriesId }: { seriesId: string }) {
     }).start();
   };
 
+  // Cuộn bằng ScrollView NGOÀI (1 luồng cuộn duy nhất) — bấm mục nào tới ảnh đó.
+  const scrollTo = (i: number, closeDrawer = true) => {
+    setActiveIdx(i);
+    const parent = parentScrollRef.current;
+    const row = rowRefs.current[i];
+    if (parent && row) {
+      const node = findNodeHandle(parent);
+      if (node) {
+        row.measureLayout(node, (_x, y) => {
+          parent.scrollTo({ y: Math.max(0, y - 12), animated: true });
+        }, () => {});
+      }
+    }
+    if (closeDrawer) setDrawer(false);
+  };
+
   if (items === null && !error) {
     return (
       <View style={{ paddingVertical: 32, alignItems: 'center' }}>
@@ -54,6 +88,20 @@ export function IllustrationsTab({ seriesId }: { seriesId: string }) {
     return (
       <View style={{ paddingVertical: 24, alignItems: 'center', gap: 8 }}>
         <Text style={[TYPO.bodySm, { color: t.textMuted, textAlign: 'center' }]}>{error}</Text>
+        <Pressable
+          onPress={() => {
+            setError(null);
+            setItems(null);
+            getIllustrations(seriesId)
+              .then((rows) => setItems(rows))
+              .catch((e: any) => setError(e?.message ?? 'Không tải được ảnh minh họa'));
+          }}
+          style={{ borderWidth: 1, borderColor: t.border, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel="Thử tải lại ảnh minh họa"
+        >
+          <Text style={[TYPO.bodySm, { color: t.primary, fontWeight: '600' }]}>Thử lại</Text>
+        </Pressable>
       </View>
     );
   }
@@ -65,40 +113,66 @@ export function IllustrationsTab({ seriesId }: { seriesId: string }) {
     );
   }
 
-  const scrollTo = (i: number, closeDrawer = true) => {
-    setActiveIdx(i);
-    const y = rowY.current[i];
-    if (typeof y === 'number') listRef.current?.scrollTo({ y: Math.max(0, y - 8), animated: true });
-    if (closeDrawer) setDrawer(false);
-  };
-
   const cur = items[activeIdx];
 
   return (
     <View>
-      {/* Thanh mục lục: bấm để đẩy ngăn kéo trái ra/thu vào */}
+      {/* Vị trí đang xem */}
+      <Text style={[TYPO.caption, { color: t.textMuted, marginBottom: 8 }]}>
+        {items.length} ảnh{cur ? ` · Đang xem ${activeIdx + 1}` : ''}
+      </Text>
+
+      {/* Cột ảnh: thumb nhẹ trước, giữ nguyên tỉ lệ */}
+      <View style={{ gap: 16, paddingBottom: 24 }}>
+        {items.map((it, i) => (
+          <View
+            key={it.id || i}
+            ref={(el) => { rowRefs.current[i] = el; }}
+            collapsable={false}
+            style={{ gap: 6 }}
+          >
+            <Text style={[TYPO.bodySm, { color: t.text, fontWeight: '600' }]}>
+              <Text style={{ color: t.primary }}>{i + 1}. </Text>
+              {it.caption || `Ảnh ${i + 1}`}
+            </Text>
+            <Pressable
+              onPress={() => { setFullUri(it.imageUrl); setLightbox(it.thumbUrl); }}
+              accessibilityRole="imagebutton"
+              accessibilityLabel={`Phóng to ${it.caption || `ảnh ${i + 1}`}`}
+            >
+              <IllustrationImage uri={it.thumbUrl} />
+            </Pressable>
+          </View>
+        ))}
+      </View>
+
+      {/* Nút mục lục sát rìa trái màn hình */}
       <Pressable
         onPress={() => setDrawer(!drawerOpen)}
         style={{
+          position: 'absolute',
+          left: 0,
+          top: 120,
           flexDirection: 'row',
           alignItems: 'center',
-          gap: 8,
-          borderWidth: 1,
-          borderColor: t.border,
-          borderRadius: 12,
-          paddingHorizontal: 12,
-          paddingVertical: 10,
-          backgroundColor: t.bgSubtle,
-          marginBottom: 12,
+          gap: 4,
+          backgroundColor: t.primary,
+          borderTopRightRadius: 999,
+          borderBottomRightRadius: 999,
+          paddingLeft: 8,
+          paddingRight: 12,
+          paddingVertical: 12,
+          elevation: 6,
+          shadowColor: '#000',
+          shadowOpacity: 0.25,
+          shadowRadius: 6,
+          shadowOffset: { width: 0, height: 2 },
         }}
         accessibilityRole="button"
         accessibilityLabel={drawerOpen ? 'Thu mục lục' : 'Mở mục lục minh họa'}
       >
-        <Icon name="list" size={18} color={t.primary} />
-        <Text style={[TYPO.bodySm, { color: t.text, fontWeight: '600', flex: 1 }]} numberOfLines={1}>
-          Mục lục ({items.length}){cur ? ` · Đang xem ${activeIdx + 1}` : ''}
-        </Text>
-        <Icon name={drawerOpen ? 'chevron-back' : 'chevron-forward'} size={16} color={t.textMuted} />
+        <Icon name="list" size={20} color="#fff" />
+        <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{items.length}</Text>
       </Pressable>
 
       {/* Ngăn kéo mục lục trái */}
@@ -148,38 +222,22 @@ export function IllustrationsTab({ seriesId }: { seriesId: string }) {
         </View>
       </Modal>
 
-      {/* Cột ảnh giữ nguyên tỉ lệ */}
-      <ScrollView
-        ref={listRef}
-        showsVerticalScrollIndicator={false}
-        scrollEventThrottle={16}
-        contentContainerStyle={{ gap: 16, paddingBottom: 24 }}
-      >
-        {items.map((it, i) => (
-          <View
-            key={it.id || i}
-            onLayout={(e) => { rowY.current[i] = e.nativeEvent.layout.y; }}
-            style={{ gap: 6 }}
-          >
-            <Text style={[TYPO.bodySm, { color: t.text, fontWeight: '600' }]}>
-              <Text style={{ color: t.primary }}>{i + 1}. </Text>
-              {it.caption || `Ảnh ${i + 1}`}
-            </Text>
-            <Pressable onPress={() => setLightbox(it.imageUrl)} accessibilityRole="imagebutton" accessibilityLabel={`Phóng to ${it.caption || `ảnh ${i + 1}`}`}>
-              <IllustrationImage uri={it.imageUrl} />
-            </Pressable>
-          </View>
-        ))}
-      </ScrollView>
-
-      {/* Lightbox */}
-      <Modal visible={lightbox !== null} transparent animationType="fade" onRequestClose={() => setLightbox(null)}>
+      {/* Lightbox: hiện thumb ngay, full tải nền rồi swap */}
+      <Modal visible={lightbox !== null} transparent animationType="fade" onRequestClose={() => { setLightbox(null); setFullUri(null); }}>
         <Pressable
-          onPress={() => setLightbox(null)}
+          onPress={() => { setLightbox(null); setFullUri(null); }}
           style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center', padding: 16 }}
         >
           {lightbox ? (
             <Image source={{ uri: lightbox }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+          ) : null}
+          {fullUri && fullUri !== lightbox ? (
+            <Image
+              source={{ uri: fullUri }}
+              style={{ position: 'absolute', width: '100%', height: '100%' }}
+              resizeMode="contain"
+              onLoad={() => setLightbox(fullUri)}
+            />
           ) : null}
         </Pressable>
       </Modal>
@@ -187,23 +245,49 @@ export function IllustrationsTab({ seriesId }: { seriesId: string }) {
   );
 }
 
-/** Ảnh giữ nguyên tỉ lệ gốc (contain): đo kích thước thật rồi tính chiều cao theo. */
+/** Ảnh thumb nhẹ, giữ nguyên tỉ lệ gốc (contain) + nút thử lại khi lỗi. */
 function IllustrationImage({ uri }: { uri: string }) {
   const t = useTheme();
   const [ratio, setRatio] = useState<number | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
   useEffect(() => {
     let cancelled = false;
     setRatio(null);
+    setFailed(false);
     Image.getSize(
       uri,
       (w, h) => { if (!cancelled && w > 0 && h > 0) setRatio(h / w); },
       () => { if (!cancelled) setRatio(9 / 16); }
     );
     return () => { cancelled = true; };
-  }, [uri]);
+  }, [uri, retryKey]);
+  if (failed) {
+    return (
+      <View style={{ width: '100%', minHeight: 160, backgroundColor: t.bgSubtle, borderRadius: 12, borderWidth: 1, borderColor: t.border, justifyContent: 'center', alignItems: 'center', gap: 8, padding: 16 }}>
+        <Text style={[TYPO.caption, { color: t.textMuted, textAlign: 'center' }]}>Không tải được ảnh (mạng yếu?).</Text>
+        <Pressable
+          onPress={() => setRetryKey((k) => k + 1)}
+          style={{ borderWidth: 1, borderColor: t.border, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel="Thử tải lại ảnh"
+        >
+          <Text style={[TYPO.bodySm, { color: t.primary, fontWeight: '600' }]}>Thử lại</Text>
+        </Pressable>
+      </View>
+    );
+  }
   return (
     <View style={{ width: '100%', aspectRatio: ratio ? 1 / ratio : 16 / 9, backgroundColor: t.bgSubtle, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: t.border }}>
-      <Image source={{ uri }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+      <Image
+        key={retryKey}
+        source={{ uri }}
+        style={{ width: '100%', height: '100%' }}
+        resizeMode="contain"
+        resizeMethod="resize"
+        progressiveRenderingEnabled
+        onError={() => setFailed(true)}
+      />
     </View>
   );
 }

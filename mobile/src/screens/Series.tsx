@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -54,6 +54,7 @@ export function SeriesScreen({ route }: { route: SeriesRouteProp }) {
   const [fav, setFav] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<'info' | 'chapters' | 'illustrations'>('info');
+  const seriesScrollRef = useRef<ScrollView | null>(null);
   const [search, setSearch] = useState('');
   const [visibleChapters, setVisibleChapters] = useState(100);
   const np = getNowPlaying();
@@ -190,7 +191,7 @@ export function SeriesScreen({ route }: { route: SeriesRouteProp }) {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={['top']}>
-      <ScrollView contentContainerStyle={{ paddingBottom: pad + 96 }} showsVerticalScrollIndicator={false}>
+      <ScrollView ref={seriesScrollRef} contentContainerStyle={{ paddingBottom: pad + 96 }} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.headerWrap}>
           <LinearGradient colors={[t.gradientPrimary[0], 'transparent']} style={styles.headerGlow} />
@@ -284,7 +285,7 @@ export function SeriesScreen({ route }: { route: SeriesRouteProp }) {
           </View>
         ) : tab === 'illustrations' ? (
           <View style={styles.section}>
-            {seriesId ? <IllustrationsTab seriesId={seriesId} /> : null}
+            {seriesId ? <IllustrationsTab seriesId={seriesId} parentScrollRef={seriesScrollRef} /> : null}
           </View>
         ) : (
           <View style={styles.section}>

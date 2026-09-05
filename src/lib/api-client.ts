@@ -140,8 +140,8 @@ export const api = {
   },
   getSeries: (id: string) => json<SeriesDetail>(`/api/series/${id}`),
   getRelated: (id: string, limit = 6) => json<{ items: SeriesItem[] }>(`/api/series/${id}/related?limit=${limit}`),
-  getIllustrations: (seriesId: string) => json<{ items: Array<{ id: string; imageUrl: string; caption: string; orderNo: number }> }>(`/api/series/${seriesId}/illustrations`),
-  saveIllustrations: (seriesId: string, items: Array<{ imageUrl: string; caption: string }>) =>
+  getIllustrations: (seriesId: string) => json<{ items: Array<{ id: string; imageUrl: string; thumbUrl?: string; caption: string; orderNo: number }> }>(`/api/series/${seriesId}/illustrations`),
+  saveIllustrations: (seriesId: string, items: Array<{ imageUrl: string; thumbUrl?: string; caption: string }>) =>
     json<{ ok: boolean; count: number }>(`/api/series/${seriesId}/illustrations`, { method: 'PUT', body: JSON.stringify({ items }) }),
   getSiteSetting: (key: string) => json<{ key: string; value: string }>(`/api/site-settings/${encodeURIComponent(key)}`),
   saveSiteSetting: (key: string, value: string) =>

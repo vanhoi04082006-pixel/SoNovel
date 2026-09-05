@@ -68,8 +68,9 @@ function DownloadAppCard() {
           <div className="flex items-center gap-3">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><Download className="h-5 w-5" /></span>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold">{ios ? 'iPhone (PWA)' : 'iPhone & Máy tính (PWA)'}</p>
-              <p className="text-xs text-muted-foreground">{ios ? 'Cài từ Safari, không cần App Store' : 'Bấm là cài, không cần cửa hàng ứng dụng'}</p>
+            <p className="text-sm font-semibold">{ios ? 'iPhone (PWA)' : 'iPhone & Máy tính (PWA)'}</p>
+            <p className="text-xs text-muted-foreground">{ios ? 'Cài từ Safari, không cần App Store' : 'Bấm là cài, không cần cửa hàng ứng dụng'}</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">Lưu ý: nghe tắt màn hình ổn định nhất vẫn là app Android ở trên (giới hạn trình duyệt).</p>
             </div>
             <Button size="sm" onClick={installNow}>Cài ngay</Button>
           </div>

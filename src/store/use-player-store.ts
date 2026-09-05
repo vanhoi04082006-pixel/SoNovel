@@ -133,6 +133,54 @@ function ensureVoices() {
   }
 }
 
+// ---- background keepalive (best-effort, PWA): giữ 1 audio gần-im-lặng để trình duyệt
+// coi trang "đang phát", ít throttle timer/TTS khi tắt màn hình. KHÔNG đảm bảo như APK
+// (giới hạn trình duyệt, nhất là iOS Safari) — muốn nghe tắt màn hình ổn định thì dùng app Android.
+let keepAliveCtx: AudioContext | null = null
+let keepAliveNode: AudioBufferSourceNode | null = null
+function startKeepAlive() {
+  try {
+    if (typeof window === 'undefined') return
+    const AC = window.AudioContext || (window as any).webkitAudioContext
+    if (!AC) return
+    if (!keepAliveCtx) keepAliveCtx = new AC()
+    if (keepAliveCtx.state === 'suspended') keepAliveCtx.resume().catch(() => {})
+    if (keepAliveNode) return
+    const len = keepAliveCtx.sampleRate
+    const buf = keepAliveCtx.createBuffer(1, len, keepAliveCtx.sampleRate)
+    keepAliveNode = keepAliveCtx.createBufferSource()
+    keepAliveNode.buffer = buf
+    keepAliveNode.loop = true
+    const gain = keepAliveCtx.createGain()
+    gain.gain.value = 0.001
+    keepAliveNode.connect(gain)
+    gain.connect(keepAliveCtx.destination)
+    keepAliveNode.start()
+  } catch {}
+}
+function stopKeepAlive() {
+  try { keepAliveNode?.stop() } catch {}
+  keepAliveNode = null
+}
+
+let visibilityWired = false
+function ensureVisibilityResume() {
+  if (visibilityWired || typeof document === 'undefined') return
+  visibilityWired = true
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return
+    try {
+      const st = usePlayerStore.getState()
+      if (!st.isPlaying || st.seriesEnded || st.chapters.length === 0) return
+      const s = getSynth()
+      if (!s) return
+      // Trình duyệt hay pause synth khi ẩn trang → nối lại đúng vị trí đã lưu
+      if (s.paused) s.resume()
+      else if (!s.speaking) st.resume()
+    } catch {}
+  })
+}
+
 export const usePlayerStore = create<PlayerState>((set, get) => {
   // ---- internal: speak current chunk ----
   const speakCurrentChunk = () => {
@@ -302,6 +350,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     startSaveTimer()
     startSleepTimer()
     startSessionTimer()
+    startKeepAlive()
+    ensureVisibilityResume()
     flushSave()
     // Prefetch the following chapter so next is near-instant.
     prefetchChapter(index + 1)
@@ -456,6 +506,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     stopSaveTimer()
     stopSleepTimer()
     stopSessionTimer()
+    stopKeepAlive()
   }
 
   const updateMediaSession = () => {
@@ -570,6 +621,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
         get().emit('stateChange', { isPlaying: true })
         startSaveTimer()
         startSleepTimer()
+        startKeepAlive()
+        ensureVisibilityResume()
       } else {
         // cold start → restart from currentChar
         playChapterInternal(st.currentIndex, st.currentChar)

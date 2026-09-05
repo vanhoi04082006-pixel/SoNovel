@@ -137,6 +137,7 @@ CREATE TABLE IF NOT EXISTS series_illustrations (
   series_id TEXT NOT NULL REFERENCES series(id) ON DELETE CASCADE,
   order_no INTEGER NOT NULL DEFAULT 0,
   image_url TEXT NOT NULL,
+  thumb_url TEXT NOT NULL DEFAULT '',
   caption TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );

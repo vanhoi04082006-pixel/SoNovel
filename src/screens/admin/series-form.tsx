@@ -20,7 +20,7 @@ const STATUSES = [
   { key: 'hidden', label: 'Ẩn' },
 ]
 
-type IllustrationRow = { imageUrl: string; caption: string }
+type IllustrationRow = { imageUrl: string; thumbUrl?: string; caption: string }
 
 export function AdminSeriesForm({ seriesId }: { seriesId?: string }) {
   const { navigate } = useAppStore()
@@ -60,7 +60,7 @@ export function AdminSeriesForm({ seriesId }: { seriesId?: string }) {
         }
         try {
           const ill = await api.getIllustrations(seriesId)
-          setIllustrations(ill.items.map((it) => ({ imageUrl: it.imageUrl, caption: it.caption || '' })))
+          setIllustrations(ill.items.map((it) => ({ imageUrl: it.imageUrl, thumbUrl: (it as any).thumbUrl || '', caption: it.caption || '' })))
         } catch {}
       }
     })()
@@ -106,7 +106,7 @@ export function AdminSeriesForm({ seriesId }: { seriesId?: string }) {
     try {
       const r = await api.uploadIllustration(file)
       if (r.url) {
-        updateIllust(idx, { imageUrl: r.url })
+        updateIllust(idx, { imageUrl: r.url, thumbUrl: r.thumbUrl || '' })
         toast.success('Đã tải ảnh minh họa lên imgBB.')
       } else toast.error(r.error || 'Tải ảnh thất bại.')
     } catch (e) {

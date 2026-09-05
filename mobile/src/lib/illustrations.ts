@@ -4,12 +4,13 @@ import { withCache, DEFAULT_TTL_MS } from './dataCache';
 export type IllustrationRow = {
   id: string;
   imageUrl: string;
+  thumbUrl: string;
   caption: string;
   orderNo: number;
 };
 
 type IllustrationsResponse = {
-  items: Array<{ id: string; imageUrl: string; caption: string; orderNo: number }>;
+  items: Array<{ id: string; imageUrl: string; thumbUrl?: string; caption: string; orderNo: number }>;
 };
 
 /** Danh sách ảnh minh họa của 1 bộ truyện (public, sắp theo order_no). */
@@ -22,6 +23,7 @@ export async function getIllustrations(seriesId: string): Promise<IllustrationRo
     return (j.items ?? []).map((it) => ({
       id: it.id,
       imageUrl: it.imageUrl,
+      thumbUrl: it.thumbUrl || it.imageUrl,
       caption: it.caption || '',
       orderNo: it.orderNo ?? 0,
     }));

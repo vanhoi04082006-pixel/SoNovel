@@ -1,5 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/session'
+import sharp from 'sharp'
+
+async function uploadToImgBB(key: string, b64: string): Promise<any> {
+  const fd = new FormData()
+  fd.append('image', b64)
+  const res = await fetch(`https://api.imgbb.com/1/upload?key=${key}`, { method: 'POST', body: fd })
+  const j: any = await res.json().catch(() => null)
+  if (!res.ok || !j?.success) throw new Error(j?.error?.message || `imgBB upload failed ${res.status}`)
+  return j.data
+}
 
 function sniffImage(buf: Uint8Array): boolean {
   if (buf.length < 12) return false
@@ -52,23 +62,24 @@ export async function POST(req: NextRequest) {
 
     const buf = Buffer.from(await file.arrayBuffer())
     if (!sniffImage(new Uint8Array(buf))) return NextResponse.json({ error: 'File không phải ảnh hợp lệ (PNG/JPEG/GIF/WEBP/BMP).' }, { status: 400 })
-    const b64 = buf.toString('base64')
 
-    const fd = new FormData()
-    fd.append('image', b64)
-
-    const res = await fetch(`https://api.imgbb.com/1/upload?key=${key}`, {
-      method: 'POST',
-      body: fd,
-    })
-    const j: any = await res.json().catch(() => null)
-    if (!res.ok || !j?.success) {
-      const msg = j?.error?.message || `imgBB upload failed ${res.status}`
-      return NextResponse.json({ error: msg }, { status: 500 })
+    // Bản gốc up nguyên vẹn; đồng thời sinh bản preview ~800px (vài chục KB)
+    // để app hiện ngay khi mạng yếu, bấm vào mới tải full.
+    let previewBuf: Buffer
+    try {
+      previewBuf = await sharp(buf).rotate().resize({ width: 800, withoutEnlargement: true }).jpeg({ quality: 70 }).toBuffer()
+    } catch {
+      return NextResponse.json({ error: 'Không đọc được file ảnh.' }, { status: 400 })
     }
-    const url = j.data?.url || j.data?.display_url || j.data?.image?.url
-    if (!url) return NextResponse.json({ error: 'imgBB không trả về URL.' }, { status: 500 })
-    return NextResponse.json({ ok: true, url, thumb: j.data?.thumb?.url || j.data?.display_url, data: j.data })
+
+    const [full, preview] = await Promise.all([
+      uploadToImgBB(key, buf.toString('base64')),
+      uploadToImgBB(key, previewBuf.toString('base64')),
+    ])
+    const url = full?.url || full?.display_url || full?.image?.url
+    const thumbUrl = preview?.url || preview?.display_url || preview?.image?.url
+    if (!url || !thumbUrl) return NextResponse.json({ error: 'imgBB không trả về URL.' }, { status: 500 })
+    return NextResponse.json({ ok: true, url, thumbUrl, thumb: preview?.thumb?.url || thumbUrl })
   } catch (e) {
     const msg = (e as Error).message
     if (msg === 'UNAUTHORIZED' || msg === 'FORBIDDEN') {

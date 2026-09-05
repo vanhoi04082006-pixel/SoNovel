@@ -17,7 +17,27 @@ import { toast } from 'sonner'
 import { usePlayerStore, type PlayerChapter } from '@/store/use-player-store'
 import { estMinutes, formatCharCount } from '@/lib/format'
 
-type IllustrationItem = { id: string; imageUrl: string; caption: string; orderNo: number }
+type IllustrationItem = { id: string; imageUrl: string; thumbUrl?: string; caption: string; orderNo: number }
+
+function IllustImage({ it, index, onOpen }: { it: IllustrationItem; index: number; onOpen: () => void }) {
+  const [failed, setFailed] = useState(false)
+  const [retryKey, setRetryKey] = useState(0)
+  const src = it.thumbUrl || it.imageUrl
+  if (failed) {
+    return (
+      <div className="flex flex-col items-center gap-2 rounded-xl border border-border bg-muted py-10 text-center">
+        <p className="text-xs text-muted-foreground">Không tải được ảnh (mạng yếu?).</p>
+        <Button size="sm" variant="outline" onClick={() => { setFailed(false); setRetryKey((k) => k + 1) }}>Thử lại</Button>
+      </div>
+    )
+  }
+  return (
+    <button type="button" onClick={onOpen} className="block w-full cursor-zoom-in" aria-label={`Phóng to ${it.caption || `ảnh ${index + 1}`}`}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img key={retryKey} src={src} alt={it.caption || `Ảnh ${index + 1}`} loading="lazy" onError={() => setFailed(true)} className="h-auto w-full rounded-xl border border-border bg-muted" />
+    </button>
+  )
+}
 
 /** Tab Minh họa: mục lục sticky cột trái (desktop) + danh sách chữ trên / ảnh dưới giữ tỉ lệ gốc. */
 function IllustrationsTab({ seriesId }: { seriesId: string }) {
@@ -96,10 +116,7 @@ function IllustrationsTab({ seriesId }: { seriesId: string }) {
               <span className="text-primary mr-1.5">{i + 1}.</span>
               {it.caption || `Ảnh ${i + 1}`}
             </p>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <button type="button" onClick={() => setLightbox(it.imageUrl)} className="block w-full cursor-zoom-in" aria-label={`Phóng to ${it.caption || `ảnh ${i + 1}`}`}>
-              <img src={it.imageUrl} alt={it.caption || `Ảnh ${i + 1}`} loading="lazy" className="h-auto w-full rounded-xl border border-border bg-muted" />
-            </button>
+            <IllustImage it={it} index={i} onOpen={() => setLightbox(it.imageUrl)} />
           </div>
         ))}
       </div>

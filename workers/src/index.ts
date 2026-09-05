@@ -200,8 +200,8 @@ app.get('/api/series/:id/related', async (c) => {
 app.get('/api/series/:id/illustrations', async (c) => {
   const id = c.req.param('id')
   const result = await cachedFetch(`illust:${id}`, 60_000, async () => {
-    const rows = await c.env.DB.prepare('SELECT id, order_no, image_url, caption FROM series_illustrations WHERE series_id=? ORDER BY order_no ASC').bind(id).all<any>()
-    return { items: (rows.results ?? []).map((r) => ({ id: r.id, imageUrl: r.image_url, caption: r.caption || '', orderNo: r.order_no })) }
+    const rows = await c.env.DB.prepare('SELECT id, order_no, image_url, thumb_url, caption FROM series_illustrations WHERE series_id=? ORDER BY order_no ASC').bind(id).all<any>()
+    return { items: (rows.results ?? []).map((r) => ({ id: r.id, imageUrl: r.image_url, thumbUrl: r.thumb_url || r.image_url, caption: r.caption || '', orderNo: r.order_no })) }
   })
   return c.json(result)
 })
@@ -223,8 +223,8 @@ app.put('/api/series/:id/illustrations', async (c) => {
     const url = String(it?.imageUrl || '').trim()
     if (!url) continue
     stmts.push(
-      db.prepare('INSERT INTO series_illustrations (id, series_id, order_no, image_url, caption, created_at) VALUES (?,?,?,?,?,?)')
-        .bind(uuid(), id, count, url.slice(0, 2000), String(it?.caption || '').slice(0, 500), now)
+      db.prepare('INSERT INTO series_illustrations (id, series_id, order_no, image_url, thumb_url, caption, created_at) VALUES (?,?,?,?,?,?,?)')
+        .bind(uuid(), id, count, url.slice(0, 2000), String(it?.thumbUrl || '').slice(0, 2000), String(it?.caption || '').slice(0, 500), now)
     )
     count++
   }
