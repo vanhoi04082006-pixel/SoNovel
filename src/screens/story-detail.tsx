@@ -120,9 +120,15 @@ function IllustrationsTab({ seriesId }: { seriesId: string }) {
     }
   }
 
-  const scrollToSection = (si: number) => {
-    if (collapsed.has(si)) toggleSection(si)
-    setTimeout(() => sectionRefs.current[si]?.scrollIntoView({ behavior: 'smooth', block: 'start' }), collapsed.has(si) ? 80 : 0)
+  // Bấm tên mục TRONG MỤC LỤC: đang mở → thu gọn (cả list mục lục lẫn khối ảnh);
+  // đang thu → mở ra + cuộn tới. Chung 1 state collapsed với khối ảnh.
+  const toggleSectionFromIndex = (si: number) => {
+    if (collapsed.has(si)) {
+      toggleSection(si)
+      setTimeout(() => sectionRefs.current[si]?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80)
+    } else {
+      toggleSection(si)
+    }
   }
 
   const indexItemBtn = (it: IllustrationItem, i: number, vertical: boolean) => (
@@ -147,11 +153,16 @@ function IllustrationsTab({ seriesId }: { seriesId: string }) {
           {sections.map((s, si) => (
             <span key={si} className="flex shrink-0 items-center gap-2">
               {s.title && (
-                <button onClick={() => scrollToSection(si)} className="shrink-0 rounded-full bg-primary/15 px-3 py-1 text-xs font-semibold text-primary">
+                <button
+                  onClick={() => toggleSectionFromIndex(si)}
+                  className={`flex shrink-0 items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${collapsed.has(si) ? 'border border-border text-muted-foreground' : 'bg-primary/15 text-primary'}`}
+                  aria-expanded={!collapsed.has(si)}
+                >
+                  <ChevronDown className={`h-3 w-3 transition-transform ${collapsed.has(si) ? '-rotate-90' : ''}`} />
                   {s.title}
                 </button>
               )}
-              {s.rows.map(({ it, idx }) => indexItemBtn(it, idx, false))}
+              {!collapsed.has(si) && s.rows.map(({ it, idx }) => indexItemBtn(it, idx, false))}
             </span>
           ))}
         </div>
@@ -161,13 +172,20 @@ function IllustrationsTab({ seriesId }: { seriesId: string }) {
             {sections.map((s, si) => (
               <div key={si}>
                 {s.title && (
-                  <button onClick={() => scrollToSection(si)} className="mb-1 block w-full truncate rounded-lg bg-primary/15 px-3 py-1.5 text-left text-xs font-semibold text-primary hover:bg-primary/25">
-                    {s.title} ({s.rows.length})
+                  <button
+                    onClick={() => toggleSectionFromIndex(si)}
+                    className="mb-1 flex w-full items-center justify-between gap-1 rounded-lg bg-primary/15 px-3 py-1.5 text-left text-xs font-semibold text-primary hover:bg-primary/25"
+                    aria-expanded={!collapsed.has(si)}
+                  >
+                    <span className="truncate">{s.title} ({s.rows.length})</span>
+                    <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${collapsed.has(si) ? '-rotate-90' : ''}`} />
                   </button>
                 )}
-                <div className="space-y-1">
-                  {s.rows.map(({ it, idx }) => indexItemBtn(it, idx, true))}
-                </div>
+                {!collapsed.has(si) && (
+                  <div className="space-y-1">
+                    {s.rows.map(({ it, idx }) => indexItemBtn(it, idx, true))}
+                  </div>
+                )}
               </div>
             ))}
           </div>

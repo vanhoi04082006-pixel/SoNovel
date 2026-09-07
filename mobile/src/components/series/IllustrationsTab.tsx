@@ -188,6 +188,21 @@ export const IllustrationsTab = forwardRef<IllustIndexHandle, Props>(function Il
     setVisibleCount(Math.min(items.length, visibleCount + BATCH));
   };
 
+  // Bấm tên mục TRONG MỤC LỤC: đang mở → thu gọn (cả drawer lẫn khối ảnh,
+  // chung state collapsed); đang thu → mở ra + cuộn tới ảnh đầu mục.
+  const toggleSectionFromIndex = (si: number) => {
+    const first = sections[si]?.rows[0];
+    if (collapsed.has(si)) {
+      toggleSection(si);
+      if (first) {
+        if (first.idx >= visibleCount) setVisibleCount(first.idx + 1);
+        setTimeout(() => scrollTo(si, first.idx, false), 150);
+      }
+    } else {
+      toggleSection(si);
+    }
+  };
+
   return (
     <View
       onLayout={(e) => { containerY.current = e.nativeEvent.layout.y; }}
@@ -295,21 +310,26 @@ export const IllustrationsTab = forwardRef<IllustIndexHandle, Props>(function Il
                 <View key={`idx-sec-${si}`} style={{ gap: 4 }}>
                   {s.title ? (
                     <Pressable
-                      onPress={() => {
-                        const first = s.rows[0];
-                        if (!first) return;
-                        if (first.idx >= visibleCount) setVisibleCount(first.idx + 1);
-                        setTimeout(() => scrollTo(si, first.idx), 120);
+                      onPress={() => toggleSectionFromIndex(si)}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        backgroundColor: collapsed.has(si) ? 'transparent' : t.primarySoft,
+                        borderRadius: 8,
+                        paddingHorizontal: 10,
+                        paddingVertical: 7,
                       }}
                       accessibilityRole="button"
-                      accessibilityLabel={`Tới mục ${s.title}`}
+                      accessibilityLabel={`${collapsed.has(si) ? 'Mở' : 'Thu gọn'} mục ${s.title}`}
                     >
-                      <Text style={[TYPO.caption, { color: t.primary, fontWeight: '700', paddingHorizontal: 10, paddingTop: 4 }]}>
+                      <Text style={[TYPO.caption, { color: t.primary, fontWeight: '700', flex: 1 }]} numberOfLines={1}>
                         {s.title} ({s.rows.length})
                       </Text>
+                      <Icon name={collapsed.has(si) ? 'chevron-forward' : 'chevron-down'} size={15} color={t.primary} />
                     </Pressable>
                   ) : null}
-                  {s.rows.map(({ it, idx: i }) => (
+                  {!collapsed.has(si) && s.rows.map(({ it, idx: i }) => (
                     <Pressable
                       key={it.id || i}
                       onPress={() => {
