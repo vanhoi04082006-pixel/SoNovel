@@ -88,6 +88,18 @@ export const IllustrationsTab = forwardRef<IllustIndexHandle, Props>(function Il
     }).start();
   };
 
+  // Prefetch CHẶN 1 đợt kế (tối đa BATCH link) để lướt tiếp hiện ngay —
+  // không prefetch toàn bộ, tránh nghẽn mạng.
+  useEffect(() => {
+    if (!items) return;
+    const next = items.slice(visibleCount, visibleCount + BATCH);
+    if (next.length === 0) return;
+    const t = setTimeout(() => {
+      next.forEach((r) => Image.prefetch(r.imageUrl).catch(() => {}));
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [items, visibleCount]);
+
   useImperativeHandle(ref, () => ({ openIndex: () => setDrawer(true) }), []);
 
   // Y tuyệt đối trong ScrollView ngoài = containerY + sectionY + rowY (đo thật qua onLayout,
