@@ -20,7 +20,7 @@ const STATUSES = [
   { key: 'hidden', label: 'Ẩn' },
 ]
 
-type IllustrationRow = { imageUrl: string; thumbUrl?: string; caption: string }
+type IllustrationRow = { imageUrl: string; thumbUrl?: string; groupName?: string; caption: string }
 
 export function AdminSeriesForm({ seriesId }: { seriesId?: string }) {
   const { navigate } = useAppStore()
@@ -62,7 +62,7 @@ export function AdminSeriesForm({ seriesId }: { seriesId?: string }) {
         }
         try {
           const ill = await api.getIllustrations(seriesId)
-          setIllustrations(ill.items.map((it) => ({ imageUrl: it.imageUrl, thumbUrl: (it as any).thumbUrl || '', caption: it.caption || '' })))
+          setIllustrations(ill.items.map((it) => ({ imageUrl: it.imageUrl, thumbUrl: (it as any).thumbUrl || '', groupName: (it as any).groupName || '', caption: it.caption || '' })))
         } catch {}
       }
     })()
@@ -318,7 +318,7 @@ export function AdminSeriesForm({ seriesId }: { seriesId?: string }) {
             <CardHeader className="pb-2"><CardTitle className="text-base">Ảnh minh họa</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <p className="text-xs text-muted-foreground">
-                Tab «Minh họa» hiển thị: thông tin ảnh (chữ) phía trên, ảnh phía dưới. Mục lục được tạo tự động từ thông tin các ảnh.
+                Tab «Minh họa» hiển thị: thông tin ảnh (chữ) phía trên, ảnh phía dưới. Đặt cùng tên «Mục» cho các ảnh để gom thành 1 mục thu gọn được (VD: Nhân vật chính). Mục xếp theo ảnh đầu tiên của nó.
               </p>
               {illustrations.map((it, idx) => (
                 <div key={idx} className="rounded-lg border border-border p-3 space-y-2 bg-muted/20">
@@ -356,7 +356,21 @@ export function AdminSeriesForm({ seriesId }: { seriesId?: string }) {
                       </div>
                     </div>
                   </div>
-                  <Input value={it.caption} maxLength={500} onChange={(e) => updateIllust(idx, { caption: e.target.value.slice(0, 500) })} placeholder={`Thông tin ảnh ${idx + 1} — hiện phía trên ảnh, làm mục lục… (tối đa 500 ký tự)`} />
+                  <div className="flex gap-2">
+                    <Input
+                      value={it.groupName || ''}
+                      onChange={(e) => updateIllust(idx, { groupName: e.target.value.slice(0, 200) })}
+                      placeholder="Mục (VD: Nhân vật chính) — để trống = Ảnh chung"
+                      list={`illust-groups-${seriesId || 'new'}`}
+                      className="max-w-56"
+                    />
+                    <Input value={it.caption} maxLength={500} onChange={(e) => updateIllust(idx, { caption: e.target.value.slice(0, 500) })} placeholder={`Thông tin ảnh ${idx + 1} — hiện phía trên ảnh, làm mục lục… (tối đa 500 ký tự)`} />
+                  </div>
+                  <datalist id={`illust-groups-${seriesId || 'new'}`}>
+                    {Array.from(new Set(illustrations.map((g) => (g.groupName || '').trim()).filter(Boolean))).map((g) => (
+                      <option key={g} value={g} />
+                    ))}
+                  </datalist>
                 </div>
               ))}
               <div className="flex flex-wrap gap-1.5">

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { Heart, Share2, Play, Headphones, ChevronLeft, BookOpen, Search as SearchIcon, Volume2, Bookmark } from 'lucide-react'
+import { Heart, Share2, Play, Headphones, ChevronLeft, ChevronDown, BookOpen, Search as SearchIcon, Volume2, Bookmark } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
 import { api, type SeriesDetail, type ChapterItem, type SeriesItem } from '@/lib/api-client'
 import { CoverImage } from '@/components/sonovel/cover-image'
@@ -17,7 +17,22 @@ import { toast } from 'sonner'
 import { usePlayerStore, type PlayerChapter } from '@/store/use-player-store'
 import { estMinutes, formatCharCount } from '@/lib/format'
 
-type IllustrationItem = { id: string; imageUrl: string; thumbUrl?: string; caption: string; orderNo: number }
+type IllustrationItem = { id: string; imageUrl: string; thumbUrl?: string; groupName?: string; caption: string; orderNo: number }
+
+type IllustSection = { title: string | null; rows: { it: IllustrationItem; idx: number }[] }
+
+function groupIllustrations(items: IllustrationItem[]): IllustSection[] {
+  const order: string[] = []
+  const map = new Map<string, { it: IllustrationItem; idx: number }[]>()
+  items.forEach((it, idx) => {
+    const g = (it.groupName || '').trim()
+    if (!map.has(g)) { map.set(g, []); order.push(g) }
+    map.get(g)!.push({ it, idx })
+  })
+  // Ảnh không mục ("") lên đầu dưới tên "Ảnh chung" — chỉ khi có mục khác
+  order.sort((a, b) => (a === '' ? -1 : b === '' ? 1 : 0))
+  return order.map((g) => ({ title: g === '' ? (order.length > 1 ? 'Ảnh chung' : null) : g, rows: map.get(g)! }))
+}
 
 function IllustImage({ it, index, onOpen }: { it: IllustrationItem; index: number; onOpen: () => void }) {
   const [failed, setFailed] = useState(false)
@@ -44,13 +59,17 @@ function IllustrationsTab({ seriesId }: { seriesId: string }) {
   const [items, setItems] = useState<IllustrationItem[] | null>(null)
   const [lightbox, setLightbox] = useState<string | null>(null)
   const [activeIdx, setActiveIdx] = useState(0)
+  const [collapsed, setCollapsed] = useState<Set<number>>(() => new Set())
   const rowRefs = useRef<(HTMLDivElement | null)[]>([])
+  const sectionRefs = useRef<(HTMLDivElement | null)[]>([])
 
   useEffect(() => {
     let cancelled = false
     setItems(null)
     setActiveIdx(0)
+    setCollapsed(new Set())
     rowRefs.current = []
+    sectionRefs.current = []
     api.getIllustrations(seriesId)
       .then((r) => { if (!cancelled) setItems(r.items) })
       .catch(() => { if (!cancelled) setItems([]) })
@@ -75,50 +94,116 @@ function IllustrationsTab({ seriesId }: { seriesId: string }) {
     return <EmptyState icon={BookOpen} title="Chưa có ảnh minh họa" description="Bộ truyện này chưa có ảnh minh họa." />
   }
 
-  const scrollTo = (i: number) => {
-    setActiveIdx(i)
-    rowRefs.current[i]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  const sections = groupIllustrations(items)
+  const toggleSection = (si: number) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev)
+      if (next.has(si)) next.delete(si)
+      else next.add(si)
+      return next
+    })
   }
 
-  const indexList = (vertical: boolean) => (
-    <>
-      {items.map((it, i) => (
-        <button
-          key={it.id || i}
-          onClick={() => scrollTo(i)}
-          className={
-            vertical
-              ? `block w-full truncate rounded-lg border px-3 py-2 text-left text-xs transition-colors ${i === activeIdx ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:border-primary hover:text-primary'}`
-              : `shrink-0 rounded-full border border-border px-3 py-1 text-xs hover:border-primary hover:text-primary transition-colors ${i === activeIdx ? 'border-primary text-primary' : ''}`
-          }
-        >
-          {i + 1}. {it.caption || `Ảnh ${i + 1}`}
-        </button>
-      ))}
-    </>
+  const scrollTo = (i: number) => {
+    const si = sections.findIndex((s) => s.rows.some((r) => r.idx === i))
+    setActiveIdx(i)
+    if (si >= 0 && collapsed.has(si)) {
+      // Mở mục đang thu gọn rồi mới cuộn
+      setCollapsed((prev) => {
+        const next = new Set(prev)
+        next.delete(si)
+        return next
+      })
+      setTimeout(() => rowRefs.current[i]?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80)
+    } else {
+      rowRefs.current[i]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
+
+  const scrollToSection = (si: number) => {
+    if (collapsed.has(si)) toggleSection(si)
+    setTimeout(() => sectionRefs.current[si]?.scrollIntoView({ behavior: 'smooth', block: 'start' }), collapsed.has(si) ? 80 : 0)
+  }
+
+  const indexItemBtn = (it: IllustrationItem, i: number, vertical: boolean) => (
+    <button
+      key={it.id || i}
+      onClick={() => scrollTo(i)}
+      className={
+        vertical
+          ? `block w-full truncate rounded-lg border px-3 py-2 text-left text-xs transition-colors ${i === activeIdx ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:border-primary hover:text-primary'}`
+          : `shrink-0 rounded-full border border-border px-3 py-1 text-xs hover:border-primary hover:text-primary transition-colors ${i === activeIdx ? 'border-primary text-primary' : ''}`
+      }
+    >
+      {i + 1}. {it.caption || `Ảnh ${i + 1}`}
+    </button>
   )
 
   return (
     <div className="md:grid md:grid-cols-[220px_1fr] md:gap-5">
-      {/* Mục lục: mobile chips ngang phía trên, desktop sticky cột trái */}
+      {/* Mục lục chia theo mục: mobile chips ngang, desktop sticky cột trái */}
       <div className="mb-3 md:mb-0">
-        <div className="flex gap-2 overflow-x-auto pb-1 md:hidden">{indexList(false)}</div>
+        <div className="flex gap-2 overflow-x-auto pb-1 md:hidden">
+          {sections.map((s, si) => (
+            <span key={si} className="flex shrink-0 items-center gap-2">
+              {s.title && (
+                <button onClick={() => scrollToSection(si)} className="shrink-0 rounded-full bg-primary/15 px-3 py-1 text-xs font-semibold text-primary">
+                  {s.title}
+                </button>
+              )}
+              {s.rows.map(({ it, idx }) => indexItemBtn(it, idx, false))}
+            </span>
+          ))}
+        </div>
         <div className="hidden md:block md:sticky md:top-20 max-h-[70vh] overflow-y-auto rounded-xl border border-border p-2">
           <p className="px-2 pb-2 pt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Mục lục ({items.length})</p>
-          <div className="space-y-1">{indexList(true)}</div>
+          <div className="space-y-2">
+            {sections.map((s, si) => (
+              <div key={si}>
+                {s.title && (
+                  <button onClick={() => scrollToSection(si)} className="mb-1 block w-full truncate rounded-lg bg-primary/15 px-3 py-1.5 text-left text-xs font-semibold text-primary hover:bg-primary/25">
+                    {s.title} ({s.rows.length})
+                  </button>
+                )}
+                <div className="space-y-1">
+                  {s.rows.map(({ it, idx }) => indexItemBtn(it, idx, true))}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
-      {/* Cột ảnh: giữ nguyên tỉ lệ gốc, không crop */}
+      {/* Cột ảnh theo mục, thu gọn được */}
       <div className="space-y-5 min-w-0">
-        {items.map((it, i) => (
-          <div key={it.id || i} ref={(el) => { rowRefs.current[i] = el }} className="space-y-2 scroll-mt-24">
-            <p className="text-sm font-medium">
-              <span className="text-primary mr-1.5">{i + 1}.</span>
-              {it.caption || `Ảnh ${i + 1}`}
-            </p>
-            <IllustImage it={it} index={i} onOpen={() => setLightbox(it.imageUrl)} />
+        {sections.map((s, si) => {
+          const titledNo = sections.slice(0, si + 1).filter((x) => x.title).length
+          return (
+          <div key={si} ref={(el) => { sectionRefs.current[si] = el }} className="scroll-mt-24 space-y-3">
+            {s.title && (
+              <button
+                onClick={() => toggleSection(si)}
+                className="flex w-full items-center justify-between rounded-xl border border-border bg-muted/40 px-4 py-2.5 text-left hover:border-primary"
+                aria-expanded={!collapsed.has(si)}
+              >
+                <span className="text-sm font-bold">
+                  Mục {titledNo}: {s.title}
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">{s.rows.length} ảnh</span>
+                </span>
+                <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${collapsed.has(si) ? '-rotate-90' : ''}`} />
+              </button>
+            )}
+            {!collapsed.has(si) && s.rows.map(({ it, idx: i }) => (
+              <div key={it.id || i} ref={(el) => { rowRefs.current[i] = el }} className="space-y-2 scroll-mt-24">
+                <p className="text-sm font-medium">
+                  <span className="text-primary mr-1.5">{i + 1}.</span>
+                  {it.caption || `Ảnh ${i + 1}`}
+                </p>
+                <IllustImage it={it} index={i} onOpen={() => setLightbox(it.imageUrl)} />
+              </div>
+            ))}
           </div>
-        ))}
+          )
+        })}
       </div>
       {lightbox && (
         <button type="button" onClick={() => setLightbox(null)} className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4 cursor-zoom-out" aria-label="Đóng ảnh phóng to">

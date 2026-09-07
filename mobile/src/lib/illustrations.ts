@@ -9,12 +9,13 @@ export type IllustrationRow = {
   id: string;
   imageUrl: string;
   thumbUrl: string;
+  groupName: string;
   caption: string;
   orderNo: number;
 };
 
 type IllustrationsResponse = {
-  items: Array<{ id: string; imageUrl: string; thumbUrl?: string; caption: string; orderNo: number }>;
+  items: Array<{ id: string; imageUrl: string; thumbUrl?: string; groupName?: string; caption: string; orderNo: number }>;
 };
 
 function mapRows(items: IllustrationsResponse['items']): IllustrationRow[] {
@@ -22,8 +23,27 @@ function mapRows(items: IllustrationsResponse['items']): IllustrationRow[] {
     id: it.id,
     imageUrl: it.imageUrl,
     thumbUrl: it.thumbUrl || it.imageUrl,
+    groupName: (it.groupName || '').trim(),
     caption: it.caption || '',
     orderNo: it.orderNo ?? 0,
+  }));
+}
+
+export type IllustSection = { title: string | null; rows: { it: IllustrationRow; idx: number }[] };
+
+/** Gom ảnh theo mục (giữ thứ tự): mục xếp theo ảnh đầu tiên của nó. */
+export function groupIllustrations(items: IllustrationRow[]): IllustSection[] {
+  const order: string[] = [];
+  const map = new Map<string, { it: IllustrationRow; idx: number }[]>();
+  items.forEach((it, idx) => {
+    const g = it.groupName;
+    if (!map.has(g)) { map.set(g, []); order.push(g); }
+    map.get(g)!.push({ it, idx });
+  });
+  order.sort((a, b) => (a === '' ? -1 : b === '' ? 1 : 0));
+  return order.map((g) => ({
+    title: g === '' ? (order.length > 1 ? 'Ảnh chung' : null) : g,
+    rows: map.get(g)!,
   }));
 }
 

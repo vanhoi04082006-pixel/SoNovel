@@ -20,7 +20,7 @@ import { Image } from 'expo-image';
 import { useTheme, TYPO } from '../../theme';
 import { Icon } from '../ui/Icon';
 import type { IllustrationRow } from '../../lib/illustrations';
-import { getIllustrations } from '../../lib/illustrations';
+import { getIllustrations, groupIllustrations } from '../../lib/illustrations';
 
 const DRAWER_WIDTH = Math.min(300, Dimensions.get('window').width * 0.78);
 const BATCH = 6;
@@ -52,7 +52,9 @@ export const IllustrationsTab = forwardRef<IllustIndexHandle, Props>(function Il
   const [activeIdx, setActiveIdx] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState(BATCH);
-  const heights = useRef<Record<number, number>>({});
+  const [collapsed, setCollapsed] = useState<Set<number>>(() => new Set());
+  const sectionY = useRef<Record<number, number>>({});
+  const rowY = useRef<Record<string, number>>({});
   const containerY = useRef(0);
   const slideX = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
 
@@ -63,7 +65,9 @@ export const IllustrationsTab = forwardRef<IllustIndexHandle, Props>(function Il
     setActiveIdx(0);
     setDrawerOpen(false);
     setVisibleCount(BATCH);
-    heights.current = {};
+    setCollapsed(new Set());
+    sectionY.current = {};
+    rowY.current = {};
     getIllustrations(seriesId)
       .then((rows) => {
         if (cancelled) return;
@@ -86,26 +90,47 @@ export const IllustrationsTab = forwardRef<IllustIndexHandle, Props>(function Il
 
   useImperativeHandle(ref, () => ({ openIndex: () => setDrawer(true) }), []);
 
-  const yOf = (i: number): number | null => {
-    if (!items) return null;
-    let y = containerY.current;
-    for (let k = 0; k < i; k++) {
-      const h = heights.current[k];
-      if (typeof h !== 'number') return null; // chưa đo xong → không đoán
-      y += h + 16; // gap 16 giữa các ảnh
-    }
-    return Math.max(0, y - 12);
+  // Y tuyệt đối trong ScrollView ngoài = containerY + sectionY + rowY (đo thật qua onLayout,
+  // chính xác kể cả khi thu gọn/mở mục hay ảnh chưa tải xong).
+  const yOf = (si: number, i: number): number | null => {
+    const sy = sectionY.current[si];
+    const ry = rowY.current[`${si}:${i}`];
+    if (typeof sy !== 'number' || typeof ry !== 'number') return null;
+    return Math.max(0, containerY.current + sy + ry - 12);
   };
 
-  const scrollTo = (i: number, closeDrawer = true) => {
-    setActiveIdx(i);
-    const y = yOf(i);
+  const doScrollTo = (si: number, i: number) => {
+    const y = yOf(si, i);
     if (y !== null) {
       parentScrollRef.current?.scrollTo({ y, animated: true });
     } else {
       console.warn(`[SoNovel][illust] chưa đo được Y của ảnh ${i + 1}, bỏ qua cuộn`);
     }
+  };
+
+  const scrollTo = (si: number, i: number, closeDrawer = true) => {
+    setActiveIdx(i);
+    if (collapsed.has(si)) {
+      // Mở mục đang thu gọn rồi đợi layout xong mới cuộn
+      setCollapsed((prev) => {
+        const next = new Set(prev);
+        next.delete(si);
+        return next;
+      });
+      setTimeout(() => doScrollTo(si, i), 150);
+    } else {
+      doScrollTo(si, i);
+    }
     if (closeDrawer) setDrawer(false);
+  };
+
+  const toggleSection = (si: number) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(si)) next.delete(si);
+      else next.add(si);
+      return next;
+    });
   };
 
   if (items === null && !error) {
@@ -145,6 +170,8 @@ export const IllustrationsTab = forwardRef<IllustIndexHandle, Props>(function Il
   }
 
   const shown = items.slice(0, visibleCount);
+  const sections = groupIllustrations(items);
+  let titledSeen = 0;
 
   const showMore = () => {
     setVisibleCount(Math.min(items.length, visibleCount + BATCH));
@@ -158,27 +185,66 @@ export const IllustrationsTab = forwardRef<IllustIndexHandle, Props>(function Il
         {items.length} ảnh · Đang xem {Math.min(activeIdx + 1, shown.length)}/{shown.length}
       </Text>
 
-      {/* Ảnh theo đợt 6 — thumb nhẹ trước, giữ nguyên tỉ lệ */}
+      {/* Ảnh theo mục (thu gọn được), đợt 6 — full gốc, giữ nguyên tỉ lệ */}
       <View style={{ gap: 16, paddingBottom: 8 }}>
-        {shown.map((it, i) => (
-          <View
-            key={it.id || i}
-            onLayout={(e) => { heights.current[i] = e.nativeEvent.layout.height; }}
-            style={{ gap: 6 }}
-          >
-            <Text style={[TYPO.bodySm, { color: t.text, fontWeight: '600' }]}>
-              <Text style={{ color: t.primary }}>{i + 1}. </Text>
-              {it.caption || `Ảnh ${i + 1}`}
-            </Text>
-            <Pressable
-              onPress={() => { setFullUri(null); setLightbox(it.imageUrl); }}
-              accessibilityRole="imagebutton"
-              accessibilityLabel={`Phóng to ${it.caption || `ảnh ${i + 1}`}`}
+        {sections.map((s, si) => {
+          const rows = s.rows.filter(({ idx }) => idx < visibleCount);
+          if (rows.length === 0) return null;
+          const isCollapsed = collapsed.has(si);
+          if (s.title) titledSeen++;
+          const titleNo = s.title ? titledSeen : 0;
+          return (
+            <View
+              key={`sec-${si}`}
+              onLayout={(e) => { sectionY.current[si] = e.nativeEvent.layout.y; }}
+              style={{ gap: 10 }}
             >
-              <IllustrationImage uri={it.imageUrl} />
-            </Pressable>
-          </View>
-        ))}
+              {s.title ? (
+                <Pressable
+                  onPress={() => toggleSection(si)}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    borderWidth: 1,
+                    borderColor: t.border,
+                    backgroundColor: t.bgSubtle,
+                    borderRadius: 12,
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={isCollapsed ? `Mở ${s.title}` : `Thu gọn ${s.title}`}
+                >
+                  <Text style={[TYPO.bodySm, { color: t.text, fontWeight: '700', flex: 1 }]} numberOfLines={1}>
+                    Mục {titleNo}: {s.title}
+                    <Text style={{ color: t.textMuted, fontWeight: '400' }}> · {s.rows.length} ảnh</Text>
+                  </Text>
+                  <Icon name={isCollapsed ? 'chevron-forward' : 'chevron-down'} size={18} color={t.textMuted} />
+                </Pressable>
+              ) : null}
+              {!isCollapsed && rows.map(({ it, idx: i }) => (
+                <View
+                  key={it.id || i}
+                  onLayout={(e) => { rowY.current[`${si}:${i}`] = e.nativeEvent.layout.y; }}
+                  style={{ gap: 6 }}
+                >
+                  <Text style={[TYPO.bodySm, { color: t.text, fontWeight: '600' }]}>
+                    <Text style={{ color: t.primary }}>{i + 1}. </Text>
+                    {it.caption || `Ảnh ${i + 1}`}
+                  </Text>
+                  <Pressable
+                    onPress={() => { setFullUri(null); setLightbox(it.imageUrl); }}
+                    accessibilityRole="imagebutton"
+                    accessibilityLabel={`Phóng to ${it.caption || `ảnh ${i + 1}`}`}
+                  >
+                    <IllustrationImage uri={it.imageUrl} />
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          );
+        })}
       </View>
       {visibleCount < items.length && (
         <Pressable
@@ -213,30 +279,50 @@ export const IllustrationsTab = forwardRef<IllustIndexHandle, Props>(function Il
                 <Icon name="close" size={20} color={t.textMuted} />
               </Pressable>
             </View>
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 4, paddingHorizontal: 12 }}>
-              {items.map((it, i) => (
-                <Pressable
-                  key={it.id || i}
-                  onPress={() => {
-                    if (i >= visibleCount) setVisibleCount(i + 1);
-                    // Đợi render xong đợt mới rồi mới cuộn
-                    setTimeout(() => scrollTo(i), 60);
-                  }}
-                  style={{
-                    borderWidth: 1,
-                    borderColor: i === activeIdx ? t.primary : 'transparent',
-                    borderRadius: 10,
-                    paddingHorizontal: 10,
-                    paddingVertical: 9,
-                    backgroundColor: i === activeIdx ? t.primarySoft : 'transparent',
-                  }}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Tới ${it.caption || `ảnh ${i + 1}`}`}
-                >
-                  <Text numberOfLines={2} style={[TYPO.bodySm, { color: i === activeIdx ? t.primary : t.text, fontWeight: i === activeIdx ? '700' : '400' }]}>
-                    {i + 1}. {it.caption || `Ảnh ${i + 1}`}
-                  </Text>
-                </Pressable>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 12 }}>
+              {sections.map((s, si) => (
+                <View key={`idx-sec-${si}`} style={{ gap: 4 }}>
+                  {s.title ? (
+                    <Pressable
+                      onPress={() => {
+                        const first = s.rows[0];
+                        if (!first) return;
+                        if (first.idx >= visibleCount) setVisibleCount(first.idx + 1);
+                        setTimeout(() => scrollTo(si, first.idx), 120);
+                      }}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Tới mục ${s.title}`}
+                    >
+                      <Text style={[TYPO.caption, { color: t.primary, fontWeight: '700', paddingHorizontal: 10, paddingTop: 4 }]}>
+                        {s.title} ({s.rows.length})
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                  {s.rows.map(({ it, idx: i }) => (
+                    <Pressable
+                      key={it.id || i}
+                      onPress={() => {
+                        if (i >= visibleCount) setVisibleCount(i + 1);
+                        // Đợi render xong đợt mới rồi mới cuộn
+                        setTimeout(() => scrollTo(si, i), 120);
+                      }}
+                      style={{
+                        borderWidth: 1,
+                        borderColor: i === activeIdx ? t.primary : 'transparent',
+                        borderRadius: 10,
+                        paddingHorizontal: 10,
+                        paddingVertical: 9,
+                        backgroundColor: i === activeIdx ? t.primarySoft : 'transparent',
+                      }}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Tới ${it.caption || `ảnh ${i + 1}`}`}
+                    >
+                      <Text numberOfLines={2} style={[TYPO.bodySm, { color: i === activeIdx ? t.primary : t.text, fontWeight: i === activeIdx ? '700' : '400' }]}>
+                        {i + 1}. {it.caption || `Ảnh ${i + 1}`}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
               ))}
             </ScrollView>
           </Animated.View>
