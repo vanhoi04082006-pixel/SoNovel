@@ -38,6 +38,8 @@ export function AdminSeriesForm({ seriesId }: { seriesId?: string }) {
   const [uploading, setUploading] = useState(false)
   const [illustrations, setIllustrations] = useState<IllustrationRow[]>([])
   const [illustUploadingIdx, setIllustUploadingIdx] = useState<number | null>(null)
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null)
+  const [bulkLinks, setBulkLinks] = useState('')
 
   useEffect(() => {
     ;(async () => {
@@ -114,6 +116,72 @@ export function AdminSeriesForm({ seriesId }: { seriesId?: string }) {
     } finally {
       setIllustUploadingIdx(null)
     }
+  }
+
+  const captionFromFileName = (name: string) =>
+    name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim().slice(0, 500)
+
+  // Up hàng loạt: chọn nhiều file 1 lần — mỗi file 1 dòng, caption tự từ tên file
+  const uploadBulkFiles = async (files: FileList | File[] | null) => {
+    if (!files || files.length === 0) return
+    const list = Array.from(files)
+    if (illustrations.length + list.length > 100) {
+      toast.error(`Vượt quá 100 ảnh (đang có ${illustrations.length}, thêm ${list.length}).`)
+      return
+    }
+    setBulkProgress({ done: 0, total: list.length })
+    let ok = 0
+    const fails: string[] = []
+    for (const f of list) {
+      if (!f.type.startsWith('image/') || f.size > 5 * 1024 * 1024) {
+        fails.push(f.name)
+        setBulkProgress((p) => (p ? { ...p, done: p.done + 1 } : p))
+        continue
+      }
+      try {
+        const r = await api.uploadIllustration(f)
+        if (r.url) {
+          setIllustrations((prev) => [...prev, { imageUrl: r.url, thumbUrl: r.thumbUrl || '', caption: captionFromFileName(f.name) }])
+          ok++
+        } else fails.push(f.name)
+      } catch {
+        fails.push(f.name)
+      }
+      setBulkProgress((p) => (p ? { ...p, done: p.done + 1 } : p))
+    }
+    setBulkProgress(null)
+    if (ok > 0) toast.success(`Đã thêm ${ok} ảnh.`)
+    if (fails.length > 0) toast.error(`${fails.length} ảnh lỗi: ${fails.slice(0, 5).join(', ')}${fails.length > 5 ? '…' : ''}`)
+  }
+
+  // Thêm hàng loạt bằng link: mỗi dòng 1 URL, bỏ qua dòng trống/trùng
+  const addBulkLinks = () => {
+    const urls = bulkLinks.split('\n').map((s) => s.trim()).filter(Boolean)
+    if (urls.length === 0) return
+    const have = new Set(illustrations.map((it) => it.imageUrl))
+    const fresh: string[] = []
+    const bad: string[] = []
+    for (const u of urls) {
+      if (!/^https?:\/\/.+/i.test(u) || have.has(u)) { bad.push(u); continue }
+      have.add(u)
+      fresh.push(u)
+    }
+    if (illustrations.length + fresh.length > 100) {
+      toast.error(`Vượt quá 100 ảnh (đang có ${illustrations.length}, thêm ${fresh.length}).`)
+      return
+    }
+    if (fresh.length > 0) {
+      setIllustrations((prev) => [
+        ...prev,
+        ...fresh.map((u) => {
+          const slug = u.split('?')[0].split('/').filter(Boolean).pop() || ''
+          return { imageUrl: u, thumbUrl: '', caption: captionFromFileName(decodeURIComponent(slug)) }
+        }),
+      ])
+      setBulkLinks('')
+      toast.success(`Đã thêm ${fresh.length} link.`)
+    }
+    if (bad.length > 0) toast.warning(`Bỏ qua ${bad.length} dòng (sai link hoặc trùng).`)
   }
 
   const onSave = async () => {
@@ -291,9 +359,26 @@ export function AdminSeriesForm({ seriesId }: { seriesId?: string }) {
                   <Input value={it.caption} maxLength={500} onChange={(e) => updateIllust(idx, { caption: e.target.value.slice(0, 500) })} placeholder={`Thông tin ảnh ${idx + 1} — hiện phía trên ảnh, làm mục lục… (tối đa 500 ký tự)`} />
                 </div>
               ))}
-              <Button variant="outline" size="sm" onClick={() => setIllustrations((prev) => [...prev, { imageUrl: '', caption: '' }])}>
-                <Plus className="h-4 w-4 mr-1" /> Thêm ảnh minh họa
-              </Button>
+              <div className="flex flex-wrap gap-1.5">
+                <Button variant="outline" size="sm" onClick={() => setIllustrations((prev) => [...prev, { imageUrl: '', caption: '' }])}>
+                  <Plus className="h-4 w-4 mr-1" /> Thêm ảnh minh họa
+                </Button>
+                <label className="cursor-pointer">
+                  <Button variant="outline" size="sm" disabled={bulkProgress !== null} asChild>
+                    <span><Upload className="h-4 w-4 mr-1" /> {bulkProgress ? `Đang tải ${bulkProgress.done}/${bulkProgress.total}…` : 'Thêm nhiều ảnh (file)'}</span>
+                  </Button>
+                  <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => {
+                    uploadBulkFiles(e.target.files)
+                    e.currentTarget.value = ''
+                  }} />
+                </label>
+              </div>
+              <div className="space-y-1.5">
+                <Textarea value={bulkLinks} onChange={(e) => setBulkLinks(e.target.value)} rows={3} placeholder={'Dán nhiều link, mỗi dòng 1 link:\nhttps://…/anh-1.jpg\nhttps://…/anh-2.jpg'} />
+                <Button variant="outline" size="sm" onClick={addBulkLinks} disabled={!bulkLinks.trim()}>
+                  <Plus className="h-4 w-4 mr-1" /> Thêm link hàng loạt
+                </Button>
+              </div>
             </CardContent>
           </Card>
 

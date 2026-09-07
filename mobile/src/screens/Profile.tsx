@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
+import Constants from 'expo-constants';
 import { useTheme, TYPO, RADIUS, SPACING } from '../theme';
 import { LoginCTA } from '../components/ui/LoginCTA';
 import { Screen } from '../components/ui/Screen';
@@ -114,6 +115,9 @@ export function ProfileScreen() {
           icon="log-out-outline"
           onPress={onLogout}
         />
+        <Text style={[TYPO.caption, { color: t.textMuted, textAlign: 'center' }]}>
+          SoNovel v{Constants.expoConfig?.version ?? '?'} ({Constants.expoConfig?.android?.versionCode ?? '?'})
+        </Text>
       </View>
     </Screen>
   );
