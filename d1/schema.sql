@@ -139,6 +139,8 @@ CREATE TABLE IF NOT EXISTS series_illustrations (
   image_url TEXT NOT NULL,
   thumb_url TEXT NOT NULL DEFAULT '',
   group_name TEXT NOT NULL DEFAULT '',
+  width INTEGER NOT NULL DEFAULT 0,
+  height INTEGER NOT NULL DEFAULT 0,
   caption TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );

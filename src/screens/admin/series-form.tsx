@@ -20,7 +20,7 @@ const STATUSES = [
   { key: 'hidden', label: 'Ẩn' },
 ]
 
-type IllustrationRow = { imageUrl: string; thumbUrl?: string; groupName?: string; caption: string }
+type IllustrationRow = { imageUrl: string; thumbUrl?: string; groupName?: string; width?: number; height?: number; caption: string }
 
 export function AdminSeriesForm({ seriesId }: { seriesId?: string }) {
   const { navigate } = useAppStore()
@@ -62,7 +62,7 @@ export function AdminSeriesForm({ seriesId }: { seriesId?: string }) {
         }
         try {
           const ill = await api.getIllustrations(seriesId)
-          setIllustrations(ill.items.map((it) => ({ imageUrl: it.imageUrl, thumbUrl: (it as any).thumbUrl || '', groupName: (it as any).groupName || '', caption: it.caption || '' })))
+          setIllustrations(ill.items.map((it) => ({ imageUrl: it.imageUrl, thumbUrl: (it as any).thumbUrl || '', groupName: (it as any).groupName || '', width: (it as any).width || 0, height: (it as any).height || 0, caption: it.caption || '' })))
         } catch {}
       }
     })()
@@ -108,7 +108,7 @@ export function AdminSeriesForm({ seriesId }: { seriesId?: string }) {
     try {
       const r = await api.uploadIllustration(file)
       if (r.url) {
-        updateIllust(idx, { imageUrl: r.url, thumbUrl: r.thumbUrl || '' })
+        updateIllust(idx, { imageUrl: r.url, thumbUrl: r.thumbUrl || '', width: r.width || 0, height: r.height || 0 })
         toast.success('Đã tải ảnh minh họa lên imgBB.')
       } else toast.error(r.error || 'Tải ảnh thất bại.')
     } catch (e) {
@@ -141,7 +141,7 @@ export function AdminSeriesForm({ seriesId }: { seriesId?: string }) {
       try {
         const r = await api.uploadIllustration(f)
         if (r.url) {
-          setIllustrations((prev) => [...prev, { imageUrl: r.url, thumbUrl: r.thumbUrl || '', caption: captionFromFileName(f.name) }])
+          setIllustrations((prev) => [...prev, { imageUrl: r.url, thumbUrl: r.thumbUrl || '', width: r.width || 0, height: r.height || 0, caption: captionFromFileName(f.name) }])
           ok++
         } else fails.push(f.name)
       } catch {

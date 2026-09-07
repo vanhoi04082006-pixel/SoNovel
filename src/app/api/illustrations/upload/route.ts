@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/session'
+import sharp from 'sharp'
 
 async function uploadToImgBB(key: string, b64: string): Promise<any> {
   const fd = new FormData()
@@ -63,10 +64,18 @@ export async function POST(req: NextRequest) {
     if (!sniffImage(new Uint8Array(buf))) return NextResponse.json({ error: 'File không phải ảnh hợp lệ (PNG/JPEG/GIF/WEBP/BMP).' }, { status: 400 })
 
     // Giữ nguyên chất lượng gốc cao nhất — up bản gốc, không nén (ảnh chỉ là link).
+    // Đọc kích thước để app dựng khung ngay, khỏi getSize tải trùng.
+    let width = 0
+    let height = 0
+    try {
+      const meta = await sharp(buf).metadata()
+      width = meta.width || 0
+      height = meta.height || 0
+    } catch {}
     const full = await uploadToImgBB(key, buf.toString('base64'))
     const url = full?.url || full?.display_url || full?.image?.url
     if (!url) return NextResponse.json({ error: 'imgBB không trả về URL.' }, { status: 500 })
-    return NextResponse.json({ ok: true, url, thumbUrl: url, thumb: full?.thumb?.url || url })
+    return NextResponse.json({ ok: true, url, thumbUrl: url, width, height, thumb: full?.thumb?.url || url })
   } catch (e) {
     const msg = (e as Error).message
     if (msg === 'UNAUTHORIZED' || msg === 'FORBIDDEN') {

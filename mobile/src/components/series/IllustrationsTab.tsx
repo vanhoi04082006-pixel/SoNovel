@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   Animated,
   Dimensions,
-  Image as RNImage,
   Modal,
   Pressable,
   ScrollView,
@@ -250,7 +249,7 @@ export const IllustrationsTab = forwardRef<IllustIndexHandle, Props>(function Il
                     accessibilityRole="imagebutton"
                     accessibilityLabel={`Phóng to ${it.caption || `ảnh ${i + 1}`}`}
                   >
-                    <IllustrationImage uri={it.imageUrl} />
+                    <IllustrationImage uri={it.imageUrl} width={it.width} height={it.height} />
                   </Pressable>
                 </View>
               ))}
@@ -366,24 +365,18 @@ export const IllustrationsTab = forwardRef<IllustIndexHandle, Props>(function Il
   );
 });
 
-/** Ảnh gốc full + vòng xoay "đang tải" rõ ràng + nút thử lại khi lỗi. */
-function IllustrationImage({ uri }: { uri: string }) {
+/** Ảnh gốc full + vòng xoay "đang tải" rõ ràng + nút thử lại khi lỗi.
+ * Tỉ lệ khung lấy từ width/height lưu sẵn trong DB — KHÔNG gọi getSize
+ * (getSize tải trùng toàn bộ file qua pipeline khác, gấp đôi data). */
+function IllustrationImage({ uri, width, height }: { uri: string; width?: number; height?: number }) {
   const t = useTheme();
-  const [ratio, setRatio] = useState<number | null>(null);
+  const ratio = width && height && width > 0 && height > 0 ? height / width : null;
   const [failed, setFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
   useEffect(() => {
-    let cancelled = false;
-    setRatio(null);
     setFailed(false);
     setLoaded(false);
-    RNImage.getSize(
-      uri,
-      (w, h) => { if (!cancelled && w > 0 && h > 0) setRatio(h / w); },
-      () => { if (!cancelled) setRatio(9 / 16); }
-    );
-    return () => { cancelled = true; };
   }, [uri, retryKey]);
   if (failed) {
     return (

@@ -10,12 +10,14 @@ export type IllustrationRow = {
   imageUrl: string;
   thumbUrl: string;
   groupName: string;
+  width: number;
+  height: number;
   caption: string;
   orderNo: number;
 };
 
 type IllustrationsResponse = {
-  items: Array<{ id: string; imageUrl: string; thumbUrl?: string; groupName?: string; caption: string; orderNo: number }>;
+  items: Array<{ id: string; imageUrl: string; thumbUrl?: string; groupName?: string; width?: number; height?: number; caption: string; orderNo: number }>;
 };
 
 function mapRows(items: IllustrationsResponse['items']): IllustrationRow[] {
@@ -24,6 +26,8 @@ function mapRows(items: IllustrationsResponse['items']): IllustrationRow[] {
     imageUrl: it.imageUrl,
     thumbUrl: it.thumbUrl || it.imageUrl,
     groupName: (it.groupName || '').trim(),
+    width: it.width || 0,
+    height: it.height || 0,
     caption: it.caption || '',
     orderNo: it.orderNo ?? 0,
   }));
