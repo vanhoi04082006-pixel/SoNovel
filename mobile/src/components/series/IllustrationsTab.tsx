@@ -264,7 +264,7 @@ export const IllustrationsTab = forwardRef<IllustIndexHandle, Props>(function Il
                     accessibilityRole="imagebutton"
                     accessibilityLabel={`Phóng to ${it.caption || `ảnh ${i + 1}`}`}
                   >
-                    <IllustrationImage uri={it.imageUrl} width={it.width} height={it.height} />
+                    <IllustrationImage uri={it.imageUrl} width={it.width} height={it.height} blurhash={it.blurhash} />
                   </Pressable>
                 </View>
               ))}
@@ -385,10 +385,10 @@ export const IllustrationsTab = forwardRef<IllustIndexHandle, Props>(function Il
   );
 });
 
-/** Ảnh gốc full + vòng xoay "đang tải" rõ ràng + nút thử lại khi lỗi.
+/** Ảnh gốc full + placeholder blurhash mờ đúng màu + vòng xoay + nút thử lại.
  * Tỉ lệ khung lấy từ width/height lưu sẵn trong DB — KHÔNG gọi getSize
  * (getSize tải trùng toàn bộ file qua pipeline khác, gấp đôi data). */
-function IllustrationImage({ uri, width, height }: { uri: string; width?: number; height?: number }) {
+function IllustrationImage({ uri, width, height, blurhash }: { uri: string; width?: number; height?: number; blurhash?: string }) {
   const t = useTheme();
   const ratio = width && height && width > 0 && height > 0 ? height / width : null;
   const [failed, setFailed] = useState(false);
@@ -422,6 +422,7 @@ function IllustrationImage({ uri, width, height }: { uri: string; width?: number
         contentFit="contain"
         cachePolicy="memory-disk"
         transition={150}
+        placeholder={blurhash ? { blurhash } : undefined}
         onLoad={() => setLoaded(true)}
         onError={() => setFailed(true)}
       />

@@ -201,8 +201,8 @@ app.get('/api/series/:id/related', async (c) => {
 app.get('/api/series/:id/illustrations', async (c) => {
   const id = c.req.param('id')
   const result = await cachedFetch(`illust:${id}`, 60_000, async () => {
-    const rows = await c.env.DB.prepare('SELECT id, order_no, image_url, thumb_url, group_name, width, height, caption FROM series_illustrations WHERE series_id=? ORDER BY order_no ASC').bind(id).all<any>()
-    return { items: (rows.results ?? []).map((r) => ({ id: r.id, imageUrl: r.image_url, thumbUrl: r.thumb_url || r.image_url, groupName: r.group_name || '', width: r.width || 0, height: r.height || 0, caption: r.caption || '', orderNo: r.order_no })) }
+    const rows = await c.env.DB.prepare('SELECT id, order_no, image_url, thumb_url, group_name, width, height, blurhash, caption FROM series_illustrations WHERE series_id=? ORDER BY order_no ASC').bind(id).all<any>()
+    return { items: (rows.results ?? []).map((r) => ({ id: r.id, imageUrl: r.image_url, thumbUrl: r.thumb_url || r.image_url, groupName: r.group_name || '', width: r.width || 0, height: r.height || 0, blurhash: r.blurhash || '', caption: r.caption || '', orderNo: r.order_no })) }
   })
   return c.json(result)
 })
@@ -224,8 +224,8 @@ app.put('/api/series/:id/illustrations', async (c) => {
     const url = String(it?.imageUrl || '').trim()
     if (!url) continue
     stmts.push(
-      db.prepare('INSERT INTO series_illustrations (id, series_id, order_no, image_url, thumb_url, group_name, width, height, caption, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)')
-        .bind(uuid(), id, count, url.slice(0, 2000), String(it?.thumbUrl || '').slice(0, 2000), String(it?.groupName || '').slice(0, 200), Math.max(0, Math.trunc(Number(it?.width) || 0)), Math.max(0, Math.trunc(Number(it?.height) || 0)), String(it?.caption || '').slice(0, 500), now)
+      db.prepare('INSERT INTO series_illustrations (id, series_id, order_no, image_url, thumb_url, group_name, width, height, blurhash, caption, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+        .bind(uuid(), id, count, url.slice(0, 2000), String(it?.thumbUrl || '').slice(0, 2000), String(it?.groupName || '').slice(0, 200), Math.max(0, Math.trunc(Number(it?.width) || 0)), Math.max(0, Math.trunc(Number(it?.height) || 0)), String(it?.blurhash || '').slice(0, 100), String(it?.caption || '').slice(0, 500), now)
     )
     count++
   }

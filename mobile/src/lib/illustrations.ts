@@ -12,12 +12,13 @@ export type IllustrationRow = {
   groupName: string;
   width: number;
   height: number;
+  blurhash: string;
   caption: string;
   orderNo: number;
 };
 
 type IllustrationsResponse = {
-  items: Array<{ id: string; imageUrl: string; thumbUrl?: string; groupName?: string; width?: number; height?: number; caption: string; orderNo: number }>;
+  items: Array<{ id: string; imageUrl: string; thumbUrl?: string; groupName?: string; width?: number; height?: number; blurhash?: string; caption: string; orderNo: number }>;
 };
 
 function mapRows(items: IllustrationsResponse['items']): IllustrationRow[] {
@@ -28,6 +29,7 @@ function mapRows(items: IllustrationsResponse['items']): IllustrationRow[] {
     groupName: (it.groupName || '').trim(),
     width: it.width || 0,
     height: it.height || 0,
+    blurhash: it.blurhash || '',
     caption: it.caption || '',
     orderNo: it.orderNo ?? 0,
   }));
@@ -61,6 +63,17 @@ async function readMetaCache(seriesId: string): Promise<IllustrationRow[] | null
   } catch {
     return null;
   }
+}
+
+/** Tải trước N ảnh đầu vào disk cache (fire-and-forget) — mở tab Minh họa thấy ngay. */
+export async function prefetchIllustrations(seriesId: string, n = 6): Promise<void> {
+  try {
+    const { Image } = await import('expo-image');
+    const rows = await getIllustrations(seriesId);
+    rows.slice(0, Math.max(1, n)).forEach((r) => {
+      Image.prefetch(r.imageUrl).catch(() => {});
+    });
+  } catch {}
 }
 
 /** Danh sách ảnh minh họa của 1 bộ truyện (public, sắp theo order_no). */

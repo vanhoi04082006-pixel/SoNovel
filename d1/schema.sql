@@ -141,6 +141,7 @@ CREATE TABLE IF NOT EXISTS series_illustrations (
   group_name TEXT NOT NULL DEFAULT '',
   width INTEGER NOT NULL DEFAULT 0,
   height INTEGER NOT NULL DEFAULT 0,
+  blurhash TEXT NOT NULL DEFAULT '',
   caption TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );

@@ -33,6 +33,7 @@ import { useAuth } from '../lib/session';
 import { RootStackParamList } from '../navigation/types';
 import { getNowPlaying } from '../lib/tts';
 import { getChapterContent } from '../lib/chapters';
+import { prefetchIllustrations } from '../lib/illustrations';
 import { invalidateCache } from '../lib/dataCache';
 import { useReadMarkers } from '../lib/readMarkers';
 import { useMiniPlayerPad } from '../lib/useMiniPlayerPad';
@@ -89,6 +90,8 @@ export function SeriesScreen({ route }: { route: SeriesRouteProp }) {
       if (p?.listen_chapter_id && p.listen_chapter_id !== chs[0]?.id) {
         getChapterContent(seriesId, p.listen_chapter_id).catch(() => {});
       }
+      // Prefetch 6 ảnh minh họa đầu vào disk cache — vào tab Minh họa thấy ngay
+      prefetchIllustrations(seriesId, 6);
     } catch (e: any) {
       setError(e?.message ?? 'Không tải được truyện');
     } finally {

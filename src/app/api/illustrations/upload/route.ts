@@ -64,18 +64,27 @@ export async function POST(req: NextRequest) {
     if (!sniffImage(new Uint8Array(buf))) return NextResponse.json({ error: 'File không phải ảnh hợp lệ (PNG/JPEG/GIF/WEBP/BMP).' }, { status: 400 })
 
     // Giữ nguyên chất lượng gốc cao nhất — up bản gốc, không nén (ảnh chỉ là link).
-    // Đọc kích thước để app dựng khung ngay, khỏi getSize tải trùng.
+    // Đọc kích thước + chuỗi blurhash (~28 ký tự) để app hiện mờ đúng màu ngay.
     let width = 0
     let height = 0
+    let blurhash = ''
     try {
-      const meta = await sharp(buf).metadata()
-      width = meta.width || 0
-      height = meta.height || 0
+      const { data, info } = await sharp(buf).rotate().resize(32, 32, { fit: 'inside' }).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+      width = info.width || 0
+      height = info.height || 0
+      // Lấy dims gốc (không resize) cho khung chính xác
+      try {
+        const meta = await sharp(buf).metadata()
+        width = meta.width || width
+        height = meta.height || height
+      } catch {}
+      const { encode } = await import('blurhash')
+      blurhash = encode(new Uint8ClampedArray(data), info.width, info.height, 4, 3)
     } catch {}
     const full = await uploadToImgBB(key, buf.toString('base64'))
     const url = full?.url || full?.display_url || full?.image?.url
     if (!url) return NextResponse.json({ error: 'imgBB không trả về URL.' }, { status: 500 })
-    return NextResponse.json({ ok: true, url, thumbUrl: url, width, height, thumb: full?.thumb?.url || url })
+    return NextResponse.json({ ok: true, url, thumbUrl: url, width, height, blurhash, thumb: full?.thumb?.url || url })
   } catch (e) {
     const msg = (e as Error).message
     if (msg === 'UNAUTHORIZED' || msg === 'FORBIDDEN') {
