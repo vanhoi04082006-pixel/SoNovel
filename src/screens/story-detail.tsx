@@ -19,33 +19,6 @@ import { estMinutes, formatCharCount } from '@/lib/format'
 
 type IllustrationItem = { id: string; imageUrl: string; thumbUrl?: string; groupName?: string; blurhash?: string; caption: string; orderNo: number }
 
-// Decode blurhash → dataURL làm nền tức thì (vài ms), full về thì swap.
-// Không giảm chất lượng: ảnh cuối vẫn là full gốc.
-function useBlurPlaceholder(hash?: string): string | null {
-  const [url, setUrl] = useState<string | null>(null)
-  useEffect(() => {
-    if (!hash || hash.length < 6) { setUrl(null); return }
-    let cancelled = false
-    ;(async () => {
-      try {
-        const { decode } = await import('blurhash')
-        const pixels = decode(hash, 32, 32)
-        const canvas = document.createElement('canvas')
-        canvas.width = 32
-        canvas.height = 32
-        const ctx = canvas.getContext('2d')
-        if (!ctx) return
-        const imgData = ctx.createImageData(32, 32)
-        imgData.data.set(pixels)
-        ctx.putImageData(imgData, 0, 0)
-        if (!cancelled) setUrl(canvas.toDataURL())
-      } catch { if (!cancelled) setUrl(null) }
-    })()
-    return () => { cancelled = true }
-  }, [hash])
-  return url
-}
-
 type IllustSection = { title: string | null; rows: { it: IllustrationItem; idx: number }[] }
 
 function groupIllustrations(items: IllustrationItem[]): IllustSection[] {
@@ -64,27 +37,19 @@ function groupIllustrations(items: IllustrationItem[]): IllustSection[] {
 function IllustImage({ it, index, onOpen }: { it: IllustrationItem; index: number; onOpen: () => void }) {
   const [failed, setFailed] = useState(false)
   const [retryKey, setRetryKey] = useState(0)
-  const [sharp, setSharp] = useState(false)
   const src = it.imageUrl // luôn full gốc, giữ chất lượng cao nhất
-  const blurUrl = useBlurPlaceholder(it.blurhash)
   if (failed) {
     return (
       <div className="flex flex-col items-center gap-2 rounded-xl border border-border bg-muted py-10 text-center">
         <p className="text-xs text-muted-foreground">Không tải được ảnh (mạng yếu?).</p>
-        <Button size="sm" variant="outline" onClick={() => { setFailed(false); setSharp(false); setRetryKey((k) => k + 1) }}>Thử lại</Button>
+        <Button size="sm" variant="outline" onClick={() => { setFailed(false); setRetryKey((k) => k + 1) }}>Thử lại</Button>
       </div>
     )
   }
   return (
     <button type="button" onClick={onOpen} className="block w-full cursor-zoom-in" aria-label={`Phóng to ${it.caption || `ảnh ${index + 1}`}`}>
-      <span className="relative block w-full overflow-hidden rounded-xl border border-border bg-muted">
-        {blurUrl && !sharp && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={blurUrl} alt="" aria-hidden className="absolute inset-0 h-full w-full object-cover blur-md scale-105" />
-        )}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img key={retryKey} src={src} alt={it.caption || `Ảnh ${index + 1}`} loading="lazy" onLoad={() => setSharp(true)} onError={() => setFailed(true)} className="relative h-auto w-full" />
-      </span>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img key={retryKey} src={src} alt={it.caption || `Ảnh ${index + 1}`} loading="lazy" onError={() => setFailed(true)} className="h-auto w-full rounded-xl border border-border bg-muted" />
     </button>
   )
 }
