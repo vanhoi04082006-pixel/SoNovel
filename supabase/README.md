@@ -2,6 +2,12 @@
 
 Schema SQL cho backend SoNovel (Postgres + RLS + Auth + Storage) theo **SPEC §5**.
 
+> **Vai trò hiện tại:** Supabase giữ **Auth (JWT) + Realtime mirror**. **D1 là source of truth**
+> cho dữ liệu đọc (xem `docs/ARCHITECTURE.md` + `docs/adr/001-dual-write.md`).
+> Các bảng mới chỉ có trên D1 (`series_illustrations`, `site_settings`, cột `view_count`,
+> `thumb_url`, `group_name`, `width/height`, `blurhash`) **chưa có** trong schema này —
+> đừng mong đợi chúng ở Postgres.
+
 ## Cấu trúc thư mục
 
 ```

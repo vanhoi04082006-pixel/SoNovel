@@ -23,21 +23,24 @@
 
 | Hạng mục | Trạng thái |
 |---|---|
-| Build APK release | ✅ `BUILD SUCCESSFUL` (gradle 614 tasks, ~2–25 phút tùy cache) |
+| Build APK release | ✅ `BUILD SUCCESSFUL` (gradle 614 tasks, ~2–30 phút tùy cache) |
 | App chạy trên máy thật | ✅ Đã verify: app mở, không crash, không FATAL trong logcat |
-| Tsc typecheck | ✅ PASS |
+| Tsc typecheck | ✅ PASS (mobile + web) |
 | Lỗi crash lúc mở | ✅ Đã fix (xem §4) |
+| Version hiện tại | v1.1.0, `versionCode: 2` — hiển thị trong app tại màn Tài khoản |
 
 APK output:
-`E:\SoNovel\mobile\android\app\build\outputs\apk\release\app-release.apk` (~85 MB, ký debug `CN=Android Debug`).
+`E:\SoNovel\mobile\android\app\build\outputs\apk\release\app-release.apk` (~100 MB, ký debug `CN=Android Debug`).
 Thư mục `mobile/android/` là **prebuild sinh ra** (gitignored) — không sửa tay khi cần làm lại.
+File phân phối: copy ra `E:\SoNovel\SoNovel.apk` (đã gitignore qua `*.apk`) + ghi SHA256 để đối chiếu.
 
 ---
 
 ## 3. Môi trường build (máy Windows của chủ dự án)
 
 - OS: Windows, shell PowerShell.
-- JDK 17 Temurin: `C:\Program Files\Eclipse Adoptium\jdk-17.0.20.8-hotspot`
+- JDK 17 Temurin: `C:\Program Files\Eclipse Adoptium\jdk-17.0.20.101-hotspot`
+  (`$env:JAVA_HOME` phải trỏ đúng thư mục này trước khi chạy gradle — JDK từng bị mất sau restart, cài lại bằng `winget install --id EclipseAdoptium.Temurin.17.JDK`)
 - `ANDROID_HOME = C:\Users\buiva\AppData\Local\Android\Sdk`
   - platform-36, build-tools 35/36, NDK 27.1.12297006, CMake 3.22.1
 - adb: `C:\Users\buiva\AppData\Local\Android\Sdk\platform-tools\adb.exe`
@@ -159,13 +162,16 @@ Thư mục `mobile/android/` là **prebuild sinh ra** (gitignored) — không s�
 cd E:\SoNovel\mobile
 npm install
 
-# 2) Chỉ cần khi sinh lại thư mục android (thay đổi native module/config):
-npx expo prebuild --platform android --clean --no-install
+# 2) Prebuild khi đổi native module / assets (icon, splash) / deps native / app.json:
+npx expo prebuild --platform android --no-install
+# (--clean chỉ khi native hỏng nặng; prebuild thường đủ để đồng bộ res/ + versionCode)
 
 # 3) Build APK release (JS thay đổi thì KHÔNG cần prebuild lại, chạy thẳng)
 cd E:\SoNovel\mobile\android
+$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-17.0.20.101-hotspot"
 .\gradlew.bat assembleRelease --no-daemon
 # Output: android\app\build\outputs\apk\release\app-release.apk
+# Copy ra E:\SoNovel\SoNovel.apk + Get-FileHash SHA256 để đối chiếu
 
 # 4) Verify trên máy (bật Developer options → USB debugging, cắm USB, nhận RSA)
 $adb = "C:\Users\buiva\AppData\Local\Android\Sdk\platform-tools\adb.exe"
@@ -184,7 +190,10 @@ $adb = "C:\Users\buiva\AppData\Local\Android\Sdk\platform-tools\adb.exe"
 - `index.js` — entry custom, import URL polyfill đầu tiên.
 - `src/lib/supabase.ts` — `createClient` với URL + anon key thật (đã commit).
 - `src/lib/nativeTts.ts` — typed wrapper + safe requireNativeModule.
-- `src/lib/tts.ts` (427 dòng) — state manager, 16 functions, event bus, watchdog/safety net.
+- `src/lib/tts.ts` (~1100 dòng) — state manager: event bus, reconcile theo native (`adoptNativeChapter`), playlist + preload cho native tự fetch, watchdog/safety net.
+- `src/lib/nativeTts.ts` — typed bridge + `hasNativeFn()` guard version (APK cũ thiếu hàm mới → báo "cần APK mới", không crash).
+- `src/components/series/IllustrationsTab.tsx` — tab Minh họa (drawer mục lục, expo-image disk cache).
+- Version app đọc từ `expo-constants` (`expoConfig.version` + `android.versionCode`), hiện ở màn Tài khoản.
 - `modules/sonovel-tts/android/.../SonovelTtsModule.kt`, `TtsService.kt`, `Events.kt`, `TtsChunker.kt`.
 - `App.tsx`: GestureHandlerRootView + SafeAreaProvider + RootNavigator (sạch).
 
@@ -202,12 +211,18 @@ $adb = "C:\Users\buiva\AppData\Local\Android\Sdk\platform-tools\adb.exe"
 7. Khi thay JS thuần: chỉ cần `gradlew assembleRelease` (Metro rebundle), không cần prebuild.
 8. Debug crash: luôn dùng `adb logcat -d -b crash` + `adb shell pidof` — không đoán mò.
 9. `react-native-url-polyfill/auto` bắt buộc ở đầu entry — bất kỳ thay đổi entry nào cũng phải giữ.
+10. **Đổi assets/icon/splash mà không prebuild → APK vẫn icon cũ.** Đã từng ship nhầm icon vàng cũ dù source đã đổi. Luôn prebuild trước build, verify bằng cách trích `res/*.webp` trong APK (xem `docs/DEPLOY.md`).
+11. **Tăng `versionCode` mỗi release** + hướng dẫn user **gỡ bản cũ trước khi cài đè** (launcher giữ icon cache).
+12. APK cũ + JS mới gọi hàm native chưa có → dùng `hasNativeFn()` guard, không gọi trực tiếp.
+13. Ý định bấm tay (`playChapterTts`) luôn thắng auto-next — Player init phải resolve `startIndex/startChapterId` trước, không được sync mù khi đang phát cùng series.
+14. Worklets/CMake build fail lạ → xóa `.cxx`/transforms cache (`C:\Users\buiva\.gradle\caches\...`), restart daemon, build lại (flaky env).
+15. EAS free hết quota nhanh — local build là đường chính.
 
 ---
 
 ## 8. Việc chưa làm (nếu muốn tiếp tục)
 
-- Cấu hình signing release (keystore) để lên store.
-- Build dev client / EAS build cho luồng phát triển nhanh hơn.
-- Test luồng TTS thật trên máy (nhận quyền notification, foreground service).
-- Cập nhật phần mobile của `worklog.md` cho thống nhất (file này là nguồn tham chiếu mới).
+- Cấu hình signing release (keystore) để lên store (hiện ký debug).
+- Server render MP3 cho PWA nghe tắt màn hình (iOS) — tốn phí TTS, để đợt riêng.
+- Chuyển ảnh minh họa sang R2 + edge cache (plan đã có, user đang giữ imgBB vì "đang ngon").
+- Chi tiết kiến trúc hệ thống xem `docs/ARCHITECTURE.md`, checklist release xem `docs/DEPLOY.md`.
