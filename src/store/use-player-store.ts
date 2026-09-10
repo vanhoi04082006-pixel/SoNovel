@@ -34,6 +34,8 @@ interface PlayerState {
 
   autoplayNext: boolean
 
+  wakeLock: boolean // giữ màn hình sáng khi đang nghe (Screen Wake Lock API)
+
   // local event subscribers
   _listeners: Map<string, Set<(payload?: any) => void>>
 
@@ -51,6 +53,7 @@ interface PlayerState {
   setRate: (r: number) => void
   setSleep: (m: SleepMode) => void
   setAutoplayNext: (v: boolean) => void
+  setWakeLock: (v: boolean) => void
   clearError: () => void
   on: (type: string, cb: (payload?: any) => void) => () => void
   emit: (type: string, payload?: any) => void
@@ -163,6 +166,73 @@ function stopKeepAlive() {
   keepAliveNode = null
 }
 
+// ---- screen wake lock: giữ màn hình sáng khi đang nghe để PWA không bị
+// trình duyệt treo TTS lúc tự tắt màn hình. Không cứu được vuốt-giết-app
+// (giới hạn web) — nghe nền tắt màn hình ổn định vẫn cần app Android.
+const WAKE_LOCK_KEY = 'sonovel-wake-lock'
+type WakeSentinel = { release: () => Promise<void>; addEventListener: (type: string, cb: () => void) => void } | null
+let wakeSentinel: WakeSentinel = null
+let wakeWanted = false
+
+export function isWakeLockSupported(): boolean {
+  try {
+    return (
+      typeof navigator !== 'undefined' &&
+      'wakeLock' in navigator &&
+      typeof (navigator as unknown as { wakeLock?: { request?: unknown } }).wakeLock?.request === 'function'
+    )
+  } catch {
+    return false
+  }
+}
+
+function loadWakeLockPref(): boolean {
+  try {
+    if (typeof localStorage === 'undefined') return true
+    const v = localStorage.getItem(WAKE_LOCK_KEY)
+    return v === null ? true : v === '1'
+  } catch {
+    return true
+  }
+}
+
+// Đồng bộ cờ module với pref đã lưu ngay khi load (store chỉ chạy client-side)
+try {
+  wakeWanted = loadWakeLockPref()
+} catch {}
+
+async function acquireWakeLock() {
+  if (!wakeWanted || wakeSentinel) return
+  if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
+  if (!isWakeLockSupported()) return
+  try {
+    const wl = (navigator as unknown as { wakeLock: { request: (t: string) => Promise<WakeSentinel> } }).wakeLock
+    const s = await wl.request('screen')
+    wakeSentinel = s
+    try {
+      s?.addEventListener('release', () => {
+        wakeSentinel = null
+        // Hệ điều hành/thẻ tab có thể nhả lock (vd khi ẩn trang) → xin lại nếu vẫn đang nghe
+        try {
+          const st = usePlayerStore.getState()
+          if (wakeWanted && st.isPlaying && !st.seriesEnded && typeof document !== 'undefined' && document.visibilityState === 'visible') {
+            acquireWakeLock()
+          }
+        } catch {}
+      })
+    } catch {}
+  } catch {}
+}
+
+async function releaseWakeLock() {
+  const s = wakeSentinel
+  wakeSentinel = null
+  if (!s) return
+  try {
+    await s.release()
+  } catch {}
+}
+
 let visibilityWired = false
 function ensureVisibilityResume() {
   if (visibilityWired || typeof document === 'undefined') return
@@ -177,6 +247,8 @@ function ensureVisibilityResume() {
       // Trình duyệt hay pause synth khi ẩn trang → nối lại đúng vị trí đã lưu
       if (s.paused) s.resume()
       else if (!s.speaking) st.resume()
+      // Tab hiện lại thì lock cũ đã bị nhả → xin lại để giữ màn hình sáng
+      acquireWakeLock()
     } catch {}
   })
 }
@@ -351,6 +423,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     startSleepTimer()
     startSessionTimer()
     startKeepAlive()
+    acquireWakeLock()
     ensureVisibilityResume()
     flushSave()
     // Prefetch the following chapter so next is near-instant.
@@ -507,6 +580,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     stopSleepTimer()
     stopSessionTimer()
     stopKeepAlive()
+    releaseWakeLock()
   }
 
   const updateMediaSession = () => {
@@ -562,6 +636,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     sleepEndTime: null,
     sleepChapterEndFlag: false,
     autoplayNext: true,
+    wakeLock: loadWakeLockPref(),
     _listeners: new Map(),
 
     playChapter: async (opts) => {
@@ -597,6 +672,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
       if (s) s.pause()
       set({ isPlaying: false, isPaused: true })
       get().emit('stateChange', { isPlaying: false })
+      releaseWakeLock()
       flushSave()
     },
 
@@ -622,6 +698,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
         startSaveTimer()
         startSleepTimer()
         startKeepAlive()
+        acquireWakeLock()
         ensureVisibilityResume()
       } else {
         // cold start → restart from currentChar
@@ -726,6 +803,22 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     },
 
     setAutoplayNext: (v) => set({ autoplayNext: v }),
+
+    setWakeLock: (v) => {
+      wakeWanted = v
+      try {
+        if (typeof localStorage !== 'undefined') localStorage.setItem(WAKE_LOCK_KEY, v ? '1' : '0')
+      } catch {}
+      set({ wakeLock: v })
+      if (v) {
+        try {
+          const st = get()
+          if (st.isPlaying && !st.seriesEnded) acquireWakeLock()
+        } catch {}
+      } else {
+        releaseWakeLock()
+      }
+    },
 
     clearError: () => set({ error: null }),
 

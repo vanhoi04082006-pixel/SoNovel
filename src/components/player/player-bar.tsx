@@ -8,7 +8,7 @@ import {
   Rewind, FastForward, AudioLines,
 } from 'lucide-react'
 import { useAppStore } from '@/store/use-app-store'
-import { usePlayerStore, RATE_PRESETS, type SleepMode } from '@/store/use-player-store'
+import { usePlayerStore, RATE_PRESETS, isWakeLockSupported, type SleepMode } from '@/store/use-player-store'
 import { useReaderSettings, FONT_FAMILY_CSS } from '@/store/use-reader-settings'
 import { useShallow } from 'zustand/react/shallow'
 import { CoverImage } from '@/components/sonovel/cover-image'
@@ -626,9 +626,12 @@ function TextTab() {
 function SettingsTab() {
   const player = usePlayerStore(useShallow((s) => ({
     rate: s.rate, sleepMode: s.sleepMode, sleepEndTime: s.sleepEndTime, autoplayNext: s.autoplayNext,
+    wakeLock: s.wakeLock,
     seriesEnded: s.seriesEnded, setRate: s.setRate, setSleep: s.setSleep, setAutoplayNext: s.setAutoplayNext,
+    setWakeLock: s.setWakeLock,
     stop: s.stop, replay: s.replay,
   })))
+  const wakeSupported = isWakeLockSupported()
 
   return (
     <div className="h-full overflow-y-auto p-4 space-y-6">
@@ -681,6 +684,18 @@ function SettingsTab() {
           <Button variant={!player.autoplayNext ? 'default' : 'outline'} size="sm" onClick={() => player.setAutoplayNext(false)}>Tắt</Button>
         </div>
       </section>
+
+      {/* Wake lock — giữ màn hình sáng khi đang nghe */}
+      {wakeSupported && (
+        <section>
+          <h3 className="text-sm font-semibold mb-2">Giữ màn hình sáng</h3>
+          <div className="flex gap-2">
+            <Button variant={player.wakeLock ? 'default' : 'outline'} size="sm" onClick={() => player.setWakeLock(true)}>Bật</Button>
+            <Button variant={!player.wakeLock ? 'default' : 'outline'} size="sm" onClick={() => player.setWakeLock(false)}>Tắt</Button>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1.5">Màn hình không tự tắt khi đang nghe (tốn pin hơn). Vuốt tắt app thì vẫn dừng — nghe nền tắt màn hình ổn định cần app Android.</p>
+        </section>
+      )}
 
       {/* Stop */}
       <section>
