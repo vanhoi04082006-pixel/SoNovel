@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Headphones, Eye, EyeOff, LogIn, UserPlus } from 'lucide-react'
+import { Eye, EyeOff, LogIn, UserPlus } from 'lucide-react'
+import { LogoMark } from '@/components/sonovel/logo-mark'
 import { useAppStore } from '@/store/use-app-store'
 import { api } from '@/lib/api-client'
 import { Button } from '@/components/ui/button'
@@ -43,19 +44,11 @@ export function LoginScreen() {
     }
   }
 
-  const fillDemo = (which: 'admin' | 'user') => {
-    if (which === 'admin') { setEmail('admin@sonovel.app'); setPassword('admin123') }
-    else { setEmail('user@sonovel.app'); setPassword('user123') }
-    setMode('login')
-  }
-
   return (
     <div className="bg-hero-soft min-h-screen">
       <div className="mx-auto max-w-md px-4 py-8 sm:py-12">
       <div className="flex flex-col items-center mb-6">
-        <span className="grid h-12 w-12 place-items-center rounded-xl bg-primary text-primary-foreground">
-          <Headphones className="h-7 w-7" />
-        </span>
+        <LogoMark className="h-12 w-12 shadow" />
         <h1 className="mt-3 text-2xl font-bold">SoNovel</h1>
         <p className="text-sm text-muted-foreground">
           {mode === 'login' ? 'Đăng nhập để lưu tiến độ nghe' : 'Tạo tài khoản miễn phí'}
@@ -125,18 +118,6 @@ export function LoginScreen() {
           </div>
         </CardContent>
       </Card>
-
-      <div className="mt-4 rounded-lg border border-dashed border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-        <p className="font-medium text-foreground mb-1">Tài khoản dùng thử:</p>
-        <div className="flex flex-wrap gap-2 mt-1">
-          <button onClick={() => fillDemo('admin')} className="rounded border border-border bg-card px-2 py-1 hover:border-primary">
-            Quản trị: admin@sonovel.app / admin123
-          </button>
-          <button onClick={() => fillDemo('user')} className="rounded border border-border bg-card px-2 py-1 hover:border-primary">
-            Người dùng: user@sonovel.app / user123
-          </button>
-        </div>
-      </div>
       </div>
     </div>
   )

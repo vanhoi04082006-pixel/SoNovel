@@ -7,6 +7,7 @@ import { api } from '@/lib/api-client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { LogoMark } from '@/components/sonovel/logo-mark'
 import { toast } from 'sonner'
 
 function isIos(): boolean {
@@ -108,9 +109,7 @@ export function AboutScreen() {
         <div className="relative bg-hero-soft p-6 text-center">
           <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 50% 0%, var(--primary) 0%, transparent 50%)' }} />
           <div className="relative">
-            <span className="inline-grid h-16 w-16 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-lg">
-              <Headphones className="h-9 w-9" />
-            </span>
+            <LogoMark className="inline-grid h-16 w-16 rounded-2xl shadow-lg" />
             <h1 className="mt-3 text-3xl font-bold">SoNovel</h1>
             <p className="mt-1 text-sm text-muted-foreground">Nghe truyện chữ bằng giọng đọc tổng hợp</p>
             <div className="mt-3 flex flex-wrap justify-center gap-1.5">

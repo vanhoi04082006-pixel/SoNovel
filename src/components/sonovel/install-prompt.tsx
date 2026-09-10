@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Download, X, Headphones } from 'lucide-react'
+import { Download, X } from 'lucide-react'
+import { LogoMark } from './logo-mark'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 
@@ -73,9 +74,7 @@ export function InstallPrompt() {
   return (
     <div className="fixed bottom-20 md:bottom-4 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-md animate-fade-in-up">
       <div className="flex items-center gap-3 rounded-xl border border-primary/30 bg-background/95 backdrop-blur shadow-lg p-3">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground">
-          <Headphones className="h-5 w-5" />
-        </span>
+        <LogoMark className="h-10 w-10 rounded-lg" />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold">Cài SoNovel</p>
           <p className="text-xs text-muted-foreground">Nghe truyện mọi lúc, kể cả offline</p>

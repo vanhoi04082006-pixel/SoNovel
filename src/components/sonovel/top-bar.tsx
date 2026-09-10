@@ -1,6 +1,7 @@
 'use client'
 
-import { Headphones, Search, Shield } from 'lucide-react'
+import { Search, Shield } from 'lucide-react'
+import { LogoMark } from './logo-mark'
 import { useAppStore } from '@/store/use-app-store'
 import { ThemeMenu } from './theme-menu'
 import { UserMenu } from './user-menu'
@@ -26,9 +27,7 @@ export function TopBar() {
           className="flex items-center gap-2 shrink-0"
           aria-label="SoNovel — Trang chủ"
         >
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-primary-foreground">
-            <Headphones className="h-5 w-5" />
-          </span>
+          <LogoMark className="h-8 w-8 rounded-lg" />
           <span className="hidden sm:block font-bold text-lg tracking-tight">SoNovel</span>
         </button>
 
